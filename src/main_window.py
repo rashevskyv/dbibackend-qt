@@ -226,6 +226,7 @@ class MainWindow(QMainWindow):
 
             btn = QPushButton(icon)
             btn.setFixedSize(60, 60)
+            btn.setStyleSheet('QPushButton { font-size: 32px; }')
             btn.clicked.connect(callback)
             btn_layout.addWidget(btn)
 
@@ -265,7 +266,19 @@ class MainWindow(QMainWindow):
         self.start_server_btn.setFixedSize(60, 60)
         self.start_server_btn.clicked.connect(self.toggle_server)
         self.start_server_btn.setEnabled(False)
-        self.start_server_btn.setStyleSheet('QPushButton { background-color: #4CAF50; color: white; font-size: 24px; }')
+        self.start_server_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                font-size: 32px;
+            }
+            QPushButton:hover:enabled {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+        ''')
         server_layout.addWidget(self.start_server_btn)
 
         self.server_label = QLabel('Start Server')
@@ -705,7 +718,19 @@ class MainWindow(QMainWindow):
 
         # Change button to Stop (red)
         self.start_server_btn.setText('⏹')
-        self.start_server_btn.setStyleSheet('QPushButton { background-color: #f44336; color: white; font-size: 24px; }')
+        self.start_server_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                font-size: 32px;
+            }
+            QPushButton:hover {
+                background-color: #da190b;
+            }
+            QPushButton:pressed {
+                background-color: #c1170a;
+            }
+        ''')
         self.server_label.setText('Stop Server')
 
         self.add_folder_btn.setEnabled(False)
@@ -728,7 +753,19 @@ class MainWindow(QMainWindow):
 
         # Change button back to Start (green)
         self.start_server_btn.setText('▶')
-        self.start_server_btn.setStyleSheet('QPushButton { background-color: #4CAF50; color: white; font-size: 24px; }')
+        self.start_server_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                font-size: 32px;
+            }
+            QPushButton:hover:enabled {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+        ''')
         self.server_label.setText('Start Server')
 
         self.add_folder_btn.setEnabled(True)
