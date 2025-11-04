@@ -215,35 +215,65 @@ class MainWindow(QMainWindow):
     def create_toolbar(self, layout):
         """Create toolbar with main actions"""
         toolbar_layout = QHBoxLayout()
+        toolbar_layout.setSpacing(10)
 
-        self.add_folder_btn = QPushButton('📁 Add Folder')
-        self.add_folder_btn.clicked.connect(self.add_folder)
-        toolbar_layout.addWidget(self.add_folder_btn)
+        # Helper function to create button with icon and label below
+        def create_button(icon, label, callback):
+            btn_container = QWidget()
+            btn_layout = QVBoxLayout(btn_container)
+            btn_layout.setContentsMargins(0, 0, 0, 0)
+            btn_layout.setSpacing(2)
 
-        self.add_files_btn = QPushButton('📄 Add Files')
-        self.add_files_btn.clicked.connect(self.add_files)
-        toolbar_layout.addWidget(self.add_files_btn)
+            btn = QPushButton(icon)
+            btn.setFixedSize(60, 60)
+            btn.clicked.connect(callback)
+            btn_layout.addWidget(btn)
 
-        self.clear_list_btn = QPushButton('🗑️ Clear List')
-        self.clear_list_btn.clicked.connect(self.clear_file_list)
-        toolbar_layout.addWidget(self.clear_list_btn)
+            lbl = QLabel(label)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet('font-size: 10px;')
+            btn_layout.addWidget(lbl)
 
-        toolbar_layout.addStretch()
+            return btn_container, btn
 
-        # Search box
+        # Add Folder button
+        folder_container, self.add_folder_btn = create_button('📁', 'Add Folder', self.add_folder)
+        toolbar_layout.addWidget(folder_container)
+
+        # Add Files button
+        files_container, self.add_files_btn = create_button('📄', 'Add Files', self.add_files)
+        toolbar_layout.addWidget(files_container)
+
+        # Clear List button
+        clear_container, self.clear_list_btn = create_button('🗑️', 'Clear List', self.clear_file_list)
+        toolbar_layout.addWidget(clear_container)
+
+        # Search box - takes all remaining space
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText('🔍 Search files...')
         self.search_box.textChanged.connect(self.filter_file_list)
-        self.search_box.setMaximumWidth(200)
-        toolbar_layout.addWidget(self.search_box)
+        self.search_box.setMinimumHeight(30)
+        toolbar_layout.addWidget(self.search_box, 1)  # stretch factor 1
 
-        toolbar_layout.addStretch()
+        # Start/Stop Server button
+        server_container = QWidget()
+        server_layout = QVBoxLayout(server_container)
+        server_layout.setContentsMargins(0, 0, 0, 0)
+        server_layout.setSpacing(2)
 
-        self.start_server_btn = QPushButton('▶ Start Server')
+        self.start_server_btn = QPushButton('▶')
+        self.start_server_btn.setFixedSize(60, 60)
         self.start_server_btn.clicked.connect(self.toggle_server)
         self.start_server_btn.setEnabled(False)
-        self.start_server_btn.setStyleSheet('QPushButton { font-weight: bold; padding: 8px 16px; }')
-        toolbar_layout.addWidget(self.start_server_btn)
+        self.start_server_btn.setStyleSheet('QPushButton { background-color: #4CAF50; color: white; font-size: 24px; }')
+        server_layout.addWidget(self.start_server_btn)
+
+        self.server_label = QLabel('Start Server')
+        self.server_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.server_label.setStyleSheet('font-size: 10px;')
+        server_layout.addWidget(self.server_label)
+
+        toolbar_layout.addWidget(server_container)
 
         layout.addLayout(toolbar_layout)
 
@@ -673,7 +703,11 @@ class MainWindow(QMainWindow):
 
         self.usb_handler.start()
 
-        self.start_server_btn.setText('⏹ Stop Server')
+        # Change button to Stop (red)
+        self.start_server_btn.setText('⏹')
+        self.start_server_btn.setStyleSheet('QPushButton { background-color: #f44336; color: white; font-size: 24px; }')
+        self.server_label.setText('Stop Server')
+
         self.add_folder_btn.setEnabled(False)
         self.add_files_btn.setEnabled(False)
         self.clear_list_btn.setEnabled(False)
@@ -692,7 +726,11 @@ class MainWindow(QMainWindow):
             self.usb_handler.stop()
             self.usb_handler = None
 
-        self.start_server_btn.setText('▶ Start Server')
+        # Change button back to Start (green)
+        self.start_server_btn.setText('▶')
+        self.start_server_btn.setStyleSheet('QPushButton { background-color: #4CAF50; color: white; font-size: 24px; }')
+        self.server_label.setText('Start Server')
+
         self.add_folder_btn.setEnabled(True)
         self.add_files_btn.setEnabled(True)
         self.clear_list_btn.setEnabled(True)
