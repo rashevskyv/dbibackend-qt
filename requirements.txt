@@ -1,0 +1,11 @@
+# DBI Backend Qt - Requirements
+
+# GUI Framework
+PyQt6>=6.4.0
+
+# USB Communication
+pyusb>=1.2.1
+
+# Note: On Windows, you'll also need to install libusb
+# Download libusb-win32 or use Zadig to install the WinUSB driver
+# for the Nintendo Switch device (VID: 057E, PID: 3000)
