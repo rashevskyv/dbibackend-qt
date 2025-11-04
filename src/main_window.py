@@ -73,6 +73,9 @@ class ProgressDelegate(QStyledItemDelegate):
 class MainWindow(QMainWindow):
     """Main application window with enhanced UI"""
 
+    # Supported file extensions for Nintendo Switch
+    SUPPORTED_EXTENSIONS = {'.nsp', '.nsz', '.xci', '.xcz'}
+
     def __init__(self):
         super().__init__()
 
@@ -346,21 +349,33 @@ class MainWindow(QMainWindow):
         self.connection_status = QLabel('🔴 Not connected')
         self.statusBar.addPermanentWidget(self.connection_status)
 
+    def is_supported_file(self, file_path: Path) -> bool:
+        """Check if file has supported extension"""
+        return file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS
+
     def add_files(self):
         """Open file dialog to add files"""
         files, _ = QFileDialog.getOpenFileNames(
             self,
             'Select Files',
             self.config.get('last_directory', ''),
-            'All Files (*.*);;NSP Files (*.nsp);;NSZ Files (*.nsz);;XCI Files (*.xci)'
+            'Switch Files (*.nsp *.nsz *.xci *.xcz);;NSP Files (*.nsp);;NSZ Files (*.nsz);;XCI Files (*.xci);;XCZ Files (*.xcz);;All Files (*.*)'
         )
 
         if files:
             self.config.set('last_directory', str(Path(files[0]).parent))
+            added_count = 0
             for file_path in files:
                 path = Path(file_path)
-                self.file_list[path.name] = path.resolve()
-            self.update_file_list()
+                if self.is_supported_file(path):
+                    self.file_list[path.name] = path.resolve()
+                    added_count += 1
+                else:
+                    self.log('warning', f'Skipped unsupported file: {path.name}')
+
+            if added_count > 0:
+                self.update_file_list()
+                self.log('info', f'Added {added_count} file(s)')
 
     def add_folder(self):
         """Open folder dialog to add all files from folder (recursively)"""
@@ -373,11 +388,24 @@ class MainWindow(QMainWindow):
         if folder:
             self.config.set('last_directory', folder)
             path = Path(folder)
-            # Recursively find all files in folder and subfolders
+            added_count = 0
+            skipped_count = 0
+
+            # Recursively find all supported files in folder and subfolders
             for file_path in path.rglob('*'):
                 if file_path.is_file():
-                    self.file_list[file_path.name] = file_path.resolve()
-            self.update_file_list()
+                    if self.is_supported_file(file_path):
+                        self.file_list[file_path.name] = file_path.resolve()
+                        added_count += 1
+                    else:
+                        skipped_count += 1
+
+            if added_count > 0:
+                self.update_file_list()
+                self.log('info', f'Added {added_count} file(s) from folder')
+
+            if skipped_count > 0:
+                self.log('warning', f'Skipped {skipped_count} unsupported file(s)')
 
     def update_file_list(self):
         """Update the file tree widget"""
@@ -854,6 +882,7 @@ class MainWindow(QMainWindow):
         """
         paths = message.strip().split('\n')
         files_added = 0
+        skipped_count = 0
 
         for path_str in paths:
             path_str = path_str.strip()
@@ -865,18 +894,27 @@ class MainWindow(QMainWindow):
                 continue
 
             if file_path.is_file():
-                self.file_list[file_path.name] = file_path.resolve()
-                files_added += 1
+                if self.is_supported_file(file_path):
+                    self.file_list[file_path.name] = file_path.resolve()
+                    files_added += 1
+                else:
+                    skipped_count += 1
             elif file_path.is_dir():
-                # Recursively find all files in folder
+                # Recursively find all supported files in folder
                 for f in file_path.rglob('*'):
                     if f.is_file():
-                        self.file_list[f.name] = f.resolve()
-                        files_added += 1
+                        if self.is_supported_file(f):
+                            self.file_list[f.name] = f.resolve()
+                            files_added += 1
+                        else:
+                            skipped_count += 1
 
         if files_added > 0:
             self.update_file_list()
             self.log("info", f"Added {files_added} file(s) from external source")
+
+            if skipped_count > 0:
+                self.log("warning", f"Skipped {skipped_count} unsupported file(s)")
 
             # Bring window to front and focus
             self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
@@ -894,16 +932,20 @@ class MainWindow(QMainWindow):
         for url in event.mimeData().urls():
             path = Path(url.toLocalFile())
             if path.is_file():
-                files.append(path)
+                if self.is_supported_file(path):
+                    files.append(path)
             elif path.is_dir():
-                # Recursively find all files in dropped folder
-                files.extend([f for f in path.rglob('*') if f.is_file()])
+                # Recursively find all supported files in dropped folder
+                files.extend([f for f in path.rglob('*') if f.is_file() and self.is_supported_file(f)])
 
+        added_count = 0
         for path in files:
             self.file_list[path.name] = path.resolve()
+            added_count += 1
 
-        self.update_file_list()
-        self.log('info', f'Added {len(files)} file(s) via drag & drop')
+        if added_count > 0:
+            self.update_file_list()
+            self.log('info', f'Added {added_count} file(s) via drag & drop')
 
     def restore_geometry(self):
         """Restore window geometry from settings"""
