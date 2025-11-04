@@ -6,6 +6,7 @@ Enhanced GUI for DBI file transfer to Nintendo Switch
 
 import sys
 import json
+import base64
 from pathlib import Path
 from typing import Dict, Optional
 from datetime import datetime
@@ -237,13 +238,13 @@ class MainWindow(QMainWindow):
 
             return btn_container, btn
 
-        # Add Folder button
-        folder_container, self.add_folder_btn = create_button('📁', 'Add Folder', self.add_folder)
-        toolbar_layout.addWidget(folder_container)
-
         # Add Files button
         files_container, self.add_files_btn = create_button('📄', 'Add Files', self.add_files)
         toolbar_layout.addWidget(files_container)
+
+        # Add Folder button
+        folder_container, self.add_folder_btn = create_button('📁', 'Add Folder', self.add_folder)
+        toolbar_layout.addWidget(folder_container)
 
         # Clear List button
         clear_container, self.clear_list_btn = create_button('🗑️', 'Clear List', self.clear_file_list)
@@ -277,6 +278,10 @@ class MainWindow(QMainWindow):
             }
             QPushButton:pressed {
                 background-color: #3d8b40;
+            }
+            QPushButton:disabled {
+                background-color: #BDBDBD;
+                color: #757575;
             }
         ''')
         server_layout.addWidget(self.start_server_btn)
@@ -406,7 +411,10 @@ class MainWindow(QMainWindow):
         )
 
         if files:
-            self.config.set('last_directory', str(Path(files[0]).parent))
+            last_dir = str(Path(files[0]).parent)
+            self.config.set('last_directory', last_dir)
+            self.config.save()
+            self.log('debug', f'Saved last_directory: {last_dir}')
             added_count = 0
             for file_path in files:
                 path = Path(file_path)
@@ -430,6 +438,8 @@ class MainWindow(QMainWindow):
 
         if folder:
             self.config.set('last_directory', folder)
+            self.config.save()
+            self.log('debug', f'Saved last_directory: {folder}')
             path = Path(folder)
             added_count = 0
             skipped_count = 0
@@ -765,6 +775,10 @@ class MainWindow(QMainWindow):
             QPushButton:pressed {
                 background-color: #3d8b40;
             }
+            QPushButton:disabled {
+                background-color: #BDBDBD;
+                color: #757575;
+            }
         ''')
         self.server_label.setText('Start Server')
 
@@ -1026,12 +1040,19 @@ class MainWindow(QMainWindow):
         """Restore window geometry from settings"""
         geometry = self.config.get('window_geometry')
         if geometry:
-            self.restoreGeometry(geometry)
+            try:
+                # Decode from base64 string
+                geometry_bytes = base64.b64decode(geometry)
+                self.restoreGeometry(geometry_bytes)
+            except Exception as e:
+                print(f'Failed to restore geometry: {e}')
 
     def closeEvent(self, event):
         """Handle window close event"""
-        # Save window geometry
-        self.config.set('window_geometry', self.saveGeometry())
+        # Save window geometry (encode to base64 string for JSON)
+        geometry_bytes = self.saveGeometry()
+        geometry_str = base64.b64encode(geometry_bytes).decode('utf-8')
+        self.config.set('window_geometry', geometry_str)
 
         # Stop server if running
         if self.usb_handler and self.usb_handler.is_running:

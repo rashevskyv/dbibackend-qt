@@ -25,8 +25,16 @@ class ConfigManager:
     def __init__(self, config_path: Optional[Path] = None):
         """Initialize configuration manager"""
         if config_path is None:
-            # Use default path in user's home directory
-            self.config_path = Path.home() / '.dbibackend-qt' / 'config.json'
+            # Use default path next to the application
+            # Get the directory where the script is located
+            import sys
+            if getattr(sys, 'frozen', False):
+                # Running as compiled executable
+                app_dir = Path(sys.executable).parent
+            else:
+                # Running as script
+                app_dir = Path(__file__).parent.parent
+            self.config_path = app_dir / 'config.json'
         else:
             self.config_path = config_path
 
@@ -39,10 +47,13 @@ class ConfigManager:
             try:
                 with open(self.config_path, 'r', encoding='utf-8') as f:
                     self.config = json.load(f)
+                print(f'Config loaded from: {self.config_path}')
+                print(f'Loaded last_directory: {self.config.get("last_directory", "NOT SET")}')
             except Exception as e:
                 print(f'Failed to load config: {e}')
                 self.config = self.DEFAULT_CONFIG.copy()
         else:
+            print(f'Config file not found: {self.config_path}')
             self.config = self.DEFAULT_CONFIG.copy()
 
     def save(self):
@@ -53,6 +64,8 @@ class ConfigManager:
 
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, indent=2)
+            print(f'Config saved to: {self.config_path}')
+            print(f'Config content: {self.config}')
         except Exception as e:
             print(f'Failed to save config: {e}')
 
