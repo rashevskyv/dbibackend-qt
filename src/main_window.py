@@ -334,6 +334,7 @@ class MainWindow(QMainWindow):
     def create_progress_section(self):
         """Create progress bars section"""
         group = QGroupBox('Transfer Progress')
+        group.setMaximumHeight(180)
         layout = QVBoxLayout()
 
         # Current file progress
@@ -382,7 +383,7 @@ class MainWindow(QMainWindow):
 
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(200)
+        self.log_text.setMinimumHeight(100)
 
         layout.addWidget(self.log_text)
 
