@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QTreeWidget, QTreeWidgetItem, QTextEdit,
     QLabel, QProgressBar, QMenuBar, QMenu, QFileDialog,
-    QMessageBox, QLineEdit, QStatusBar, QSplitter,
+    QMessageBox, QLineEdit, QStatusBar, QSplitter, QSplitterHandle,
     QHeaderView, QStyle, QCheckBox, QGroupBox, QStyledItemDelegate
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QRect
@@ -24,6 +24,83 @@ from PyQt6.QtGui import QAction, QIcon, QDragEnterEvent, QDropEvent, QColor, QPa
 from usb_handler import USBHandler, ConnectionStatus
 from config_manager import ConfigManager
 from theme_manager import ThemeManager
+
+
+class CustomSplitterHandle(QSplitterHandle):
+    """Custom splitter handle that changes color when sections are collapsed"""
+
+    def __init__(self, orientation, parent):
+        super().__init__(orientation, parent)
+        self.is_collapsed = False
+
+    def mouseDoubleClickEvent(self, event):
+        """Handle double-click to collapse/expand sections"""
+        splitter = self.splitter()
+        sizes = splitter.sizes()
+
+        # Find which handle this is (handle index = widget index after it)
+        handle_index = splitter.indexOf(self)
+
+        if handle_index > 0 and handle_index < len(sizes):
+            # This handle is between widget (handle_index - 1) and widget (handle_index)
+            widget_after_index = handle_index
+
+            if sizes[widget_after_index] == 0:
+                # Widget is collapsed, expand it
+                # Restore to a reasonable size (e.g., 200px)
+                new_sizes = sizes.copy()
+                new_sizes[widget_after_index] = 200
+
+                # Reduce size from the largest widget to make room
+                max_index = sizes.index(max(sizes))
+                if new_sizes[max_index] > 200:
+                    new_sizes[max_index] -= 200
+
+                splitter.setSizes(new_sizes)
+            else:
+                # Widget is expanded, collapse it
+                new_sizes = sizes.copy()
+                # Add current size to the widget before
+                if widget_after_index > 0:
+                    new_sizes[widget_after_index - 1] += new_sizes[widget_after_index]
+                new_sizes[widget_after_index] = 0
+
+                splitter.setSizes(new_sizes)
+
+    def paintEvent(self, event):
+        """Custom paint to show different colors for collapsed state"""
+        painter = QPainter(self)
+
+        # Choose color based on collapsed state
+        if self.is_collapsed:
+            color = QColor('#2196F3')  # Blue when collapsed
+        else:
+            color = QColor('#e0e0e0')  # Gray when normal
+
+        # Draw the handle with margin (create visual spacing)
+        rect = self.rect()
+        if self.orientation() == Qt.Orientation.Vertical:
+            # Vertical splitter - add margin top and bottom
+            painter.fillRect(rect.x(), rect.y() + 2, rect.width(), rect.height() - 4, color)
+        else:
+            # Horizontal splitter - add margin left and right
+            painter.fillRect(rect.x() + 2, rect.y(), rect.width() - 4, rect.height(), color)
+
+
+class CustomSplitter(QSplitter):
+    """Custom splitter that uses custom handles"""
+
+    # Signal emitted when sizes change (for handle color updates)
+    sizes_changed = pyqtSignal()
+
+    def createHandle(self):
+        """Create custom handle"""
+        return CustomSplitterHandle(self.orientation(), self)
+
+    def setSizes(self, sizes):
+        """Override to emit signal when sizes change"""
+        super().setSizes(sizes)
+        self.sizes_changed.emit()
 
 
 class ProgressDelegate(QStyledItemDelegate):
@@ -96,6 +173,7 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.apply_theme(self.config.get('theme', 'light'))
         self.restore_geometry()
+        self.restore_splitter_sizes()
 
         # Setup auto-reconnect timer
         self.reconnect_timer = QTimer()
@@ -121,26 +199,31 @@ class MainWindow(QMainWindow):
         self.create_toolbar(main_layout)
 
         # Create splitter for file list and log
-        splitter = QSplitter(Qt.Orientation.Vertical)
+        self.splitter = CustomSplitter(Qt.Orientation.Vertical)
+        self.splitter.setHandleWidth(10)
+
+        # Connect signals to detect when sections are collapsed
+        self.splitter.splitterMoved.connect(self.update_splitter_handles)
+        self.splitter.sizes_changed.connect(self.update_splitter_handles)
 
         # File list section
         file_section = self.create_file_section()
-        splitter.addWidget(file_section)
+        self.splitter.addWidget(file_section)
 
         # Progress section
         progress_section = self.create_progress_section()
-        splitter.addWidget(progress_section)
+        self.splitter.addWidget(progress_section)
 
         # Log section
         log_section = self.create_log_section()
-        splitter.addWidget(log_section)
+        self.splitter.addWidget(log_section)
 
         # Set splitter proportions
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 1)
-        splitter.setStretchFactor(2, 2)
+        self.splitter.setStretchFactor(0, 3)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setStretchFactor(2, 2)
 
-        main_layout.addWidget(splitter)
+        main_layout.addWidget(self.splitter)
 
         # Status bar
         self.create_status_bar()
@@ -1048,12 +1131,22 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(f'Failed to restore geometry: {e}')
 
+    def restore_splitter_sizes(self):
+        """Restore splitter section sizes from settings"""
+        sizes = self.config.get('splitter_sizes')
+        if sizes and isinstance(sizes, list) and len(sizes) == self.splitter.count():
+            self.splitter.setSizes(sizes)
+            print(f'Restored splitter sizes: {sizes}')
+
     def closeEvent(self, event):
         """Handle window close event"""
         # Save window geometry (encode to base64 string for JSON)
         geometry_bytes = self.saveGeometry()
         geometry_str = base64.b64encode(geometry_bytes).decode('utf-8')
         self.config.set('window_geometry', geometry_str)
+
+        # Save splitter sizes
+        self.config.set('splitter_sizes', self.splitter.sizes())
 
         # Stop server if running
         if self.usb_handler and self.usb_handler.is_running:
@@ -1070,6 +1163,21 @@ class MainWindow(QMainWindow):
 
         self.config.save()
         event.accept()
+
+    def update_splitter_handles(self):
+        """Update splitter handle colors based on collapsed state"""
+        sizes = self.splitter.sizes()
+
+        # There are count-1 handles for count widgets
+        for i in range(self.splitter.count() - 1):
+            handle = self.splitter.handle(i + 1)  # Handle indices start at 1
+            if isinstance(handle, CustomSplitterHandle):
+                # This handle is between widget i and widget i+1
+                # It should be blue ONLY if the widget AFTER it (i+1) is collapsed
+                widget_after_collapsed = sizes[i + 1] == 0
+
+                handle.is_collapsed = widget_after_collapsed
+                handle.update()  # Trigger repaint
 
     @staticmethod
     def format_size(size: int) -> str:

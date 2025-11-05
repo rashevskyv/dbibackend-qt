@@ -18,6 +18,7 @@ class ConfigManager:
         'file_filters': ['.nsp', '.nsz', '.xci', '.nca'],
         'last_directory': '',
         'window_geometry': None,
+        'splitter_sizes': None,
         'max_log_lines': 1000,
         'reconnect_interval': 2000,  # ms
     }
