@@ -917,8 +917,20 @@ class MainWindow(QMainWindow):
             # Display actually transferred bytes (includes all data sent via USB)
             transferred_str = self.format_size(transferred_bytes)
             if total_requested_size > 0 and num_requested_files > 0:
-                # Calculate progress percentage based on completed files only
-                # Progress jumps only when file completes (not gradual per byte)
+                # ===================================================================
+                # IMPORTANT: Overall progress bar calculation - DO NOT CHANGE
+                # ===================================================================
+                # Progress is based ONLY on completed files count, NOT bytes
+                # Formula: (completed_files / num_requested_files) * 100%
+                #
+                # This ensures:
+                # - Progress starts at 0% (not from middle)
+                # - Progress jumps only when file completes
+                # - Source of truth: num_requested_files (from metadata phase)
+                # - Matches "Overall N / M files" counter exactly
+                #
+                # Example: 0% → 25% → 50% → 75% → 100% (for 4 files)
+                # ===================================================================
                 completed = self.transfer_stats['completed_files']
 
                 # Force 100% when all files are completed
