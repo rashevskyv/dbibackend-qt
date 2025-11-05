@@ -110,10 +110,15 @@ class ProgressDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self.tree_widget = tree_widget
         self.progress_data = {}  # filename -> progress%
+        self.skipped_files = set()  # filenames that were skipped
 
     def set_progress(self, filename: str, progress: int):
         """Set progress for a file"""
         self.progress_data[filename] = max(0, min(100, progress))
+
+    def mark_skipped(self, filename: str):
+        """Mark a file as skipped (will be shown in red)"""
+        self.skipped_files.add(filename)
 
     def paint(self, painter, option, index):
         """Custom paint with progress bar background"""
@@ -122,27 +127,37 @@ class ProgressDelegate(QStyledItemDelegate):
         if item:
             # Get filename from column 1 (name column)
             filename = item.text(1)
-            progress = self.progress_data.get(filename, 0)
 
-            if progress > 0:
-                # Draw progress background (left to right fill)
+            # Check if file was skipped - show red background
+            if filename in self.skipped_files:
                 painter.save()
-
-                # Calculate progress width
-                progress_width = int((option.rect.width() * progress) / 100)
-                progress_rect = QRect(option.rect.x(), option.rect.y(),
-                                     progress_width, option.rect.height())
-
-                # Draw green progress background
-                if progress >= 100:
-                    # Complete - brighter green
-                    color = QColor(80, 200, 80, 100)
-                else:
-                    # In progress - semi-transparent green
-                    color = QColor(60, 180, 60, 80)
-
-                painter.fillRect(progress_rect, QBrush(color))
+                # Full width red background for skipped files
+                color = QColor(244, 67, 54, 100)  # Red with transparency
+                painter.fillRect(option.rect, QBrush(color))
                 painter.restore()
+            else:
+                # Normal progress display
+                progress = self.progress_data.get(filename, 0)
+
+                if progress > 0:
+                    # Draw progress background (left to right fill)
+                    painter.save()
+
+                    # Calculate progress width
+                    progress_width = int((option.rect.width() * progress) / 100)
+                    progress_rect = QRect(option.rect.x(), option.rect.y(),
+                                         progress_width, option.rect.height())
+
+                    # Draw green progress background
+                    if progress >= 100:
+                        # Complete - brighter green
+                        color = QColor(80, 200, 80, 100)
+                    else:
+                        # In progress - semi-transparent green
+                        color = QColor(60, 180, 60, 80)
+
+                    painter.fillRect(progress_rect, QBrush(color))
+                    painter.restore()
 
         # Draw the default item content on top
         super().paint(painter, option, index)
@@ -165,6 +180,7 @@ class MainWindow(QMainWindow):
             'total_files': 0,
             'transferred_files': 0,
             'completed_files': 0,  # Files fully transferred
+            'skipped_files': 0,  # Files skipped/interrupted by Switch
             'total_size': 0,
             'transferred_size': 0,
             'start_time': None,
@@ -334,12 +350,41 @@ class MainWindow(QMainWindow):
         clear_container, self.clear_list_btn = create_button('🗑️', 'Clear List', self.clear_file_list)
         toolbar_layout.addWidget(clear_container)
 
-        # Search box - takes all remaining space
+        # Search box container - takes all remaining space
+        search_container = QWidget()
+        search_layout = QHBoxLayout(search_container)
+        search_layout.setContentsMargins(0, 0, 0, 0)
+        search_layout.setSpacing(0)
+
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText('🔍 Search files...')
-        self.search_box.textChanged.connect(self.filter_file_list)
+        self.search_box.textChanged.connect(self.on_search_text_changed)
         self.search_box.setMinimumHeight(30)
-        toolbar_layout.addWidget(self.search_box, 1)  # stretch factor 1
+        search_layout.addWidget(self.search_box)
+
+        # Clear button (hidden by default)
+        self.search_clear_btn = QPushButton('✕')
+        self.search_clear_btn.setFixedSize(30, 30)
+        self.search_clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.search_clear_btn.clicked.connect(self.clear_search)
+        self.search_clear_btn.setVisible(False)
+        self.search_clear_btn.setStyleSheet('''
+            QPushButton {
+                border: none;
+                background-color: transparent;
+                color: #666;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                color: #f44336;
+                background-color: rgba(244, 67, 54, 0.1);
+                border-radius: 15px;
+            }
+        ''')
+        search_layout.addWidget(self.search_clear_btn)
+
+        toolbar_layout.addWidget(search_container, 1)  # stretch factor 1
 
         # Start/Stop Server button
         server_container = QWidget()
@@ -704,6 +749,18 @@ class MainWindow(QMainWindow):
 
         self.log('info', f'Inverted {len(selected_items)} file(s)')
 
+    def on_search_text_changed(self, text: str):
+        """Handle search text changes - update filter and show/hide clear button"""
+        # Show/hide clear button based on text presence
+        self.search_clear_btn.setVisible(bool(text))
+
+        # Apply filter
+        self.filter_file_list(text)
+
+    def clear_search(self):
+        """Clear search box text"""
+        self.search_box.clear()
+
     def filter_file_list(self, text: str):
         """Filter file list based on search text"""
         for i in range(self.file_tree.topLevelItemCount()):
@@ -804,6 +861,7 @@ class MainWindow(QMainWindow):
         """Start the USB server"""
         # Reset transfer stats
         self.transfer_stats['completed_files'] = 0
+        self.transfer_stats['skipped_files'] = 0
 
         self.usb_handler = USBHandler(self.file_list)
         self.usb_handler.connection_changed.connect(self.on_connection_changed)
@@ -811,6 +869,8 @@ class MainWindow(QMainWindow):
         self.usb_handler.progress_updated.connect(self.on_progress_updated)
         self.usb_handler.file_progress.connect(self.on_file_progress)
         self.usb_handler.transfer_complete.connect(self.on_transfer_complete)
+        self.usb_handler.file_skipped.connect(self.on_file_skipped)
+        self.usb_handler.transfer_reset.connect(self.on_transfer_reset)
         self.usb_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
 
         self.usb_handler.start()
@@ -967,12 +1027,14 @@ class MainWindow(QMainWindow):
 
         if total_requested_size > 0 and num_requested_files > 0:
             completed = self.transfer_stats['completed_files']
+            skipped = self.transfer_stats['skipped_files']
+            processed = completed + skipped  # Total files processed (completed + skipped)
 
             # Calculate byte-based progress
             overall_percent = int((transferred_bytes / total_requested_size) * 100)
 
-            # Cap at 99% until all files are actually completed
-            if completed >= num_requested_files:
+            # Cap at 99% until all files are actually processed (completed or skipped)
+            if processed >= num_requested_files:
                 overall_percent = 100
             else:
                 overall_percent = min(99, overall_percent)
@@ -984,15 +1046,15 @@ class MainWindow(QMainWindow):
             self.overall_progress.setValue(overall_percent)
 
             # Update files counter - show current file being installed (+1)
-            # But when all files are completed (completed == num_requested_files), don't add +1
-            if completed < num_requested_files:
-                display_current = completed + 1
+            # But when all files are processed (processed == num_requested_files), don't add +1
+            if processed < num_requested_files:
+                display_current = processed + 1
             else:
-                display_current = completed
+                display_current = processed
             self.overall_label.setText(f'{display_current} / {num_requested_files} files')
 
             # Calculate ETA based on bytes transferred and elapsed time
-            if transferred_bytes > 0 and completed < num_requested_files:
+            if transferred_bytes > 0 and processed < num_requested_files:
                 if self.transfer_stats.get('start_time'):
                     elapsed = (datetime.now() - self.transfer_stats['start_time']).total_seconds()
                     if elapsed > 0:
@@ -1036,6 +1098,56 @@ class MainWindow(QMainWindow):
                     index = self.file_tree.indexFromItem(item, col)
                     self.file_tree.update(index)
                 break
+
+    def on_file_skipped(self, filename: str, file_size: int):
+        """Handle file skip/interruption"""
+        self.transfer_stats['skipped_files'] += 1
+        self.log('warning', f'File skipped by Switch: {filename} ({self.format_size(file_size)})')
+
+        # Mark file as skipped (delegate will show it with red background)
+        self.progress_delegate.mark_skipped(filename)
+
+        # Trigger repaint for all columns of this file
+        for i in range(self.file_tree.topLevelItemCount()):
+            item = self.file_tree.topLevelItem(i)
+            if item.text(1) == filename:
+                for col in range(self.file_tree.columnCount()):
+                    index = self.file_tree.indexFromItem(item, col)
+                    self.file_tree.update(index)
+                break
+
+    def on_transfer_reset(self):
+        """Handle transfer reset when Switch reselects files"""
+        self.log('info', 'Transfer reset - Switch restarted file selection')
+
+        # Reset statistics
+        self.transfer_stats['completed_files'] = 0
+        self.transfer_stats['skipped_files'] = 0
+        self.transfer_stats['start_time'] = None
+
+        # Clear progress delegate data
+        self.progress_delegate.progress_data.clear()
+        self.progress_delegate.skipped_files.clear()
+
+        # Reset progress bars
+        self.current_progress.setValue(0)
+        self.current_progress.setFormat('0%')
+        self.overall_progress.setValue(0)
+        self.overall_progress.setFormat('0%')
+
+        # Reset labels
+        self.current_file_label.setText('No transfer in progress')
+        self.overall_label.setText('0 / ? files')
+        self.speed_label.setText('Speed: 0 MB/s')
+        self.eta_label.setText('ETA: --:--:--')
+        self.session_time_label.setText('Session: 00:00:00')
+
+        # Repaint all file items to clear progress visualization
+        for i in range(self.file_tree.topLevelItemCount()):
+            item = self.file_tree.topLevelItem(i)
+            for col in range(self.file_tree.columnCount()):
+                index = self.file_tree.indexFromItem(item, col)
+                self.file_tree.update(index)
 
     def on_all_transfers_complete(self):
         """Handle completion of all transfers (Switch sent EXIT command)"""

@@ -34,6 +34,8 @@ class USBHandler(QThread):
     progress_updated = pyqtSignal(str, object, float, object, int, object, object, object)  # filename, transferred_bytes, speed_mbps, total_requested_size, num_requested_files, current_file_bytes, current_file_size, unique_bytes_transferred
     file_progress = pyqtSignal(str, int)  # filename, progress% - for updating file list item
     transfer_complete = pyqtSignal(str)  # filename
+    file_skipped = pyqtSignal(str, object)  # filename, file_size - emitted when file installation is interrupted
+    transfer_reset = pyqtSignal()  # emitted when Switch resets selection (sends LIST again)
     all_transfers_complete = pyqtSignal()  # emitted when Switch sends EXIT command
 
     # DBI Protocol Commands
@@ -72,6 +74,7 @@ class USBHandler(QThread):
         self.unique_bytes_transferred = 0  # Actual unique bytes transferred (sum of all file intervals)
         self.completed_files = 0
         self.total_files = len(file_list)
+        self.list_command_count = 0  # Track how many times LIST command was called
 
         self._log_to_file(f"Total files: {self.total_files}")
 
@@ -87,10 +90,16 @@ class USBHandler(QThread):
         self.current_file_bytes_sent = 0  # Total bytes sent via USB for current file
         self.current_range_offset = 0  # Offset of current range request
         self.current_range_size = 0  # Size of current range request
+        self.current_transfer_file = None  # Name of file currently in transfer phase (for detecting skips)
+        self.skipped_files = set()  # Files that were skipped/interrupted by Switch
 
         # Metadata vs Transfer phase detection
         # Metadata requests are small (<100KB), transfer requests are large (>=1MB)
         self.METADATA_THRESHOLD = 100 * 1024  # 100KB
+
+        # Track metadata phase state to detect resets
+        self.metadata_phase_active = True  # True during initial metadata collection
+        self.metadata_files_seen = set()  # Files seen in current metadata phase
 
     def _init_log_file(self):
         """Initialize log file"""
@@ -330,8 +339,38 @@ class USBHandler(QThread):
         except Exception as e:
             self._log_to_file(f"all_transfers_complete emit failed (ignored): {e}")
 
+    def _reset_transfer_state(self):
+        """Reset all transfer-related state (called when Switch restarts selection)"""
+        self._log_to_file("=== RESET: Clearing transfer state ===")
+
+        # Reset progress tracking
+        self.total_requested_size = 0
+        self.requested_files = set()
+        self.completed_files_set = set()
+        self.completed_files = 0
+        self.transferred_bytes = 0
+        self.unique_bytes_transferred = 0
+
+        # Reset file-specific tracking
+        self.file_intervals = {name: [] for name in self.file_list.keys()}
+        self.file_bytes_sent = {name: 0 for name in self.file_list.keys()}
+        self.current_file_size = 0
+        self.current_file_bytes = 0
+        self.current_file_bytes_sent = 0
+        self.current_transfer_file = None
+        self.skipped_files = set()
+
+        # Reset timing
+        self.transfer_start_time = None
+
+        # Don't reset metadata_files_seen here - it's managed separately in metadata detection
+
+        self._log_to_file("=== RESET: State cleared ===")
+
     def process_list_command(self):
         """Handle list command - send file list to Switch"""
+        self.list_command_count += 1
+        self._log_to_file(f"[LIST] LIST command #{self.list_command_count}")
         self.log_message.emit('info', 'Sending file list to Switch')
 
         nsp_path_list = ""
@@ -413,6 +452,33 @@ class USBHandler(QThread):
 
             if is_metadata:
                 # METADATA PHASE: Small chunks (16, 96, 3072 bytes) - identify which files will be installed
+
+                # Check if this is FIRST metadata request for a file that's ALREADY in requested_files
+                # (offset 0 with small size = first metadata chunk)
+                # This means Switch went back and is restarting selection
+                if (range_offset == 0 and
+                    range_size <= 16 and  # First tiny metadata request
+                    nsp_name in self.requested_files):
+
+                    self._log_to_file(f"[RESET] Detected repeat first metadata (offset=0) for {nsp_name} - Switch restarted selection")
+                    self.log_message.emit('warning', 'Switch restarted file selection')
+
+                    # Reset all transfer state
+                    self._reset_transfer_state()
+
+                    # Clear metadata tracking for fresh start
+                    self.metadata_files_seen.clear()
+                    self.metadata_phase_active = True
+
+                    # Notify UI to reset progress
+                    try:
+                        self.transfer_reset.emit()
+                    except Exception as e:
+                        self._log_to_file(f"transfer_reset emit failed (ignored): {e}")
+
+                # Track that we've seen this file in metadata phase
+                self.metadata_files_seen.add(nsp_name)
+
                 if nsp_name not in self.requested_files:
                     self.requested_files.add(nsp_name)
                     try:
@@ -435,7 +501,31 @@ class USBHandler(QThread):
                     self._log_to_file(f"[METADATA] Additional metadata request for {nsp_name}: range={range_offset}+{range_size}")
             else:
                 # TRANSFER PHASE: Large chunks (1MB) - actual file installation
+
+                # Check if Switch skipped the previous file (started new file without completing previous)
+                if (self.current_transfer_file is not None and
+                    self.current_transfer_file != nsp_name and
+                    self.current_transfer_file not in self.completed_files_set and
+                    self.current_transfer_file not in self.skipped_files):
+
+                    # Previous file was interrupted/skipped
+                    skipped_file = self.current_transfer_file
+                    skipped_size = self.file_sizes.get(skipped_file, 0)
+                    self.skipped_files.add(skipped_file)
+
+                    # Subtract skipped file size from total_requested_size
+                    self.total_requested_size -= skipped_size
+
+                    self._log_to_file(f"[SKIP] File skipped by Switch: {skipped_file} (size={skipped_size})")
+                    self._log_to_file(f"[SKIP] Adjusted total_requested_size: {self.total_requested_size}")
+
+                    try:
+                        self.file_skipped.emit(skipped_file, skipped_size)
+                    except Exception as e:
+                        self._log_to_file(f"file_skipped emit failed (ignored): {e}")
+
                 # Set current file info
+                self.current_transfer_file = nsp_name
                 self.current_file_size = self.file_sizes.get(nsp_name, 0)
                 self.current_range_offset = range_offset
                 self.current_range_size = range_size
