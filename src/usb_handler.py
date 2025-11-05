@@ -29,7 +29,7 @@ class USBHandler(QThread):
     # Signals
     connection_changed = pyqtSignal(ConnectionStatus)
     log_message = pyqtSignal(str, str)  # level, message
-    progress_updated = pyqtSignal(str, int, float, int, int, int, int)  # filename, transferred_bytes, speed_mbps, total_requested_size, num_requested_files, current_file_bytes, current_file_size
+    progress_updated = pyqtSignal(str, int, float, int, int, int, int, int)  # filename, transferred_bytes, speed_mbps, total_requested_size, num_requested_files, current_file_bytes, current_file_size, unique_bytes_transferred
     file_progress = pyqtSignal(str, int)  # filename, progress% - for updating file list item
     transfer_complete = pyqtSignal(str)  # filename
 
@@ -65,7 +65,8 @@ class USBHandler(QThread):
         self.requested_files = set()  # Files that Switch has requested (metadata phase)
         self.completed_files_set = set()  # Files that have been fully transferred
         self.file_sizes = {}  # Will be populated during metadata phase
-        self.transferred_bytes = 0
+        self.transferred_bytes = 0  # Total bytes sent via USB (includes overlaps)
+        self.unique_bytes_transferred = 0  # Actual unique bytes transferred (sum of all file intervals)
         self.completed_files = 0
         self.total_files = len(file_list)
 
@@ -147,6 +148,13 @@ class USBHandler(QThread):
 
         # Calculate total unique bytes transferred for this file
         total_bytes = sum(end - start for start, end in merged)
+
+        # Update global unique bytes counter (sum across all files)
+        self.unique_bytes_transferred = sum(
+            sum(end - start for start, end in intervals)
+            for intervals in self.file_intervals.values()
+        )
+
         return total_bytes
 
     def run(self):
@@ -406,7 +414,7 @@ class USBHandler(QThread):
                         try:
                             num_requested = len(self.requested_files)
                             self._log_to_file(f"[METADATA] Progress emit: {num_requested} files requested so far")
-                            self.progress_updated.emit(nsp_name, 0, 0.0, self.total_requested_size, num_requested, 0, 0)
+                            self.progress_updated.emit(nsp_name, 0, 0.0, self.total_requested_size, num_requested, 0, 0, 0)
                         except Exception as e:
                             self._log_to_file(f"[METADATA] Progress emit failed (ignored): {e}")
                     except Exception as e:
@@ -485,8 +493,8 @@ class USBHandler(QThread):
                     if not is_metadata and chunk_count % 10 == 0:
                         try:
                             num_requested = len(self.requested_files)
-                            self._log_to_file(f"Progress emit: {nsp_name}, overall={self.transferred_bytes}/{self.total_requested_size}, current={self.current_file_bytes}/{self.current_file_size}, files={num_requested}, speed={avg_speed:.1f}MB/s")
-                            self.progress_updated.emit(nsp_name, self.transferred_bytes, avg_speed, self.total_requested_size, num_requested, self.current_file_bytes, self.current_file_size)
+                            self._log_to_file(f"Progress emit: {nsp_name}, overall={self.transferred_bytes}/{self.total_requested_size}, current={self.current_file_bytes}/{self.current_file_size}, files={num_requested}, speed={avg_speed:.1f}MB/s, unique={self.unique_bytes_transferred}")
+                            self.progress_updated.emit(nsp_name, self.transferred_bytes, avg_speed, self.total_requested_size, num_requested, self.current_file_bytes, self.current_file_size, self.unique_bytes_transferred)
                         except Exception as e:
                             self._log_to_file(f"Progress emit failed (ignored): {e}")
 
@@ -506,7 +514,15 @@ class USBHandler(QThread):
                     if nsp_name not in self.completed_files_set and self.current_file_bytes >= self.current_file_size:
                         self.completed_files_set.add(nsp_name)
                         self.completed_files = len(self.completed_files_set)
+
+                        # Log file completion with unique bytes info (in MB)
+                        file_mb = self.current_file_bytes / (1024 * 1024)
+                        total_unique_mb = self.unique_bytes_transferred / (1024 * 1024)
                         self._log_to_file(f"File complete: {nsp_name} ({self.completed_files}/{len(self.requested_files)})")
+                        self._log_to_file(f"  File unique bytes: {file_mb:.2f} MB")
+                        self._log_to_file(f"  Total unique bytes transferred: {total_unique_mb:.2f} MB")
+                        print(f"[FILE COMPLETE] {nsp_name}: {file_mb:.2f} MB | Total: {total_unique_mb:.2f} MB ({self.completed_files}/{len(self.requested_files)} files)")
+
                         try:
                             self.transfer_complete.emit(nsp_name)
                         except Exception as e:
@@ -515,8 +531,8 @@ class USBHandler(QThread):
                     # Final emit after transfer completes
                     try:
                         num_requested = len(self.requested_files)
-                        self._log_to_file(f"Final progress emit: {nsp_name}, overall={self.transferred_bytes}/{self.total_requested_size}, current={self.current_file_bytes}/{self.current_file_size}, files={num_requested}, speed={avg_speed:.1f}MB/s")
-                        self.progress_updated.emit(nsp_name, self.transferred_bytes, avg_speed, self.total_requested_size, num_requested, self.current_file_bytes, self.current_file_size)
+                        self._log_to_file(f"Final progress emit: {nsp_name}, overall={self.transferred_bytes}/{self.total_requested_size}, current={self.current_file_bytes}/{self.current_file_size}, files={num_requested}, speed={avg_speed:.1f}MB/s, unique={self.unique_bytes_transferred}")
+                        self.progress_updated.emit(nsp_name, self.transferred_bytes, avg_speed, self.total_requested_size, num_requested, self.current_file_bytes, self.current_file_size, self.unique_bytes_transferred)
                     except Exception as e:
                         self._log_to_file(f"Final progress emit failed (ignored): {e}")
 

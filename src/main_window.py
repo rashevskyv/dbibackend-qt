@@ -894,7 +894,7 @@ class MainWindow(QMainWindow):
             if self.usb_handler and self.usb_handler.is_running:
                 self.log('warning', 'Connection lost, retrying...')
 
-    def on_progress_updated(self, filename: str, transferred_bytes: int, speed_mbps: float, total_requested_size: int, num_requested_files: int, current_file_bytes: int, current_file_size: int):
+    def on_progress_updated(self, filename: str, transferred_bytes: int, speed_mbps: float, total_requested_size: int, num_requested_files: int, current_file_bytes: int, current_file_size: int, unique_bytes_transferred: int):
         """Handle progress updates - with actual progress based on requested files and current file"""
         try:
             # Update current file
@@ -914,7 +914,8 @@ class MainWindow(QMainWindow):
                 self.current_progress.setValue(0)
 
             # Show overall progress based on files (more accurate than bytes due to overlapping ranges)
-            overall_str = self.format_size(transferred_bytes)
+            # Use unique_bytes_transferred (actual bytes sent to Switch) instead of transferred_bytes (includes overlaps)
+            unique_str = self.format_size(unique_bytes_transferred)
             if total_requested_size > 0 and num_requested_files > 0:
                 # Calculate progress based on completed files + current file progress
                 completed = self.transfer_stats['completed_files']
@@ -934,7 +935,7 @@ class MainWindow(QMainWindow):
 
                 total_str = self.format_size(total_requested_size)
 
-                self.overall_progress.setFormat(f'{overall_percent}% ({overall_str} / {total_str})')
+                self.overall_progress.setFormat(f'{overall_percent}% ({unique_str} / {total_str})')
                 self.overall_progress.setValue(overall_percent)
 
                 # Update files counter - show completed / requested files
@@ -962,7 +963,7 @@ class MainWindow(QMainWindow):
                     self.eta_label.setText('ETA: Calculating...')
             else:
                 # Metadata phase or no data yet - show basic info
-                self.overall_progress.setFormat(f'{overall_str} total')
+                self.overall_progress.setFormat(f'{unique_str} total')
                 self.overall_progress.setValue(50)
                 self.eta_label.setText('ETA: Unknown')
 
