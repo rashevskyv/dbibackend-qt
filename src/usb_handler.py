@@ -29,7 +29,9 @@ class USBHandler(QThread):
     # Signals
     connection_changed = pyqtSignal(ConnectionStatus)
     log_message = pyqtSignal(str, str)  # level, message
-    progress_updated = pyqtSignal(str, int, float, int, int, int, int, int)  # filename, transferred_bytes, speed_mbps, total_requested_size, num_requested_files, current_file_bytes, current_file_size, unique_bytes_transferred
+    # Use Python int for large values (>2GB) - PyQt will handle conversion
+    # Note: 'int' in pyqtSignal is Python int (unlimited), not C++ int (32-bit)
+    progress_updated = pyqtSignal(str, object, float, object, int, object, object, object)  # filename, transferred_bytes, speed_mbps, total_requested_size, num_requested_files, current_file_bytes, current_file_size, unique_bytes_transferred
     file_progress = pyqtSignal(str, int)  # filename, progress% - for updating file list item
     transfer_complete = pyqtSignal(str)  # filename
 
