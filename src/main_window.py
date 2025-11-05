@@ -920,18 +920,18 @@ class MainWindow(QMainWindow):
                 # Calculate progress percentage based on files (more stable, avoids negative progress)
                 completed = self.transfer_stats['completed_files']
 
-                # Current file progress fraction (0.0 to 1.0)
-                current_file_progress = 0.0
-                if current_file_size > 0:
-                    current_file_progress = min(1.0, current_file_bytes / current_file_size)
-
-                # Progress based on files (stable, monotonic)
-                overall_progress_fraction = (completed + current_file_progress) / num_requested_files
-                overall_percent = int(overall_progress_fraction * 100)
-
-                # Allow 100% when all files completed
+                # Force 100% when all files are completed
                 if completed >= num_requested_files:
                     overall_percent = 100
+                else:
+                    # Current file progress fraction (0.0 to 1.0)
+                    current_file_progress = 0.0
+                    if current_file_size > 0:
+                        current_file_progress = min(1.0, current_file_bytes / current_file_size)
+
+                    # Progress based on files (stable, monotonic)
+                    overall_progress_fraction = (completed + current_file_progress) / num_requested_files
+                    overall_percent = int(overall_progress_fraction * 100)
 
                 total_str = self.format_size(total_requested_size)
 
