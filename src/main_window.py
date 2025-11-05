@@ -913,25 +913,15 @@ class MainWindow(QMainWindow):
                 self.current_progress.setFormat(f'{current_bytes_str} transferred')
                 self.current_progress.setValue(0)
 
-            # Show overall progress based on files (more accurate than bytes due to overlapping ranges)
-            # Use unique_bytes_transferred (actual bytes sent to Switch) instead of transferred_bytes (includes overlaps)
+            # Show overall progress based on unique bytes transferred
+            # This matches exactly what's shown in console output for completed files
             unique_str = self.format_size(unique_bytes_transferred)
             if total_requested_size > 0 and num_requested_files > 0:
-                # Calculate progress based on completed files + current file progress
-                completed = self.transfer_stats['completed_files']
+                # Calculate progress based on actual unique bytes transferred
+                overall_percent = int((unique_bytes_transferred / total_requested_size) * 100)
 
-                # Current file progress fraction (0.0 to 1.0)
-                current_file_progress = 0.0
-                if current_file_size > 0:
-                    current_file_progress = min(1.0, current_file_bytes / current_file_size)
-
-                # Overall progress: (completed files + current file progress) / total files
-                overall_progress_fraction = (completed + current_file_progress) / num_requested_files
-                overall_percent = int(overall_progress_fraction * 100)
-
-                # Allow 100% when all files are completed
-                if completed >= num_requested_files:
-                    overall_percent = 100
+                # Cap at 100% (in case of slight rounding issues)
+                overall_percent = min(100, overall_percent)
 
                 total_str = self.format_size(total_requested_size)
 
@@ -944,21 +934,12 @@ class MainWindow(QMainWindow):
                 completed = self.transfer_stats['completed_files']
                 self.overall_label.setText(f'{completed} / {num_requested_files} files')
 
-                # Calculate ETA based on file progress (more accurate than bytes)
-                if speed_mbps > 0 and overall_progress_fraction < 0.99:
-                    # Estimate time based on current progress and elapsed time
-                    if self.transfer_stats.get('start_time'):
-                        elapsed = (datetime.now() - self.transfer_stats['start_time']).total_seconds()
-                        if overall_progress_fraction > 0.01:  # At least 1% progress
-                            # Estimate total time and subtract elapsed time
-                            estimated_total_seconds = elapsed / overall_progress_fraction
-                            remaining_seconds = estimated_total_seconds - elapsed
-                            eta_str = self.format_time(int(max(0, remaining_seconds)))
-                            self.eta_label.setText(f'ETA: {eta_str}')
-                        else:
-                            self.eta_label.setText('ETA: Calculating...')
-                    else:
-                        self.eta_label.setText('ETA: Calculating...')
+                # Calculate ETA based on bytes and speed
+                if speed_mbps > 0 and unique_bytes_transferred < total_requested_size:
+                    remaining_bytes = total_requested_size - unique_bytes_transferred
+                    remaining_seconds = remaining_bytes / (speed_mbps * 1024 * 1024)
+                    eta_str = self.format_time(int(remaining_seconds))
+                    self.eta_label.setText(f'ETA: {eta_str}')
                 else:
                     self.eta_label.setText('ETA: Calculating...')
             else:
