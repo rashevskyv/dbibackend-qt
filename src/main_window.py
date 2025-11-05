@@ -861,7 +861,6 @@ class MainWindow(QMainWindow):
         """Get only checked files from the file list"""
         checked_files = {}
         total_items = self.file_tree.topLevelItemCount()
-        self.log('debug', f'Checking {total_items} items for checked state...')
 
         for i in range(total_items):
             item = self.file_tree.topLevelItem(i)
@@ -870,12 +869,8 @@ class MainWindow(QMainWindow):
                 filename = item.text(1)
                 if filename in self.file_list:
                     checked_files[filename] = self.file_list[filename]
-                    self.log('debug', f'  ✓ {filename}')
-            else:
-                filename = item.text(1)
-                self.log('debug', f'  ✗ {filename}')
 
-        self.log('info', f'Found {len(checked_files)} checked files out of {total_items} total')
+        self.log('info', f'Selected {len(checked_files)} of {total_items} files for transfer')
         return checked_files
 
     def start_server(self):
