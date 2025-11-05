@@ -79,8 +79,10 @@ class USBHandler(QThread):
         # Track file-specific progress (for current file progress bar)
         # Using interval tracking like torrent clients - track which parts of file were transferred
         self.file_intervals = {name: [] for name in file_list.keys()}  # List of (start, end) tuples
+        self.file_bytes_sent = {name: 0 for name in file_list.keys()}  # Total bytes sent via USB per file (includes overlaps)
         self.current_file_size = 0  # Size of file currently being transferred
         self.current_file_bytes = 0  # Unique bytes transferred for current file
+        self.current_file_bytes_sent = 0  # Total bytes sent via USB for current file
         self.current_range_offset = 0  # Offset of current range request
         self.current_range_size = 0  # Size of current range request
 
@@ -428,6 +430,7 @@ class USBHandler(QThread):
                 self.current_range_offset = range_offset
                 self.current_range_size = range_size
                 self.current_range_bytes = 0
+                self.current_file_bytes_sent = 0  # Reset for this range
 
                 self._log_to_file(f"[TRANSFER] Range request for {nsp_name}: offset={range_offset}, size={range_size}, file_size={self.current_file_size}")
 
@@ -460,6 +463,11 @@ class USBHandler(QThread):
                     bytes_sent = len(buf)
                     curr_off += bytes_sent
                     self.transferred_bytes += bytes_sent
+
+                    # Track bytes sent for current file (only during transfer phase)
+                    if not is_metadata:
+                        self.current_file_bytes_sent += bytes_sent
+                        self.file_bytes_sent[nsp_name] += bytes_sent
 
                     # Track current range progress (only during transfer phase, not metadata)
                     # NOTE: We don't update current_file_bytes here because partial range
@@ -515,13 +523,25 @@ class USBHandler(QThread):
                         self.completed_files_set.add(nsp_name)
                         self.completed_files = len(self.completed_files_set)
 
-                        # Log file completion with unique bytes info (in MB)
-                        file_mb = self.current_file_bytes / (1024 * 1024)
-                        total_unique_mb = self.unique_bytes_transferred / (1024 * 1024)
+                        # Log file completion with byte statistics
+                        file_size_bytes = self.current_file_size
+                        file_size_mb = file_size_bytes / (1024 * 1024)
+                        bytes_sent_for_file = self.file_bytes_sent[nsp_name]
+                        bytes_sent_mb = bytes_sent_for_file / (1024 * 1024)
+                        overhead_bytes = bytes_sent_for_file - file_size_bytes
+                        overhead_mb = overhead_bytes / (1024 * 1024)
+                        overhead_percent = (overhead_bytes / file_size_bytes * 100) if file_size_bytes > 0 else 0
+
                         self._log_to_file(f"File complete: {nsp_name} ({self.completed_files}/{len(self.requested_files)})")
-                        self._log_to_file(f"  File unique bytes: {file_mb:.2f} MB")
-                        self._log_to_file(f"  Total unique bytes transferred: {total_unique_mb:.2f} MB")
-                        print(f"[FILE COMPLETE] {nsp_name}: {file_mb:.2f} MB | Total: {total_unique_mb:.2f} MB ({self.completed_files}/{len(self.requested_files)} files)")
+                        self._log_to_file(f"  File size: {file_size_bytes} bytes ({file_size_mb:.2f} MB)")
+                        self._log_to_file(f"  Bytes sent: {bytes_sent_for_file} bytes ({bytes_sent_mb:.2f} MB)")
+                        self._log_to_file(f"  Overhead: {overhead_bytes} bytes ({overhead_mb:.2f} MB, {overhead_percent:.1f}%)")
+
+                        print(f"[FILE COMPLETE] {nsp_name}")
+                        print(f"  File size:  {file_size_bytes:>15} bytes ({file_size_mb:>10.2f} MB)")
+                        print(f"  Bytes sent: {bytes_sent_for_file:>15} bytes ({bytes_sent_mb:>10.2f} MB)")
+                        print(f"  Overhead:   {overhead_bytes:>15} bytes ({overhead_mb:>10.2f} MB, {overhead_percent:.1f}%)")
+                        print(f"  Progress: {self.completed_files}/{len(self.requested_files)} files")
 
                         try:
                             self.transfer_complete.emit(nsp_name)
