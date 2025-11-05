@@ -913,18 +913,29 @@ class MainWindow(QMainWindow):
                 self.current_progress.setFormat(f'{current_bytes_str} transferred')
                 self.current_progress.setValue(0)
 
-            # Show overall progress based on unique bytes transferred
-            # This matches exactly what's shown in console output for completed files
+            # Show overall progress based on completed files (for progress bar)
+            # But display unique bytes transferred (for byte count accuracy)
             unique_str = self.format_size(unique_bytes_transferred)
             if total_requested_size > 0 and num_requested_files > 0:
-                # Calculate progress based on actual unique bytes transferred
-                overall_percent = int((unique_bytes_transferred / total_requested_size) * 100)
+                # Calculate progress percentage based on files (more stable, avoids negative progress)
+                completed = self.transfer_stats['completed_files']
 
-                # Cap at 100% (in case of slight rounding issues)
-                overall_percent = min(100, overall_percent)
+                # Current file progress fraction (0.0 to 1.0)
+                current_file_progress = 0.0
+                if current_file_size > 0:
+                    current_file_progress = min(1.0, current_file_bytes / current_file_size)
+
+                # Progress based on files (stable, monotonic)
+                overall_progress_fraction = (completed + current_file_progress) / num_requested_files
+                overall_percent = int(overall_progress_fraction * 100)
+
+                # Allow 100% when all files completed
+                if completed >= num_requested_files:
+                    overall_percent = 100
 
                 total_str = self.format_size(total_requested_size)
 
+                # Show file-based progress percentage, but unique byte count
                 self.overall_progress.setFormat(f'{overall_percent}% ({unique_str} / {total_str})')
                 self.overall_progress.setValue(overall_percent)
 
@@ -934,12 +945,17 @@ class MainWindow(QMainWindow):
                 completed = self.transfer_stats['completed_files']
                 self.overall_label.setText(f'{completed} / {num_requested_files} files')
 
-                # Calculate ETA based on bytes and speed
-                if speed_mbps > 0 and unique_bytes_transferred < total_requested_size:
-                    remaining_bytes = total_requested_size - unique_bytes_transferred
-                    remaining_seconds = remaining_bytes / (speed_mbps * 1024 * 1024)
-                    eta_str = self.format_time(int(remaining_seconds))
-                    self.eta_label.setText(f'ETA: {eta_str}')
+                # Calculate ETA based on file progress and elapsed time
+                if overall_progress_fraction > 0.01 and overall_progress_fraction < 0.99:
+                    if self.transfer_stats.get('start_time'):
+                        elapsed = (datetime.now() - self.transfer_stats['start_time']).total_seconds()
+                        # Estimate total time based on current progress
+                        estimated_total_seconds = elapsed / overall_progress_fraction
+                        remaining_seconds = estimated_total_seconds - elapsed
+                        eta_str = self.format_time(int(max(0, remaining_seconds)))
+                        self.eta_label.setText(f'ETA: {eta_str}')
+                    else:
+                        self.eta_label.setText('ETA: Calculating...')
                 else:
                     self.eta_label.setText('ETA: Calculating...')
             else:
