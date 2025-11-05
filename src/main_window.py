@@ -1002,10 +1002,11 @@ class MainWindow(QMainWindow):
             else:
                 self.eta_label.setText('ETA: Calculating...')
         else:
-            # Metadata phase or no data yet
+            # Metadata phase or no data yet - show 0% progress
+            # Progress bar stays at 0% until first file completes
             self.overall_progress.setFormat(f'{transferred_str} total')
-            self.overall_progress.setValue(50)
-            self.eta_label.setText('ETA: Unknown')
+            self.overall_progress.setValue(0)  # 0 files completed = 0%
+            self.eta_label.setText('ETA: Calculating...')
 
             if num_requested_files > 0:
                 self.overall_label.setText(f'0 / {num_requested_files} files')
