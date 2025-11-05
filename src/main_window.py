@@ -926,19 +926,22 @@ class MainWindow(QMainWindow):
 
                 # Overall progress: (completed files + current file progress) / total files
                 overall_progress_fraction = (completed + current_file_progress) / num_requested_files
-                overall_percent = min(99, int(overall_progress_fraction * 100))
+                overall_percent = int(overall_progress_fraction * 100)
+
+                # Allow 100% when all files are completed
+                if completed >= num_requested_files:
+                    overall_percent = 100
 
                 total_str = self.format_size(total_requested_size)
 
                 self.overall_progress.setFormat(f'{overall_percent}% ({overall_str} / {total_str})')
                 self.overall_progress.setValue(overall_percent)
 
-                # Update files counter - show completed+1 (current) / requested files
+                # Update files counter - show completed / requested files
                 # completed_files is tracked via transfer_complete signal
                 # num_requested_files = files that Switch requested (metadata phase)
                 completed = self.transfer_stats['completed_files']
-                current_file_num = completed + 1  # +1 for current file being transferred
-                self.overall_label.setText(f'{current_file_num} / {num_requested_files} files')
+                self.overall_label.setText(f'{completed} / {num_requested_files} files')
 
                 # Calculate ETA based on file progress (more accurate than bytes)
                 if speed_mbps > 0 and overall_progress_fraction < 0.99:
