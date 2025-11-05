@@ -469,6 +469,14 @@ class USBHandler(QThread):
                         self.current_file_bytes_sent += bytes_sent
                         self.file_bytes_sent[nsp_name] += bytes_sent
 
+                        # Debug logging for large files (>2GB) - log every 10MB
+                        if self.file_bytes_sent[nsp_name] > 2 * 1024 * 1024 * 1024:  # After 2GB
+                            # Log every 10MB (10485760 bytes)
+                            if self.file_bytes_sent[nsp_name] % (10 * 1024 * 1024) < bytes_sent:
+                                mb_sent = self.file_bytes_sent[nsp_name] / (1024 * 1024)
+                                self._log_to_file(f"[DEBUG >2GB] {nsp_name}: file_bytes_sent={self.file_bytes_sent[nsp_name]} ({mb_sent:.2f} MB)")
+                                print(f"[DEBUG >2GB] {nsp_name}: {self.file_bytes_sent[nsp_name]:,} bytes ({mb_sent:.2f} MB)")
+
                     # Track current range progress (only during transfer phase, not metadata)
                     # NOTE: We don't update current_file_bytes here because partial range
                     # might overlap with existing intervals, causing incorrect counts.
@@ -517,6 +525,16 @@ class USBHandler(QThread):
                     interval_end = self.current_range_offset + range_size
                     self.current_file_bytes = self._add_interval(nsp_name, interval_start, interval_end)
                     self._log_to_file(f"Added interval [{interval_start}, {interval_end}) for {nsp_name}, unique_bytes={self.current_file_bytes}/{self.current_file_size}")
+
+                    # Debug: Compare bytes_sent vs unique_bytes for large files
+                    if self.file_bytes_sent[nsp_name] > 2 * 1024 * 1024 * 1024:  # After 2GB
+                        bytes_sent_total = self.file_bytes_sent[nsp_name]
+                        unique_bytes = self.current_file_bytes
+                        overhead = bytes_sent_total - unique_bytes
+                        self._log_to_file(f"[DEBUG >2GB COMPARE] bytes_sent={bytes_sent_total}, unique={unique_bytes}, overhead={overhead}")
+                        if overhead < 0:
+                            self._log_to_file(f"[WARNING] NEGATIVE OVERHEAD! bytes_sent < unique_bytes")
+                            print(f"[WARNING] {nsp_name}: bytes_sent={bytes_sent_total:,} < unique={unique_bytes:,} (diff={overhead:,})")
 
                     # Check if file is complete
                     if nsp_name not in self.completed_files_set and self.current_file_bytes >= self.current_file_size:
