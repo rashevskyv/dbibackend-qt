@@ -63,6 +63,7 @@ class USBHandler(QThread):
         self.total_size = 0  # Total size of ALL files (if we knew)
         self.total_requested_size = 0  # Total size of files actually requested by Switch
         self.requested_files = set()  # Files that Switch has requested (metadata phase)
+        self.completed_files_set = set()  # Files that have been fully transferred
         self.file_sizes = {}  # Will be populated during metadata phase
         self.transferred_bytes = 0
         self.completed_files = 0
@@ -491,6 +492,16 @@ class USBHandler(QThread):
                     interval_end = self.current_range_offset + range_size
                     self.current_file_bytes = self._add_interval(nsp_name, interval_start, interval_end)
                     self._log_to_file(f"Added interval [{interval_start}, {interval_end}) for {nsp_name}, unique_bytes={self.current_file_bytes}/{self.current_file_size}")
+
+                    # Check if file is complete
+                    if nsp_name not in self.completed_files_set and self.current_file_bytes >= self.current_file_size:
+                        self.completed_files_set.add(nsp_name)
+                        self.completed_files = len(self.completed_files_set)
+                        self._log_to_file(f"File complete: {nsp_name} ({self.completed_files}/{len(self.requested_files)})")
+                        try:
+                            self.transfer_complete.emit(nsp_name)
+                        except Exception as e:
+                            self._log_to_file(f"transfer_complete emit failed (ignored): {e}")
 
                     # Final emit after transfer completes
                     try:

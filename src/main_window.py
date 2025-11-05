@@ -164,6 +164,7 @@ class MainWindow(QMainWindow):
         self.transfer_stats = {
             'total_files': 0,
             'transferred_files': 0,
+            'completed_files': 0,  # Files fully transferred
             'total_size': 0,
             'transferred_size': 0,
             'start_time': None,
@@ -801,6 +802,9 @@ class MainWindow(QMainWindow):
 
     def start_server(self):
         """Start the USB server"""
+        # Reset transfer stats
+        self.transfer_stats['completed_files'] = 0
+
         self.usb_handler = USBHandler(self.file_list)
         self.usb_handler.connection_changed.connect(self.on_connection_changed)
         self.usb_handler.log_message.connect(self.log)
@@ -834,8 +838,8 @@ class MainWindow(QMainWindow):
         self.transfer_stats['start_time'] = datetime.now()
         self.transfer_stats['total_files'] = len(self.file_list)
 
-        # Show total files count
-        self.overall_label.setText(f'0 / {len(self.file_list)} files')
+        # Show placeholder until Switch requests files
+        self.overall_label.setText(f'0 / ? files')
 
         self.log('info', 'Server started')
 
@@ -919,8 +923,12 @@ class MainWindow(QMainWindow):
                 self.overall_progress.setFormat(f'{overall_percent}% ({overall_str} / {total_str})')
                 self.overall_progress.setValue(overall_percent)
 
-                # Update files counter - show REQUESTED files count, not total in list
-                self.overall_label.setText(f'0 / {num_requested_files} files (of {len(self.file_list)} total)')
+                # Update files counter - show completed+1 (current) / requested files
+                # completed_files is tracked via transfer_complete signal
+                # num_requested_files = files that Switch requested (metadata phase)
+                completed = self.transfer_stats['completed_files']
+                current_file_num = completed + 1  # +1 for current file being transferred
+                self.overall_label.setText(f'{current_file_num} / {num_requested_files} files')
 
                 # Calculate ETA
                 if speed_mbps > 0 and transferred_bytes < total_requested_size:
@@ -967,10 +975,7 @@ class MainWindow(QMainWindow):
 
     def on_transfer_complete(self, filename: str):
         """Handle transfer completion"""
-        self.transfer_stats['transferred_files'] += 1
-        self.overall_label.setText(
-            f"{self.transfer_stats['transferred_files']} / {self.transfer_stats['total_files']} files"
-        )
+        self.transfer_stats['completed_files'] += 1
         self.log('success', f'Transfer complete: {filename}')
 
         # Mark file as 100% complete (delegate will show it with brighter color)
