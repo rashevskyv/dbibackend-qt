@@ -857,13 +857,33 @@ class MainWindow(QMainWindow):
         else:
             self.stop_server()
 
+    def get_checked_files(self) -> Dict[str, Path]:
+        """Get only checked files from the file list"""
+        checked_files = {}
+        for i in range(self.file_tree.topLevelItemCount()):
+            item = self.file_tree.topLevelItem(i)
+            checkbox = self.file_tree.itemWidget(item, 0)
+            if checkbox and checkbox.isChecked():
+                filename = item.text(1)
+                if filename in self.file_list:
+                    checked_files[filename] = self.file_list[filename]
+        return checked_files
+
     def start_server(self):
         """Start the USB server"""
         # Reset transfer stats
         self.transfer_stats['completed_files'] = 0
         self.transfer_stats['skipped_files'] = 0
 
-        self.usb_handler = USBHandler(self.file_list)
+        # Get only checked files
+        checked_files = self.get_checked_files()
+
+        if not checked_files:
+            self.log('warning', 'No files selected! Please check at least one file.')
+            return
+
+        self.log('info', f'Starting server with {len(checked_files)} checked file(s)')
+        self.usb_handler = USBHandler(checked_files)
         self.usb_handler.connection_changed.connect(self.on_connection_changed)
         self.usb_handler.log_message.connect(self.log)
         self.usb_handler.progress_updated.connect(self.on_progress_updated)
