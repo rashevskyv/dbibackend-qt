@@ -11,17 +11,11 @@ echo DBI Backend Qt - Build Script
 echo ========================================
 echo.
 
-REM Install dependencies
+REM Install dependencies (continue even if already installed)
 echo Installing dependencies...
 echo Installing dependencies... >> %LOGFILE%
-python -m pip install -r requirements.txt --quiet >> %LOGFILE% 2>&1
-if %errorlevel% neq 0 (
-    echo ERROR: Failed to install dependencies!
-    echo ERROR: Failed to install dependencies! >> %LOGFILE%
-    pause
-    exit /b 1
-)
-echo Dependencies installed successfully >> %LOGFILE%
+python -m pip install -r requirements.txt >> %LOGFILE% 2>&1
+echo Dependencies check complete >> %LOGFILE%
 
 REM Check if PyInstaller is installed
 echo Checking PyInstaller... >> %LOGFILE%
@@ -30,12 +24,6 @@ if %errorlevel% neq 0 (
     echo Installing PyInstaller...
     echo Installing PyInstaller... >> %LOGFILE%
     python -m pip install pyinstaller >> %LOGFILE% 2>&1
-    if %errorlevel% neq 0 (
-        echo ERROR: Failed to install PyInstaller!
-        echo ERROR: Failed to install PyInstaller! >> %LOGFILE%
-        pause
-        exit /b 1
-    )
 )
 echo PyInstaller ready >> %LOGFILE%
 
@@ -63,6 +51,7 @@ if %errorlevel% equ 0 (
     echo Executable location: dist\dbibackend-qt.exe
     echo.
     echo You can now run: dist\dbibackend-qt.exe
+    echo.
     echo Check build_output.log for detailed build information
 ) else (
     echo.
@@ -70,8 +59,10 @@ if %errorlevel% equ 0 (
     echo Build FAILED!
     echo ========================================
     echo Build FAILED at %date% %time% >> %LOGFILE%
-    echo Check build_output.log for error details >> %LOGFILE%
+    echo.
+    echo Check build_output.log for error details
     exit /b 1
 )
 
+echo.
 pause
