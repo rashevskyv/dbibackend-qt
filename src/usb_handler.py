@@ -34,6 +34,7 @@ class USBHandler(QThread):
     progress_updated = pyqtSignal(str, object, float, object, int, object, object, object)  # filename, transferred_bytes, speed_mbps, total_requested_size, num_requested_files, current_file_bytes, current_file_size, unique_bytes_transferred
     file_progress = pyqtSignal(str, int)  # filename, progress% - for updating file list item
     transfer_complete = pyqtSignal(str)  # filename
+    all_transfers_complete = pyqtSignal()  # emitted when Switch sends EXIT command
 
     # DBI Protocol Commands
     CMD_ID_EXIT = 0
@@ -74,9 +75,8 @@ class USBHandler(QThread):
 
         self._log_to_file(f"Total files: {self.total_files}")
 
-        # Speed tracking with smoothing
-        self.speed_samples = []
-        self.max_speed_samples = 10
+        # Speed tracking based on overall elapsed time
+        self.transfer_start_time = None
 
         # Track file-specific progress (for current file progress bar)
         # Using interval tracking like torrent clients - track which parts of file were transferred
@@ -324,6 +324,11 @@ class USBHandler(QThread):
         self.log_message.emit('info', 'Received exit command')
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', self.CMD_TYPE_RESPONSE,
                                      self.CMD_ID_EXIT, 0))
+        # Emit signal that all transfers are complete
+        try:
+            self.all_transfers_complete.emit()
+        except Exception as e:
+            self._log_to_file(f"all_transfers_complete emit failed (ignored): {e}")
 
     def process_list_command(self):
         """Handle list command - send file list to Switch"""
@@ -398,10 +403,13 @@ class USBHandler(QThread):
             file_path = self.file_list[nsp_name]
             self._log_to_file(f"File path: {file_path}")
             self.current_file = nsp_name
-            self.transfer_start_time = time.time()
 
             # Detect metadata vs transfer phase based on range_size
             is_metadata = range_size < self.METADATA_THRESHOLD
+
+            # Start transfer timer on first transfer phase chunk
+            if not is_metadata and self.transfer_start_time is None:
+                self.transfer_start_time = time.time()
 
             if is_metadata:
                 # METADATA PHASE: Small chunks (16, 96, 3072 bytes) - identify which files will be installed
@@ -471,13 +479,12 @@ class USBHandler(QThread):
                         self.current_file_bytes_sent += bytes_sent
                         self.file_bytes_sent[nsp_name] += bytes_sent
 
-                        # Debug logging for large files (>2GB) - log every 10MB
+                        # Debug logging for large files (>2GB) - log every 10MB (to file only)
                         if self.file_bytes_sent[nsp_name] > 2 * 1024 * 1024 * 1024:  # After 2GB
                             # Log every 10MB (10485760 bytes)
                             if self.file_bytes_sent[nsp_name] % (10 * 1024 * 1024) < bytes_sent:
                                 mb_sent = self.file_bytes_sent[nsp_name] / (1024 * 1024)
                                 self._log_to_file(f"[DEBUG >2GB] {nsp_name}: file_bytes_sent={self.file_bytes_sent[nsp_name]} ({mb_sent:.2f} MB)")
-                                print(f"[DEBUG >2GB] {nsp_name}: {self.file_bytes_sent[nsp_name]:,} bytes ({mb_sent:.2f} MB)")
 
                     # Track current range progress (only during transfer phase, not metadata)
                     # NOTE: We don't update current_file_bytes here because partial range
@@ -489,20 +496,15 @@ class USBHandler(QThread):
                     # 2. Verification passes (Switch re-downloads to verify)
                     # This is normal and we'll cap progress display at 99%
 
-                    # Calculate speed for this chunk (only for transfer phase, metadata is too small)
-                    if not is_metadata:
-                        chunk_speed_mbps = (bytes_sent / transfer_time / (1024 * 1024)) if transfer_time > 0 else 0
-
-                        # Add to speed samples for averaging
-                        self.speed_samples.append(chunk_speed_mbps)
-                        if len(self.speed_samples) > self.max_speed_samples:
-                            self.speed_samples.pop(0)
-
-                        # Average speed
-                        avg_speed = sum(self.speed_samples) / len(self.speed_samples) if self.speed_samples else 0
+                    # Calculate overall average speed based on total elapsed time
+                    if not is_metadata and self.transfer_start_time is not None:
+                        elapsed_time = time.time() - self.transfer_start_time
+                        if elapsed_time > 0:
+                            avg_speed = (self.transferred_bytes / elapsed_time) / (1024 * 1024)  # MB/s
+                        else:
+                            avg_speed = 0
                     else:
-                        # Metadata phase - use last known speed or 0
-                        avg_speed = sum(self.speed_samples) / len(self.speed_samples) if self.speed_samples else 0
+                        avg_speed = 0
 
                     # Emit progress every 10 chunks (10 MB) - balance between updates and performance
                     # Only emit during TRANSFER phase (not metadata)
@@ -536,7 +538,6 @@ class USBHandler(QThread):
                         self._log_to_file(f"[DEBUG >2GB COMPARE] bytes_sent={bytes_sent_total}, unique={unique_bytes}, overhead={overhead}")
                         if overhead < 0:
                             self._log_to_file(f"[WARNING] NEGATIVE OVERHEAD! bytes_sent < unique_bytes")
-                            print(f"[WARNING] {nsp_name}: bytes_sent={bytes_sent_total:,} < unique={unique_bytes:,} (diff={overhead:,})")
 
                     # Check if file is complete
                     if nsp_name not in self.completed_files_set and self.current_file_bytes >= self.current_file_size:
@@ -557,11 +558,6 @@ class USBHandler(QThread):
                         self._log_to_file(f"  Bytes sent: {bytes_sent_for_file} bytes ({bytes_sent_mb:.2f} MB)")
                         self._log_to_file(f"  Overhead: {overhead_bytes} bytes ({overhead_mb:.2f} MB, {overhead_percent:.1f}%)")
 
-                        print(f"[FILE COMPLETE] {nsp_name}")
-                        print(f"  File size:  {file_size_bytes:>15} bytes ({file_size_mb:>10.2f} MB)")
-                        print(f"  Bytes sent: {bytes_sent_for_file:>15} bytes ({bytes_sent_mb:>10.2f} MB)")
-                        print(f"  Overhead:   {overhead_bytes:>15} bytes ({overhead_mb:>10.2f} MB, {overhead_percent:.1f}%)")
-                        print(f"  Progress: {self.completed_files}/{len(self.requested_files)} files")
 
                         try:
                             self.transfer_complete.emit(nsp_name)

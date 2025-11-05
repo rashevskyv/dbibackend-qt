@@ -811,6 +811,7 @@ class MainWindow(QMainWindow):
         self.usb_handler.progress_updated.connect(self.on_progress_updated)
         self.usb_handler.file_progress.connect(self.on_file_progress)
         self.usb_handler.transfer_complete.connect(self.on_transfer_complete)
+        self.usb_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
 
         self.usb_handler.start()
 
@@ -902,7 +903,11 @@ class MainWindow(QMainWindow):
 
             # Show current file progress (if we have size info)
             if current_file_size > 0:
-                current_percent = min(99, int((current_file_bytes / current_file_size) * 100))
+                # Calculate progress, allow 100% when bytes match size
+                if current_file_bytes >= current_file_size:
+                    current_percent = 100
+                else:
+                    current_percent = int((current_file_bytes / current_file_size) * 100)
                 current_bytes_str = self.format_size(current_file_bytes)
                 current_size_str = self.format_size(current_file_size)
                 self.current_progress.setFormat(f'{current_percent}% ({current_bytes_str} / {current_size_str})')
@@ -947,24 +952,15 @@ class MainWindow(QMainWindow):
 
     def _update_overall_progress(self, transferred_bytes: int, total_requested_size: int, num_requested_files: int):
         """
-        Update overall (bottom) progress bar based on completed files.
+        Update overall (bottom) progress bar based on transferred bytes.
 
         ===================================================================
-        IMPORTANT: DO NOT MODIFY THIS METHOD
+        BYTE-BASED PROGRESS BAR
         ===================================================================
-        This method is isolated to prevent accidental changes to the
-        overall progress bar calculation logic.
+        Progress is based on transferred bytes vs total size.
+        Formula: (transferred_bytes / total_requested_size) * 100%
 
-        Progress is based ONLY on completed files count, NOT bytes.
-        Formula: (completed_files / num_requested_files) * 100%
-
-        This ensures:
-        - Progress starts at 0% (not from middle)
-        - Progress jumps only when file completes
-        - Source of truth: num_requested_files (from metadata phase)
-        - Matches "Overall N / M files" counter exactly
-
-        Example: 0% → 25% → 50% → 75% → 100% (for 4 files)
+        This ensures smooth, continuous progress as bytes are transferred.
         ===================================================================
         """
         transferred_str = self.format_size(transferred_bytes)
@@ -972,40 +968,49 @@ class MainWindow(QMainWindow):
         if total_requested_size > 0 and num_requested_files > 0:
             completed = self.transfer_stats['completed_files']
 
-            # Force 100% when all files are completed
+            # Calculate byte-based progress
+            overall_percent = int((transferred_bytes / total_requested_size) * 100)
+
+            # Cap at 99% until all files are actually completed
             if completed >= num_requested_files:
                 overall_percent = 100
             else:
-                # Simple: completed / total (progress jumps per file, not per byte)
-                overall_percent = int((completed / num_requested_files) * 100)
+                overall_percent = min(99, overall_percent)
 
             total_str = self.format_size(total_requested_size)
 
-            # Show file-based progress percentage with transferred bytes
+            # Show byte-based progress percentage with transferred bytes
             self.overall_progress.setFormat(f'{overall_percent}% ({transferred_str} / {total_str})')
             self.overall_progress.setValue(overall_percent)
 
-            # Update files counter
-            self.overall_label.setText(f'{completed} / {num_requested_files} files')
+            # Update files counter - show current file being installed (+1)
+            # But when all files are completed (completed == num_requested_files), don't add +1
+            if completed < num_requested_files:
+                display_current = completed + 1
+            else:
+                display_current = completed
+            self.overall_label.setText(f'{display_current} / {num_requested_files} files')
 
-            # Calculate ETA based on completed files and elapsed time
-            if completed > 0 and completed < num_requested_files:
+            # Calculate ETA based on bytes transferred and elapsed time
+            if transferred_bytes > 0 and completed < num_requested_files:
                 if self.transfer_stats.get('start_time'):
                     elapsed = (datetime.now() - self.transfer_stats['start_time']).total_seconds()
-                    avg_time_per_file = elapsed / completed
-                    remaining_files = num_requested_files - completed
-                    remaining_seconds = avg_time_per_file * remaining_files
-                    eta_str = self.format_time(int(max(0, remaining_seconds)))
-                    self.eta_label.setText(f'ETA: {eta_str}')
+                    if elapsed > 0:
+                        bytes_per_second = transferred_bytes / elapsed
+                        remaining_bytes = total_requested_size - transferred_bytes
+                        remaining_seconds = remaining_bytes / bytes_per_second if bytes_per_second > 0 else 0
+                        eta_str = self.format_time(int(max(0, remaining_seconds)))
+                        self.eta_label.setText(f'ETA: {eta_str}')
+                    else:
+                        self.eta_label.setText('ETA: Calculating...')
                 else:
                     self.eta_label.setText('ETA: Calculating...')
             else:
                 self.eta_label.setText('ETA: Calculating...')
         else:
             # Metadata phase or no data yet - show 0% progress
-            # Progress bar stays at 0% until first file completes
             self.overall_progress.setFormat(f'{transferred_str} total')
-            self.overall_progress.setValue(0)  # 0 files completed = 0%
+            self.overall_progress.setValue(0)
             self.eta_label.setText('ETA: Calculating...')
 
             if num_requested_files > 0:
@@ -1019,6 +1024,10 @@ class MainWindow(QMainWindow):
         # Mark file as 100% complete (delegate will show it with brighter color)
         self.progress_delegate.set_progress(filename, 100)
 
+        # Update current progress bar to 100% for completed file
+        self.current_progress.setValue(100)
+        self.current_progress.setFormat('100%')
+
         # Trigger repaint
         for i in range(self.file_tree.topLevelItemCount()):
             item = self.file_tree.topLevelItem(i)
@@ -1027,6 +1036,15 @@ class MainWindow(QMainWindow):
                     index = self.file_tree.indexFromItem(item, col)
                     self.file_tree.update(index)
                 break
+
+    def on_all_transfers_complete(self):
+        """Handle completion of all transfers (Switch sent EXIT command)"""
+        self.log('success', 'All transfers complete!')
+
+        # Force both progress bars to 100%
+        self.current_progress.setValue(100)
+        self.current_progress.setFormat('100%')
+        self.overall_progress.setValue(100)
 
     def log(self, level: str, message: str):
         """Add a log message with color coding"""
