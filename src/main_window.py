@@ -913,11 +913,21 @@ class MainWindow(QMainWindow):
                 self.current_progress.setFormat(f'{current_bytes_str} transferred')
                 self.current_progress.setValue(0)
 
-            # Show overall progress (if we know total size of requested files)
+            # Show overall progress based on files (more accurate than bytes due to overlapping ranges)
             overall_str = self.format_size(transferred_bytes)
-            if total_requested_size > 0:
-                # Cap at 99% to handle overlapping ranges (transferred > total is possible)
-                overall_percent = min(99, int((transferred_bytes / total_requested_size) * 100))
+            if total_requested_size > 0 and num_requested_files > 0:
+                # Calculate progress based on completed files + current file progress
+                completed = self.transfer_stats['completed_files']
+
+                # Current file progress fraction (0.0 to 1.0)
+                current_file_progress = 0.0
+                if current_file_size > 0:
+                    current_file_progress = min(1.0, current_file_bytes / current_file_size)
+
+                # Overall progress: (completed files + current file progress) / total files
+                overall_progress_fraction = (completed + current_file_progress) / num_requested_files
+                overall_percent = min(99, int(overall_progress_fraction * 100))
+
                 total_str = self.format_size(total_requested_size)
 
                 self.overall_progress.setFormat(f'{overall_percent}% ({overall_str} / {total_str})')
@@ -930,12 +940,21 @@ class MainWindow(QMainWindow):
                 current_file_num = completed + 1  # +1 for current file being transferred
                 self.overall_label.setText(f'{current_file_num} / {num_requested_files} files')
 
-                # Calculate ETA
-                if speed_mbps > 0 and transferred_bytes < total_requested_size:
-                    remaining_bytes = total_requested_size - transferred_bytes
-                    remaining_seconds = remaining_bytes / (speed_mbps * 1024 * 1024)
-                    eta_str = self.format_time(int(remaining_seconds))
-                    self.eta_label.setText(f'ETA: {eta_str}')
+                # Calculate ETA based on file progress (more accurate than bytes)
+                if speed_mbps > 0 and overall_progress_fraction < 0.99:
+                    # Estimate time based on current progress and elapsed time
+                    if self.transfer_stats.get('start_time'):
+                        elapsed = (datetime.now() - self.transfer_stats['start_time']).total_seconds()
+                        if overall_progress_fraction > 0.01:  # At least 1% progress
+                            # Estimate total time and subtract elapsed time
+                            estimated_total_seconds = elapsed / overall_progress_fraction
+                            remaining_seconds = estimated_total_seconds - elapsed
+                            eta_str = self.format_time(int(max(0, remaining_seconds)))
+                            self.eta_label.setText(f'ETA: {eta_str}')
+                        else:
+                            self.eta_label.setText('ETA: Calculating...')
+                    else:
+                        self.eta_label.setText('ETA: Calculating...')
                 else:
                     self.eta_label.setText('ETA: Calculating...')
             else:
