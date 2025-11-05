@@ -400,6 +400,15 @@ class USBHandler(QThread):
                         self.file_sizes[nsp_name] = file_size
                         self.total_requested_size += file_size
                         self._log_to_file(f"[METADATA] First request for {nsp_name}: size={file_size}, total_requested={self.total_requested_size}")
+
+                        # Emit progress update to notify UI about new file count
+                        # During metadata phase: transferred_bytes=0, speed=0, current_file_bytes=0
+                        try:
+                            num_requested = len(self.requested_files)
+                            self._log_to_file(f"[METADATA] Progress emit: {num_requested} files requested so far")
+                            self.progress_updated.emit(nsp_name, 0, 0.0, self.total_requested_size, num_requested, 0, 0)
+                        except Exception as e:
+                            self._log_to_file(f"[METADATA] Progress emit failed (ignored): {e}")
                     except Exception as e:
                         self._log_to_file(f"[METADATA] Cannot get size for {nsp_name}: {e}")
                 else:

@@ -939,10 +939,14 @@ class MainWindow(QMainWindow):
                 else:
                     self.eta_label.setText('ETA: Calculating...')
             else:
-                # No files requested yet - show basic info
+                # Metadata phase or no data yet - show basic info
                 self.overall_progress.setFormat(f'{overall_str} total')
                 self.overall_progress.setValue(50)
                 self.eta_label.setText('ETA: Unknown')
+
+                # Update files counter even during metadata phase
+                if num_requested_files > 0:
+                    self.overall_label.setText(f'0 / {num_requested_files} files')
 
             # Update speed
             self.speed_label.setText(f'Speed: {speed_mbps:.1f} MB/s')
