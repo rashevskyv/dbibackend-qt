@@ -917,21 +917,16 @@ class MainWindow(QMainWindow):
             # Display actually transferred bytes (includes all data sent via USB)
             transferred_str = self.format_size(transferred_bytes)
             if total_requested_size > 0 and num_requested_files > 0:
-                # Calculate progress percentage based on files (more stable, avoids negative progress)
+                # Calculate progress percentage based on completed files only
+                # Progress jumps only when file completes (not gradual per byte)
                 completed = self.transfer_stats['completed_files']
 
                 # Force 100% when all files are completed
                 if completed >= num_requested_files:
                     overall_percent = 100
                 else:
-                    # Current file progress fraction (0.0 to 1.0)
-                    current_file_progress = 0.0
-                    if current_file_size > 0:
-                        current_file_progress = min(1.0, current_file_bytes / current_file_size)
-
-                    # Progress based on files (stable, monotonic)
-                    overall_progress_fraction = (completed + current_file_progress) / num_requested_files
-                    overall_percent = int(overall_progress_fraction * 100)
+                    # Simple: completed / total (progress jumps per file, not per byte)
+                    overall_percent = int((completed / num_requested_files) * 100)
 
                 total_str = self.format_size(total_requested_size)
 
@@ -945,13 +940,14 @@ class MainWindow(QMainWindow):
                 completed = self.transfer_stats['completed_files']
                 self.overall_label.setText(f'{completed} / {num_requested_files} files')
 
-                # Calculate ETA based on file progress and elapsed time
-                if overall_progress_fraction > 0.01 and overall_progress_fraction < 0.99:
+                # Calculate ETA based on completed files and elapsed time
+                if completed > 0 and completed < num_requested_files:
                     if self.transfer_stats.get('start_time'):
                         elapsed = (datetime.now() - self.transfer_stats['start_time']).total_seconds()
-                        # Estimate total time based on current progress
-                        estimated_total_seconds = elapsed / overall_progress_fraction
-                        remaining_seconds = estimated_total_seconds - elapsed
+                        # Estimate based on average time per file
+                        avg_time_per_file = elapsed / completed
+                        remaining_files = num_requested_files - completed
+                        remaining_seconds = avg_time_per_file * remaining_files
                         eta_str = self.format_time(int(max(0, remaining_seconds)))
                         self.eta_label.setText(f'ETA: {eta_str}')
                     else:
