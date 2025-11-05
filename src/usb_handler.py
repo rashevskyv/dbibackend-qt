@@ -371,14 +371,17 @@ class USBHandler(QThread):
         """Handle list command - send file list to Switch"""
         self.list_command_count += 1
         self._log_to_file(f"[LIST] LIST command #{self.list_command_count}")
-        self.log_message.emit('info', 'Sending file list to Switch')
+        self._log_to_file(f"[LIST] Sending {len(self.file_list)} files to Switch:")
 
         nsp_path_list = ""
         for name in self.file_list.keys():
+            self._log_to_file(f"[LIST]   - {name}")
             nsp_path_list += name + '\n'
 
         nsp_path_list_bytes = nsp_path_list.encode('utf-8')
         nsp_path_list_len = len(nsp_path_list_bytes)
+
+        self.log_message.emit('info', f'Sending file list to Switch: {len(self.file_list)} files')
 
         # Send response header
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', self.CMD_TYPE_RESPONSE,

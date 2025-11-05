@@ -860,13 +860,22 @@ class MainWindow(QMainWindow):
     def get_checked_files(self) -> Dict[str, Path]:
         """Get only checked files from the file list"""
         checked_files = {}
-        for i in range(self.file_tree.topLevelItemCount()):
+        total_items = self.file_tree.topLevelItemCount()
+        self.log('debug', f'Checking {total_items} items for checked state...')
+
+        for i in range(total_items):
             item = self.file_tree.topLevelItem(i)
             checkbox = self.file_tree.itemWidget(item, 0)
             if checkbox and checkbox.isChecked():
                 filename = item.text(1)
                 if filename in self.file_list:
                     checked_files[filename] = self.file_list[filename]
+                    self.log('debug', f'  ✓ {filename}')
+            else:
+                filename = item.text(1)
+                self.log('debug', f'  ✗ {filename}')
+
+        self.log('info', f'Found {len(checked_files)} checked files out of {total_items} total')
         return checked_files
 
     def start_server(self):
@@ -1183,6 +1192,7 @@ class MainWindow(QMainWindow):
         timestamp = datetime.now().strftime('%H:%M:%S')
 
         color_map = {
+            'debug': '#9E9E9E',
             'info': '#2196F3',
             'success': '#4CAF50',
             'warning': '#FF9800',
@@ -1191,6 +1201,7 @@ class MainWindow(QMainWindow):
 
         color = color_map.get(level, '#000000')
         icon_map = {
+            'debug': '🔍',
             'info': 'ℹ️',
             'success': '✓',
             'warning': '⚠',
