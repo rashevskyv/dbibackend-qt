@@ -37,10 +37,13 @@ a = Analysis(
         # Application modules
         'src',
         'src.config_manager',
+        'src.http_handler',
         'src.main_window',
         'src.usb_handler',
         'src.theme_manager',
         'src.single_instance',
+        # Standard library modules
+        'html',
     ],
     hookspath=[],
     hooksconfig={},

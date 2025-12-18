@@ -15,7 +15,14 @@
       "Bash(python -m pip:*)",
       "Bash(dir:*)",
       "Bash(dbibackend-qt.exe)",
-      "Bash(python -m py_compile:*)"
+      "Bash(python -m py_compile:*)",
+      "Bash(tasklist:*)",
+      "Bash(find:*)",
+      "Bash(powershell -Command \"& { .\\build.bat }\")",
+      "Bash(/mnt/c/Windows/System32/cmd.exe /c \"cd /d Y:\\Switch\\dbibackend-qt && build.bat\")",
+      "Bash(cmd.exe /c \"dir dist\\dbibackend-qt.exe\")",
+      "Bash(python:*)",
+      "Bash(where python)"
     ],
     "deny": [],
     "ask": []

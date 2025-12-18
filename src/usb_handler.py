@@ -62,7 +62,8 @@ class USBHandler(QThread):
 
         # Setup logging to file
         self.log_file = Path("log.txt")
-        self._init_log_file()
+        # Note: Log file is initialized at program start (MainWindow.__init__)
+        # We only append to it here, not overwrite
 
         # Track progress across all files (sizes calculated lazily when needed)
         self.total_size = 0  # Total size of ALL files (if we knew)
@@ -101,13 +102,6 @@ class USBHandler(QThread):
         self.metadata_phase_active = True  # True during initial metadata collection
         self.metadata_files_seen = set()  # Files seen in current metadata phase
 
-    def _init_log_file(self):
-        """Initialize log file"""
-        try:
-            with open(self.log_file, 'w', encoding='utf-8') as f:
-                f.write(f"=== DBI Backend Qt Log - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
-        except Exception as e:
-            print(f"Cannot create log file: {e}")
 
     def _log_to_file(self, message: str):
         """Write message to log file"""
@@ -511,16 +505,28 @@ class USBHandler(QThread):
                     self.current_transfer_file not in self.completed_files_set and
                     self.current_transfer_file not in self.skipped_files):
 
-                    # Previous file was interrupted/skipped
+                    # Previous file was interrupted/skipped (transferred <99%)
                     skipped_file = self.current_transfer_file
                     skipped_size = self.file_sizes.get(skipped_file, 0)
                     self.skipped_files.add(skipped_file)
 
+                    # Calculate how many unique bytes were transferred for this skipped file
+                    skipped_file_intervals = self.file_intervals.get(skipped_file, [])
+                    skipped_file_bytes_transferred = sum(end - start for start, end in skipped_file_intervals)
+                    skipped_file_bytes_sent = self.file_bytes_sent.get(skipped_file, 0)
+
                     # Subtract skipped file size from total_requested_size
                     self.total_requested_size -= skipped_size
 
+                    # Subtract skipped file bytes from transferred_bytes and unique_bytes_transferred
+                    self.transferred_bytes -= skipped_file_bytes_sent
+                    self.unique_bytes_transferred -= skipped_file_bytes_transferred
+
                     self._log_to_file(f"[SKIP] File skipped by Switch: {skipped_file} (size={skipped_size})")
+                    self._log_to_file(f"[SKIP] Transferred {skipped_file_bytes_transferred} bytes ({skipped_file_bytes_transferred/skipped_size*100:.1f}%) before skip")
                     self._log_to_file(f"[SKIP] Adjusted total_requested_size: {self.total_requested_size}")
+                    self._log_to_file(f"[SKIP] Adjusted transferred_bytes: {self.transferred_bytes}")
+                    self._log_to_file(f"[SKIP] Adjusted unique_bytes_transferred: {self.unique_bytes_transferred}")
 
                     try:
                         self.file_skipped.emit(skipped_file, skipped_size)
@@ -632,8 +638,9 @@ class USBHandler(QThread):
                         if overhead < 0:
                             self._log_to_file(f"[WARNING] NEGATIVE OVERHEAD! bytes_sent < unique_bytes")
 
-                    # Check if file is complete
-                    if nsp_name not in self.completed_files_set and self.current_file_bytes >= self.current_file_size:
+                    # Check if file is complete (99% threshold - Switch may not request entire file for NSZ)
+                    completion_threshold = self.current_file_size * 0.99
+                    if nsp_name not in self.completed_files_set and self.current_file_bytes >= completion_threshold:
                         self.completed_files_set.add(nsp_name)
                         self.completed_files = len(self.completed_files_set)
 

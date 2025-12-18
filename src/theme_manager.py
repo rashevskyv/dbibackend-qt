@@ -73,7 +73,7 @@ class ThemeManager:
     }
 
     QTreeWidget::item:hover {
-        background-color: #f5f5f5;
+        background-color: rgba(0, 0, 0, 0.1);
     }
 
     QHeaderView::section {
@@ -227,7 +227,7 @@ class ThemeManager:
     }
 
     QTreeWidget::item:hover {
-        background-color: #3d3d3d;
+        background-color: rgba(255, 255, 255, 0.1);
     }
 
     QHeaderView::section {

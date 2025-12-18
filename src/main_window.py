@@ -7,6 +7,7 @@ Enhanced GUI for DBI file transfer to Nintendo Switch
 import sys
 import json
 import base64
+import re
 from pathlib import Path
 from typing import Dict, Optional
 from datetime import datetime
@@ -16,14 +17,49 @@ from PyQt6.QtWidgets import (
     QPushButton, QTreeWidget, QTreeWidgetItem, QTextEdit,
     QLabel, QProgressBar, QMenuBar, QMenu, QFileDialog,
     QMessageBox, QLineEdit, QStatusBar, QSplitter, QSplitterHandle,
-    QHeaderView, QStyle, QCheckBox, QGroupBox, QStyledItemDelegate
+    QHeaderView, QStyle, QCheckBox, QGroupBox, QStyledItemDelegate,
+    QInputDialog, QApplication, QTreeWidgetItemIterator, QComboBox,
+    QDialog, QFormLayout, QSpinBox, QDialogButtonBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QRect
-from PyQt6.QtGui import QAction, QIcon, QDragEnterEvent, QDropEvent, QColor, QPainter, QBrush
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QRect, QEvent
+from PyQt6.QtGui import QAction, QIcon, QDragEnterEvent, QDropEvent, QColor, QPainter, QBrush, QWheelEvent, QFont
 
 from usb_handler import USBHandler, ConnectionStatus
+from http_handler import HTTPHandler
 from config_manager import ConfigManager
 from theme_manager import ThemeManager
+
+
+class FileTreeWidgetItem(QTreeWidgetItem):
+    """Custom tree widget item that properly sorts numeric values and statuses"""
+    
+    def __lt__(self, other):
+        """Override comparison for proper sorting"""
+        if not isinstance(other, FileTreeWidgetItem):
+            return super().__lt__(other)
+            
+        column = self.treeWidget().sortColumn() if self.treeWidget() else 0
+        
+        # For checkbox column (column 0), compare checked state stored in UserRole
+        if column == 0:
+            self_state = self.data(0, Qt.ItemDataRole.UserRole) or 0
+            other_state = other.data(0, Qt.ItemDataRole.UserRole) or 0
+            return self_state < other_state
+        
+        # For size column (column 2), compare numeric values
+        if column == 2:
+            self_size = self.data(2, Qt.ItemDataRole.UserRole) or 0
+            other_size = other.data(2, Qt.ItemDataRole.UserRole) or 0
+            return self_size < other_size
+
+        # For status column (column 3), compare status weights (Pending < Process < Failed < Done)
+        if column == 3:
+            self_status = self.data(3, Qt.ItemDataRole.UserRole) or 0
+            other_status = other.data(3, Qt.ItemDataRole.UserRole) or 0
+            return self_status < other_status
+            
+        # For other columns, use default comparison
+        return super().__lt__(other)
 
 
 class CustomSplitterHandle(QSplitterHandle):
@@ -103,6 +139,70 @@ class CustomSplitter(QSplitter):
         self.sizes_changed.emit()
 
 
+class ZoomableTreeWidget(QTreeWidget):
+    """QTreeWidget with Ctrl+Wheel zoom support"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.zoom_level = 0  # Default zoom level (0 = 100%)
+        self.base_font_size = 9  # Base font size in points
+        self.min_zoom = -5  # Minimum zoom level
+        self.max_zoom = 10  # Maximum zoom level
+        # Default sort by Status (column 3)
+        self.sortByColumn(3, Qt.SortOrder.AscendingOrder)
+        self.header().setSortIndicatorShown(True)
+
+    def wheelEvent(self, event: QWheelEvent):
+        """Handle mouse wheel events for zooming with Ctrl"""
+        if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            # Zoom with Ctrl+Wheel
+            delta = event.angleDelta().y()
+            if delta > 0:
+                # Zoom in
+                self.zoom_level = min(self.zoom_level + 1, self.max_zoom)
+            else:
+                # Zoom out
+                self.zoom_level = max(self.zoom_level - 1, self.min_zoom)
+
+            self.apply_zoom()
+            event.accept()
+        else:
+            # Normal scrolling
+            super().wheelEvent(event)
+
+    def apply_zoom(self):
+        """Apply the current zoom level to the widget"""
+        # Calculate new font size based on zoom level
+        new_size = self.base_font_size + self.zoom_level
+
+        # Update font
+        font = self.font()
+        font.setPointSize(new_size)
+        self.setFont(font)
+
+        # Update row height to match new font size
+        self.setStyleSheet(f"QTreeWidget {{ font-size: {new_size}pt; }}")
+
+    def keyPressEvent(self, event):
+        """Handle key press events for the tree widget"""
+        if event.key() == Qt.Key.Key_Space and not event.modifiers():
+            selected_items = self.selectedItems()
+            if selected_items:
+                window = self.window()
+                if hasattr(window, "invert_selected_files"):
+                    window.invert_selected_files()
+                else:
+                    # Fallback: invert directly if window handler is unavailable
+                    for item in selected_items:
+                        checkbox = self.itemWidget(item, 0)
+                        if checkbox:
+                            checkbox.setChecked(not checkbox.isChecked())
+                event.accept()
+                return
+
+        super().keyPressEvent(event)
+
+
 class ProgressDelegate(QStyledItemDelegate):
     """Custom delegate to draw progress bar background for file items"""
 
@@ -175,6 +275,7 @@ class MainWindow(QMainWindow):
         self.config = ConfigManager()
         self.theme_manager = ThemeManager()
         self.usb_handler = None
+        self.http_handler = None # New HTTP Handler
         self.file_list: Dict[str, Path] = {}
         self.transfer_stats = {
             'total_files': 0,
@@ -186,11 +287,18 @@ class MainWindow(QMainWindow):
             'start_time': None,
             'current_speed': 0
         }
+        self.completed_files_set = set() # Track unique completed files to avoid double counting
+        self.current_processing_file = None  # Track which file is currently being processed
+        self.presets_dir = self._get_presets_directory()
 
         self.init_ui()
         self.apply_theme(self.config.get('theme', 'light'))
         self.restore_geometry()
         self.restore_splitter_sizes()
+        self.restore_zoom_level()
+
+        # Initialize log file for new session (overwrite previous log)
+        self._init_log_file()
 
         # Setup auto-reconnect timer
         self.reconnect_timer = QTimer()
@@ -199,7 +307,7 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         """Initialize the user interface"""
-        self.setWindowTitle('DBI Backend Qt v2.3.1')
+        self.setWindowTitle('DBI Backend Qt v2.3.4')
         self.setMinimumSize(900, 700)
 
         # Create central widget
@@ -267,20 +375,10 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        save_list_action = QAction('&Save List (JSON)...', self)
-        save_list_action.setShortcut('Ctrl+S')
-        save_list_action.triggered.connect(self.save_file_list)
-        file_menu.addAction(save_list_action)
-
         save_batch_action = QAction('Save as &Batch...', self)
         save_batch_action.setShortcut('Ctrl+B')
         save_batch_action.triggered.connect(self.save_file_list_as_batch)
         file_menu.addAction(save_batch_action)
-
-        load_list_action = QAction('&Load List...', self)
-        load_list_action.setShortcut('Ctrl+L')
-        load_list_action.triggered.connect(self.load_file_list)
-        file_menu.addAction(load_list_action)
 
         file_menu.addSeparator()
 
@@ -305,6 +403,27 @@ class MainWindow(QMainWindow):
         clear_log_action = QAction('Clear &Log', self)
         clear_log_action.triggered.connect(self.clear_log)
         view_menu.addAction(clear_log_action)
+
+        # Presets menu (Quick Load) - main menu with list of presets
+        self.presets_menu = menubar.addMenu('&Presets')
+        self.presets_menu.aboutToShow.connect(self.update_presets_menu)
+        
+        # Manage Presets submenu - store reference
+        self.manage_presets_menu = self.presets_menu.addMenu('&Manage Presets')
+        
+        save_preset_action = QAction('Save Preset...', self)
+        save_preset_action.setShortcut('Ctrl+Shift+S')
+        save_preset_action.triggered.connect(self.save_preset)
+        self.manage_presets_menu.addAction(save_preset_action)
+
+        load_preset_action = QAction('Load Preset...', self)
+        load_preset_action.setShortcut('Ctrl+Shift+L')
+        load_preset_action.triggered.connect(self.load_preset)
+        self.manage_presets_menu.addAction(load_preset_action)
+
+        delete_preset_action = QAction('Delete Preset...', self)
+        delete_preset_action.triggered.connect(self.delete_preset)
+        self.manage_presets_menu.addAction(delete_preset_action)
 
         # Help menu
         help_menu = menubar.addMenu('&Help')
@@ -425,20 +544,25 @@ class MainWindow(QMainWindow):
         layout.addLayout(toolbar_layout)
 
     def create_file_section(self):
-        """Create file list section"""
+        """Create file list section with Mode Toggle and IP Label"""
         group = QGroupBox('File Queue')
         layout = QVBoxLayout()
 
-        # File tree widget
-        self.file_tree = QTreeWidget()
-        self.file_tree.setHeaderLabels(['', 'Filename', 'Size', 'Path', ''])
+        # File tree widget with zoom support
+        self.file_tree = ZoomableTreeWidget()
+        self.file_tree.setHeaderLabels(['', 'Filename', 'Size', 'Status', 'Path'])
         self.file_tree.setColumnWidth(0, 50)  # Checkbox
         self.file_tree.setColumnWidth(1, 250)  # Filename
         self.file_tree.setColumnWidth(2, 100)  # Size
-        self.file_tree.setColumnWidth(3, 300)  # Path
-        self.file_tree.setColumnWidth(4, 40)  # Delete button
+        self.file_tree.setColumnWidth(3, 80)  # Status
+        self.file_tree.setColumnWidth(4, 300)  # Path
         self.file_tree.setAlternatingRowColors(True)
-        self.file_tree.header().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.file_tree.header().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+
+        # Enable sorting by clicking column headers
+        self.file_tree.setSortingEnabled(True)
+        # Default sort by Status (column 3), then Filename
+        self.file_tree.sortByColumn(3, Qt.SortOrder.AscendingOrder) 
 
         # Enable multiple selection
         self.file_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
@@ -451,6 +575,38 @@ class MainWindow(QMainWindow):
         self.progress_delegate = ProgressDelegate(self.file_tree, self.file_tree)
         self.file_tree.setItemDelegate(self.progress_delegate)
 
+        # Add "select all" checkbox and Mode Toggle in header for column 0 area
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(15, 0, 15, 0)
+        
+        # 1. Select All Checkbox
+        self.header_checkbox = QCheckBox()
+        self.header_checkbox.setTristate(True)  # Enable three states
+        self.header_checkbox.setChecked(False) 
+        self._updating_header_checkbox = False 
+        self.header_checkbox.stateChanged.connect(self.on_header_checkbox_changed)
+        header_layout.addWidget(self.header_checkbox)
+
+        # Spacer
+        header_layout.addStretch()
+
+        # 2. Mode Toggle (USB / HTTP)
+        header_layout.addWidget(QLabel("Mode:"))
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems(["USB Backend", "HTTP Server"])
+        self.mode_combo.currentIndexChanged.connect(self.on_mode_changed)
+        header_layout.addWidget(self.mode_combo)
+        
+        # 3. IP Label (Hidden in USB mode)
+        self.ip_label = QLabel("")
+        self.ip_label.setStyleSheet("color: #2196F3; font-weight: bold; margin-left: 10px;")
+        self.ip_label.setVisible(False)
+        header_layout.addWidget(self.ip_label)
+
+        # Insert header widget before file tree
+        layout.insertWidget(0, header_widget)
+
         layout.addWidget(self.file_tree)
 
         # File count label
@@ -459,6 +615,18 @@ class MainWindow(QMainWindow):
 
         group.setLayout(layout)
         return group
+    
+    def on_mode_changed(self, index):
+        """Handle mode change (USB/HTTP)"""
+        mode = self.mode_combo.currentText()
+        if mode == "HTTP Server":
+            self.server_label.setText("Start HTTP")
+            self.connection_status.setText("🌐 HTTP Mode")
+        else:
+            self.server_label.setText("Start USB")
+            self.connection_status.setText("🔴 Not connected")
+            self.ip_label.setVisible(False)
+            self.ip_label.setText("")
 
     def create_progress_section(self):
         """Create progress bars section"""
@@ -545,6 +713,8 @@ class MainWindow(QMainWindow):
             self.config.set('last_directory', last_dir)
             self.config.save()
             self.log('debug', f'Saved last_directory: {last_dir}')
+            
+            current_checked_state = self._get_current_checked_state()
             added_count = 0
             for file_path in files:
                 path = Path(file_path)
@@ -555,7 +725,7 @@ class MainWindow(QMainWindow):
                     self.log('warning', f'Skipped unsupported file: {path.name}')
 
             if added_count > 0:
-                self.update_file_list()
+                self.update_file_list(current_checked_state)
                 self.log('info', f'Added {added_count} file(s)')
 
     def add_folder(self):
@@ -570,6 +740,8 @@ class MainWindow(QMainWindow):
             self.config.set('last_directory', folder)
             self.config.save()
             self.log('debug', f'Saved last_directory: {folder}')
+
+            current_checked_state = self._get_current_checked_state()
             path = Path(folder)
             added_count = 0
             skipped_count = 0
@@ -584,23 +756,40 @@ class MainWindow(QMainWindow):
                         skipped_count += 1
 
             if added_count > 0:
-                self.update_file_list()
+                self.update_file_list(current_checked_state)
                 self.log('info', f'Added {added_count} file(s) from folder')
 
             if skipped_count > 0:
                 self.log('warning', f'Skipped {skipped_count} unsupported file(s)')
 
-    def update_file_list(self):
+    def on_item_checkbox_state_changed(self, item: QTreeWidgetItem, state: int):
+        """Update stored state and refresh totals when an item's checkbox changes"""
+        checked = (state == Qt.CheckState.Checked.value)
+        item.setData(0, Qt.ItemDataRole.UserRole, 1 if checked else 0)
+        self.update_total_size()
+        self.update_header_checkbox_state()
+
+    def update_file_list(self, checked_state: Optional[Dict[str, bool]] = None):
         """Update the file tree widget"""
+        # Disable sorting during update for better performance
+        self.file_tree.setSortingEnabled(False)
         self.file_tree.clear()
-        total_size = 0
 
         for name, path in sorted(self.file_list.items()):
-            item = QTreeWidgetItem()
+            item = FileTreeWidgetItem()
 
             # Checkbox
             checkbox = QCheckBox()
+            checkbox.blockSignals(True)
             checkbox.setChecked(True)
+            if checked_state and name in checked_state:
+                checkbox.setChecked(bool(checked_state[name]))
+            checkbox.blockSignals(False)
+            # Store initial state for sorting
+            item.setData(0, Qt.ItemDataRole.UserRole, 1 if checkbox.isChecked() else 0)
+            checkbox.stateChanged.connect(
+                lambda state, item=item: self.on_item_checkbox_state_changed(item, state)
+            )
             self.file_tree.addTopLevelItem(item)
             self.file_tree.setItemWidget(item, 0, checkbox)
 
@@ -610,33 +799,126 @@ class MainWindow(QMainWindow):
             # Size (with error handling - file might not exist)
             try:
                 size = path.stat().st_size
-                total_size += size
                 item.setText(2, self.format_size(size))
+                # Store numeric size for proper sorting
+                item.setData(2, Qt.ItemDataRole.UserRole, size)
             except Exception as e:
                 item.setText(2, "Error")
+                item.setData(2, Qt.ItemDataRole.UserRole, 0)
                 self.log('error', f'Cannot get size for {name}: {e}')
 
-            # Path
-            item.setText(3, str(path.parent))
+            # Status (initially empty)
+            item.setText(3, "")
+            # Set default sorting weight for status (0 = Pending)
+            item.setData(3, Qt.ItemDataRole.UserRole, 0)
 
-            # Delete button
-            delete_btn = QPushButton('❌')
-            delete_btn.setMaximumWidth(40)
-            delete_btn.clicked.connect(lambda checked, n=name: self.remove_file(n))
-            self.file_tree.setItemWidget(item, 4, delete_btn)
+            # Path
+            item.setText(4, str(path.parent))
+
+        # Re-enable sorting after update
+        self.file_tree.setSortingEnabled(True)
+
+        # Update count label and total size
+        self.update_total_size()
+        
+        # Update header checkbox state
+        self.update_header_checkbox_state()
+
+        # Enable/disable start button
+        count = len(self.file_list)
+        self.start_server_btn.setEnabled(count > 0)
+
+    def update_total_size(self):
+        """Update the total size label based on checked files only"""
+        total_size = 0
+        total_items = self.file_tree.topLevelItemCount()
+        checked_count = 0
+
+        for i in range(total_items):
+            item = self.file_tree.topLevelItem(i)
+            checkbox = self.file_tree.itemWidget(item, 0)
+
+            if checkbox and checkbox.isChecked():
+                checked_count += 1
+                filename = item.text(1)
+                if filename in self.file_list:
+                    path = self.file_list[filename]
+                    try:
+                        size = path.stat().st_size
+                        total_size += size
+                    except Exception:
+                        pass  # Size already shown as "Error" in the tree
 
         # Update count label
         count = len(self.file_list)
-        self.file_count_label.setText(f'{count} file{"s" if count != 1 else ""}, {self.format_size(total_size)} total')
+        if checked_count < count:
+            self.file_count_label.setText(f'{count} file{"s" if count != 1 else ""} ({checked_count} checked), {self.format_size(total_size)} total')
+        else:
+            self.file_count_label.setText(f'{count} file{"s" if count != 1 else ""}, {self.format_size(total_size)} total')
 
-        # Enable/disable start button
-        self.start_server_btn.setEnabled(count > 0)
+    def update_file_status(self, filename: str, status: str):
+        """Update the status of a file in the tree"""
+        # Define sorting weights for statuses
+        # 0: Pending (empty)
+        # 1: Processing
+        # 2: Failed
+        # 3: Done
+        status_weights = {
+            '': 0,
+            'process': 1,
+            'failed': 2,
+            'done': 3
+        }
+
+        highlight_colors = {
+            'process': QColor('#E3F2FD'),  # Light blue
+            'done': QColor('#E8F5E9'),     # Light green
+            'failed': QColor('#FFEBEE')    # Light red
+        }
+        
+        for i in range(self.file_tree.topLevelItemCount()):
+            item = self.file_tree.topLevelItem(i)
+            if item.text(1) == filename:  # Column 1 is filename
+                # Update status text with icon
+                if status == 'process':
+                    item.setText(3, '🔄 Process')
+                    item.setForeground(3, QColor('#2196F3'))  # Blue
+                elif status == 'done':
+                    item.setText(3, '✓ Done')
+                    item.setForeground(3, QColor('#4CAF50'))  # Green
+                elif status == 'failed':
+                    item.setText(3, '✗ Failed')
+                    item.setForeground(3, QColor('#F44336'))  # Red
+                else:
+                    item.setText(3, '')
+                    item.setForeground(3, self.palette().text().color())
+
+                # Set numeric weight for sorting
+                item.setData(3, Qt.ItemDataRole.UserRole, status_weights.get(status, 0))
+
+                self._set_item_highlight(item, highlight_colors.get(status))
+                break
+
+    def get_file_status(self, filename: str) -> str:
+        """Get the current status of a file in the tree"""
+        for i in range(self.file_tree.topLevelItemCount()):
+            item = self.file_tree.topLevelItem(i)
+            if item.text(1) == filename:  # Column 1 is filename
+                return item.text(3)  # Column 3 is status
+        return ''
+
+    def _set_item_highlight(self, item: QTreeWidgetItem, color: Optional[QColor]):
+        """Apply a background highlight color to all columns of an item"""
+        brush = QBrush(color) if color else QBrush()
+        for col in range(self.file_tree.columnCount()):
+            item.setBackground(col, brush)
 
     def remove_file(self, filename: str):
         """Remove a file from the list"""
         if filename in self.file_list:
+            current_checked_state = self._get_current_checked_state()
             del self.file_list[filename]
-            self.update_file_list()
+            self.update_file_list(current_checked_state)
 
     def clear_file_list(self):
         """Clear all files from the list"""
@@ -653,19 +935,53 @@ class MainWindow(QMainWindow):
 
     def show_context_menu(self, position):
         """Show context menu for file tree"""
+        item = self.file_tree.itemAt(position)
         selected_items = self.file_tree.selectedItems()
-
-        if not selected_items:
-            return
-
         menu = QMenu()
 
-        # Delete selected
-        delete_action = QAction(f'🗑️ Delete selected ({len(selected_items)} files)', self)
-        delete_action.triggered.connect(self.delete_selected_files)
-        menu.addAction(delete_action)
+        # Check/Uncheck Same Status
+        if item:
+            status = item.text(3)
+            status_map = {
+                '✓ Done': 'Done',
+                '✗ Failed': 'Failed',
+                '🔄 Process': 'Processing',
+                '': 'Pending'
+            }
+            status_name = status_map.get(status, 'Pending')
 
-        menu.addSeparator()
+            iterator = QTreeWidgetItemIterator(self.file_tree)
+            same_status_items = []
+            all_are_checked = True
+
+            while iterator.value():
+                it = iterator.value()
+                if it.text(3) == status:
+                    same_status_items.append(it)
+                    checkbox = self.file_tree.itemWidget(it, 0)
+                    if checkbox and not checkbox.isChecked():
+                        all_are_checked = False
+                iterator += 1
+
+            if same_status_items:
+                if all_are_checked:
+                    action_text = f'☐ Uncheck all "{status_name}"'
+                    target_state = False
+                else:
+                    action_text = f'✅ Check all "{status_name}"'
+                    target_state = True
+
+                action = QAction(action_text, self)
+                action.triggered.connect(lambda _, s=status, st=target_state: self.set_check_state_by_status(s, st))
+                menu.addAction(action)
+                menu.addSeparator()
+
+        # Delete selected
+        if selected_items:
+            delete_action = QAction(f'🗑️ Delete selected ({len(selected_items)} files)', self)
+            delete_action.triggered.connect(self.delete_selected_files)
+            menu.addAction(delete_action)
+            menu.addSeparator()
 
         # Check/Uncheck actions
         check_action = QAction('✅ Check selected', self)
@@ -676,11 +992,25 @@ class MainWindow(QMainWindow):
         uncheck_action.triggered.connect(self.uncheck_selected_files)
         menu.addAction(uncheck_action)
 
-        invert_action = QAction('🔄 Invert selection', self)
-        invert_action.triggered.connect(self.invert_selected_files)
-        menu.addAction(invert_action)
+        # Invert selection
+        invert_sel_action = QAction('🔄 Invert selected checks', self)
+        invert_sel_action.triggered.connect(self.invert_selected_files)
+        menu.addAction(invert_sel_action)
+
+        # Invert All
+        invert_all_action = QAction('🔄 Invert ALL checks', self)
+        invert_all_action.triggered.connect(self.invert_all_checkboxes)
+        menu.addAction(invert_all_action)
 
         menu.addSeparator()
+
+        # Copy checked file names
+        checked_count = self._count_checked_files()
+        if checked_count > 0:
+            copy_action = QAction(f'📋 Copy checked file names ({checked_count} files)', self)
+            copy_action.triggered.connect(self.copy_checked_file_names)
+            menu.addAction(copy_action)
+            menu.addSeparator()
 
         # Select all / Select none
         select_all_action = QAction('⬜ Select all files', self)
@@ -692,6 +1022,42 @@ class MainWindow(QMainWindow):
         menu.addAction(select_none_action)
 
         menu.exec(self.file_tree.viewport().mapToGlobal(position))
+
+    def set_check_state_by_status(self, status_text: str, state: bool):
+        """Set checkbox state for all files matching a specific status"""
+        iterator = QTreeWidgetItemIterator(self.file_tree)
+        changed_count = 0
+        
+        while iterator.value():
+            item = iterator.value()
+            if item.text(3) == status_text:
+                checkbox = self.file_tree.itemWidget(item, 0)
+                if checkbox and checkbox.isChecked() != state:
+                    checkbox.setChecked(state)
+                    changed_count += 1
+            iterator += 1
+            
+        if changed_count > 0:
+            self.update_header_checkbox_state()
+            action_name = "Checked" if state else "Unchecked"
+            self.log('info', f'{action_name} {changed_count} files with status "{status_text}"')
+
+    def invert_all_checkboxes(self):
+        """Invert checkboxes for ALL files in the list"""
+        iterator = QTreeWidgetItemIterator(self.file_tree)
+        count = 0
+        
+        while iterator.value():
+            item = iterator.value()
+            checkbox = self.file_tree.itemWidget(item, 0)
+            if checkbox:
+                checkbox.setChecked(not checkbox.isChecked())
+                count += 1
+            iterator += 1
+            
+        if count > 0:
+            self.update_header_checkbox_state()
+            self.log('info', f'Inverted checkboxes for all {count} files')
 
     def delete_selected_files(self):
         """Delete all selected files from the list"""
@@ -708,53 +1074,143 @@ class MainWindow(QMainWindow):
         )
 
         if reply == QMessageBox.StandardButton.Yes:
+            current_checked_state = self._get_current_checked_state()
             for item in selected_items:
                 filename = item.text(1)
                 if filename in self.file_list:
                     del self.file_list[filename]
 
-            self.update_file_list()
+            self.update_file_list(current_checked_state)
             self.log('info', f'Deleted {len(selected_items)} file(s) from queue')
 
     def check_selected_files(self):
         """Check (enable) all selected files"""
         selected_items = self.file_tree.selectedItems()
-
         for item in selected_items:
             checkbox = self.file_tree.itemWidget(item, 0)
             if checkbox:
                 checkbox.setChecked(True)
-
         self.log('info', f'Checked {len(selected_items)} file(s)')
 
     def uncheck_selected_files(self):
         """Uncheck (disable) all selected files"""
         selected_items = self.file_tree.selectedItems()
-
         for item in selected_items:
             checkbox = self.file_tree.itemWidget(item, 0)
             if checkbox:
                 checkbox.setChecked(False)
-
         self.log('info', f'Unchecked {len(selected_items)} file(s)')
 
     def invert_selected_files(self):
         """Invert checkbox state for all selected files"""
         selected_items = self.file_tree.selectedItems()
-
         for item in selected_items:
             checkbox = self.file_tree.itemWidget(item, 0)
             if checkbox:
                 checkbox.setChecked(not checkbox.isChecked())
-
         self.log('info', f'Inverted {len(selected_items)} file(s)')
+        self.update_header_checkbox_state()
+
+    def _count_checked_files(self) -> int:
+        """Count files with checked checkboxes"""
+        checked_count = 0
+        total_items = self.file_tree.topLevelItemCount()
+        for i in range(total_items):
+            item = self.file_tree.topLevelItem(i)
+            checkbox = self.file_tree.itemWidget(item, 0)
+            if checkbox and checkbox.isChecked():
+                checked_count += 1
+        return checked_count
+
+    def _get_current_checked_state(self) -> Dict[str, bool]:
+        """Get the current checked state of all items in the file tree"""
+        states = {}
+        iterator = QTreeWidgetItemIterator(self.file_tree)
+        while iterator.value():
+            item = iterator.value()
+            filename = item.text(1)
+            checkbox = self.file_tree.itemWidget(item, 0)
+            if checkbox:
+                states[filename] = checkbox.isChecked()
+            iterator += 1
+        return states
+
+    def copy_checked_file_names(self):
+        """Copy names of all checked files to clipboard"""
+        checked_names = []
+        total_items = self.file_tree.topLevelItemCount()
+        for i in range(total_items):
+            item = self.file_tree.topLevelItem(i)
+            checkbox = self.file_tree.itemWidget(item, 0)
+            if checkbox and checkbox.isChecked():
+                filename = item.text(1)  # Column 1 is filename
+                checked_names.append(filename)
+        
+        if checked_names:
+            text_to_copy = '\n'.join(checked_names)
+            clipboard = QApplication.clipboard()
+            clipboard.setText(text_to_copy)
+            self.log('info', f'Copied {len(checked_names)} file name(s) to clipboard')
+        else:
+            self.log('warning', 'No checked files to copy')
+
+    def on_header_checkbox_changed(self, state):
+        """Handle header checkbox state change - check/uncheck all files"""
+        if self._updating_header_checkbox:
+            return
+        
+        total_items = self.file_tree.topLevelItemCount()
+        if total_items == 0:
+            return
+        
+        checked_count = self._count_checked_files()
+        
+        if checked_count == total_items:
+            target_checked = False  # All checked -> uncheck all
+        else:
+            target_checked = True   # Not all checked -> check all
+        
+        self._updating_header_checkbox = True
+        
+        for i in range(total_items):
+            item = self.file_tree.topLevelItem(i)
+            checkbox = self.file_tree.itemWidget(item, 0)
+            if checkbox:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(target_checked)
+                checkbox.blockSignals(False)
+                item.setData(0, Qt.ItemDataRole.UserRole, 1 if target_checked else 0)
+        
+        self._updating_header_checkbox = False
+        
+        self.update_total_size()
+        self.update_header_checkbox_state()
+
+    def update_header_checkbox_state(self):
+        """Update header checkbox state based on current file checkboxes"""
+        self._updating_header_checkbox = True
+        
+        total_items = self.file_tree.topLevelItemCount()
+        if total_items == 0:
+            self.header_checkbox.setChecked(False)
+            self.header_checkbox.setCheckState(Qt.CheckState.Unchecked)
+            self._updating_header_checkbox = False
+            return
+        
+        checked_count = self._count_checked_files()
+        
+        if checked_count == total_items:
+            self.header_checkbox.setCheckState(Qt.CheckState.Unchecked)
+        elif checked_count == 0:
+            self.header_checkbox.setCheckState(Qt.CheckState.Checked)
+        else:
+            self.header_checkbox.setCheckState(Qt.CheckState.PartiallyChecked)
+        
+        self._updating_header_checkbox = False
 
     def on_search_text_changed(self, text: str):
-        """Handle search text changes - update filter and show/hide clear button"""
-        # Show/hide clear button based on text presence
+        """Handle search text changes"""
         self.search_clear_btn.setVisible(bool(text))
-
-        # Apply filter
         self.filter_file_list(text)
 
     def clear_search(self):
@@ -768,21 +1224,6 @@ class MainWindow(QMainWindow):
             filename = item.text(1)
             item.setHidden(text.lower() not in filename.lower())
 
-    def save_file_list(self):
-        """Save current file list to JSON"""
-        filename, _ = QFileDialog.getSaveFileName(
-            self,
-            'Save File List',
-            '',
-            'JSON Files (*.json)'
-        )
-
-        if filename:
-            data = {name: str(path) for name, path in self.file_list.items()}
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
-            self.log('info', f'File list saved to {filename}')
-
     def save_file_list_as_batch(self):
         """Save current file list as Windows batch file"""
         filename, _ = QFileDialog.getSaveFileName(
@@ -794,68 +1235,209 @@ class MainWindow(QMainWindow):
 
         if filename:
             try:
-                # Get path to main.py or executable
                 import sys
                 if getattr(sys, 'frozen', False):
-                    # Running as compiled executable
                     app_path = sys.executable
                 else:
-                    # Running as script
                     app_path = str(Path(__file__).parent.parent / 'main.py')
-                    # Use python/python3 command
                     app_path = f'python "{app_path}"'
 
                 with open(filename, 'w', encoding='utf-8') as f:
                     f.write('@echo off\n')
                     f.write('REM DBI Backend Qt - Auto-generated batch file\n')
                     f.write('REM Double-click to load these files into DBI Backend Qt\n\n')
-
-                    # Build command line
                     f.write(f'{app_path}')
-
-                    # Add all files as arguments
                     for name, path in sorted(self.file_list.items()):
                         f.write(f' "{path}"')
-
                     f.write('\n')
 
                 self.log('success', f'Batch file saved: {filename}')
-                self.log('info', f'Saved {len(self.file_list)} file(s) to batch')
             except Exception as e:
                 self.log('error', f'Failed to save batch file: {e}')
                 QMessageBox.warning(self, 'Error', f'Failed to save batch file:\n{e}')
 
-    def load_file_list(self):
-        """Load file list from JSON"""
+    def _get_current_preset_entries(self):
+        """Return current file list with checkbox states"""
+        entries = []
+        for i in range(self.file_tree.topLevelItemCount()):
+            item = self.file_tree.topLevelItem(i)
+            filename = item.text(1)
+            path = self.file_list.get(filename)
+            checkbox = self.file_tree.itemWidget(item, 0)
+            entries.append({
+                'name': filename,
+                'path': str(path) if path else '',
+                'checked': bool(checkbox.isChecked()) if checkbox else True
+            })
+        return entries
+
+    def _prompt_preset_name(self) -> Optional[str]:
+        """Prompt user for preset name"""
+        name, ok = QInputDialog.getText(self, 'Save Preset', 'Preset name:')
+        if not ok:
+            return None
+        sanitized = re.sub(r'[^\w\s\-]+', '', name).strip()
+        if not sanitized:
+            QMessageBox.warning(self, 'Invalid Name', 'Preset name cannot be empty.')
+            return None
+        return sanitized
+
+    def _select_preset_file(self, title: str) -> Optional[Path]:
+        """Prompt user to choose an existing preset"""
+        presets = sorted(self.presets_dir.glob('*.json'))
+        if not presets:
+            QMessageBox.information(self, 'No Presets', 'No presets found. Save one first.')
+            return None
+        options = [preset.stem for preset in presets]
+        name, ok = QInputDialog.getItem(self, title, 'Select preset:', options, 0, False)
+        if not ok:
+            return None
+        selected = self.presets_dir / f'{name}.json'
+        if not selected.exists():
+            QMessageBox.warning(self, 'Not Found', f'Preset "{name}" does not exist.')
+            return None
+        return selected
+
+    def save_preset(self):
+        """Save current file list and checkbox states as preset"""
+        if not self.file_list:
+            QMessageBox.information(self, 'No Files', 'Add files before saving a preset.')
+            return
+
+        preset_name = self._prompt_preset_name()
+        if not preset_name:
+            return
+
+        preset_path = self.presets_dir / f'{preset_name}.json'
+        data = {
+            'name': preset_name,
+            'created_at': datetime.now().isoformat(),
+            'files': self._get_current_preset_entries()
+        }
+        try:
+            with open(preset_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+            self.log('success', f'Preset saved: {preset_name}')
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', f'Failed to save preset:\n{e}')
+
+    def update_presets_menu(self):
+        """Update presets menu with current presets list"""
+        self.presets_menu.clear()
+        presets = sorted(self.presets_dir.glob('*.json'))
+        
+        if not presets:
+            no_presets_action = QAction('(No presets available)', self)
+            no_presets_action.setEnabled(False)
+            self.presets_menu.addAction(no_presets_action)
+        else:
+            for preset_file in presets:
+                preset_name = preset_file.stem
+                action = QAction(preset_name, self)
+                action.triggered.connect(lambda checked, path=preset_file: self.load_preset_file(path))
+                self.presets_menu.addAction(action)
+        
+        self.presets_menu.addSeparator()
+        self.presets_menu.addMenu(self.manage_presets_menu)
+
+    def load_preset_file(self, preset_file: Path):
+        """Load preset from file path"""
+        if not preset_file.exists():
+            QMessageBox.warning(self, 'Not Found', f'Preset file does not exist.')
+            return
+
+        try:
+            with open(preset_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            files = data.get('files', [])
+            new_file_list = {}
+            checked_state = {}
+            missing = []
+
+            for entry in files:
+                path_str = entry.get('path')
+                if not path_str:
+                    continue
+                path = Path(path_str)
+                if not path.exists():
+                    missing.append(path_str)
+                    continue
+                new_file_list[path.name] = path.resolve()
+                checked_state[path.name] = bool(entry.get('checked', True))
+
+            if not new_file_list:
+                QMessageBox.warning(self, 'Preset Empty', 'No available files were found in this preset.')
+                return
+
+            self.file_list = new_file_list
+            self.update_file_list(checked_state)
+            self.log('success', f'Preset loaded: {preset_file.stem} ({len(new_file_list)} files)')
+
+            if missing:
+                self.log('warning', f'{len(missing)} file(s) from preset not found: {", ".join(missing[:5])}{"..." if len(missing) > 5 else ""}')
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', f'Failed to load preset:\n{e}')
+            self.log('error', f'Failed to load preset: {e}')
+
+    def load_preset(self):
+        """Load preset from a JSON file"""
         filename, _ = QFileDialog.getOpenFileName(
             self,
-            'Load File List',
-            '',
-            'JSON Files (*.json)'
+            'Load Preset File',
+            str(self.presets_dir),
+            'Preset Files (*.json);;All Files (*.*)'
         )
 
-        if filename:
-            try:
-                with open(filename, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                self.file_list.clear()
-                for name, path_str in data.items():
-                    path = Path(path_str)
-                    if path.exists():
-                        self.file_list[name] = path
-                    else:
-                        self.log('warning', f'File not found: {path}')
-                self.update_file_list()
-                self.log('info', f'File list loaded from {filename}')
-            except Exception as e:
-                QMessageBox.warning(self, 'Error', f'Failed to load file list: {e}')
+        if not filename:
+            return
+
+        preset_file = Path(filename)
+        self.load_preset_file(preset_file)
+
+    def delete_preset(self):
+        """Delete a preset file"""
+        preset_file = self._select_preset_file('Delete Preset')
+        if not preset_file:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            'Delete Preset',
+            f'Delete preset "{preset_file.stem}"?',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            preset_file.unlink()
+            self.log('info', f'Preset deleted: {preset_file.stem}')
+        except Exception as e:
+            QMessageBox.warning(self, 'Error', f'Failed to delete preset:\n{e}')
 
     def toggle_server(self):
-        """Start or stop the server"""
-        if self.usb_handler is None or not self.usb_handler.is_running:
-            self.start_server()
+        """Start or stop the server (USB or HTTP based on mode)"""
+        mode = self.mode_combo.currentText()
+        
+        if mode == "USB Backend":
+            # USB Logic
+            if self.usb_handler is None or not self.usb_handler.is_running:
+                self.start_usb_server()
+            else:
+                reply = QMessageBox.question(
+                    self,
+                    'Stop USB Server',
+                    'Stop USB server? Any ongoing transfer will be interrupted.',
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.stop_usb_server()
         else:
-            self.stop_server()
+            # HTTP Logic
+            if self.http_handler is None or not self.http_handler.is_running:
+                self.start_http_server()
+            else:
+                self.stop_http_server()
 
     def get_checked_files(self) -> Dict[str, Path]:
         """Get only checked files from the file list"""
@@ -870,23 +1452,33 @@ class MainWindow(QMainWindow):
                 if filename in self.file_list:
                     checked_files[filename] = self.file_list[filename]
 
-        self.log('info', f'Selected {len(checked_files)} of {total_items} files for transfer')
+        self.log('info', f'Selected {len(checked_files)} of {total_items} files')
         return checked_files
 
-    def start_server(self):
+    def start_usb_server(self):
         """Start the USB server"""
-        # Reset transfer stats
+        # Reset transfer stats and UI
         self.transfer_stats['completed_files'] = 0
         self.transfer_stats['skipped_files'] = 0
+        self.completed_files_set.clear() # Reset set
+        self.current_processing_file = None
+        self.progress_delegate.progress_data.clear()
+        self.progress_delegate.skipped_files.clear()
+        
+        # Clear statuses
+        for i in range(self.file_tree.topLevelItemCount()):
+            item = self.file_tree.topLevelItem(i)
+            self.update_file_status(item.text(1), '')
+            for col in range(self.file_tree.columnCount()):
+                index = self.file_tree.indexFromItem(item, col)
+                self.file_tree.update(index)
 
-        # Get only checked files
         checked_files = self.get_checked_files()
-
         if not checked_files:
             self.log('warning', 'No files selected! Please check at least one file.')
             return
 
-        self.log('info', f'Starting server with {len(checked_files)} checked file(s)')
+        self.log('info', f'Starting USB server with {len(checked_files)} files')
         self.usb_handler = USBHandler(checked_files)
         self.usb_handler.connection_changed.connect(self.on_connection_changed)
         self.usb_handler.log_message.connect(self.log)
@@ -898,77 +1490,176 @@ class MainWindow(QMainWindow):
         self.usb_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
 
         self.usb_handler.start()
-
-        # Change button to Stop (red)
-        self.start_server_btn.setText('⏹')
-        self.start_server_btn.setStyleSheet('''
-            QPushButton {
-                background-color: #f44336;
-                color: white;
-                font-size: 32px;
-            }
-            QPushButton:hover {
-                background-color: #da190b;
-            }
-            QPushButton:pressed {
-                background-color: #c1170a;
-            }
-        ''')
-        self.server_label.setText('Stop Server')
-
-        self.add_folder_btn.setEnabled(False)
-        self.add_files_btn.setEnabled(False)
-        self.clear_list_btn.setEnabled(False)
-
+        self._set_server_ui_state(True)
         self.transfer_stats['start_time'] = datetime.now()
         self.transfer_stats['total_files'] = len(self.file_list)
-
-        # Show placeholder until Switch requests files
         self.overall_label.setText(f'0 / ? files')
+        self.log('info', 'USB Server started')
 
-        self.log('info', 'Server started')
-
-    def stop_server(self):
+    def stop_usb_server(self):
         """Stop the USB server"""
         if self.usb_handler:
             self.usb_handler.stop()
             self.usb_handler = None
+        
+        self._set_server_ui_state(False)
+        self.log('info', 'USB Server stopped')
 
-        # Change button back to Start (green)
-        self.start_server_btn.setText('▶')
-        self.start_server_btn.setStyleSheet('''
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                font-size: 32px;
-            }
-            QPushButton:hover:enabled {
-                background-color: #45a049;
-            }
-            QPushButton:pressed {
-                background-color: #3d8b40;
-            }
-            QPushButton:disabled {
-                background-color: #BDBDBD;
-                color: #757575;
-            }
-        ''')
-        self.server_label.setText('Start Server')
+    def start_http_server(self):
+        """Start the HTTP server after configuring port"""
+        checked_files = self.get_checked_files()
+        if not checked_files:
+            self.log('warning', 'No files selected! Please check at least one file.')
+            return
 
-        self.add_folder_btn.setEnabled(True)
-        self.add_files_btn.setEnabled(True)
-        self.clear_list_btn.setEnabled(True)
+        # 1. Prepare configuration dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Start HTTP Server")
+        dialog.setMinimumWidth(300)
+        
+        layout = QVBoxLayout(dialog)
+        form_layout = QFormLayout()
+        
+        # IP Display
+        local_ip = HTTPHandler.get_local_ip()
+        ip_label = QLabel(local_ip)
+        ip_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        form_layout.addRow("Your IP:", ip_label)
+        
+        # Port Input
+        port_spin = QSpinBox()
+        port_spin.setRange(1024, 65535)
+        # Use last used port or default 8080
+        default_port = self.config.get('http_port', 8080)
+        port_spin.setValue(default_port)
+        form_layout.addRow("Port:", port_spin)
+        
+        layout.addLayout(form_layout)
+        
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        # 2. Show Dialog
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return # User cancelled
+            
+        selected_port = port_spin.value()
+        
+        # Save port for next time
+        self.config.set('http_port', selected_port)
+        self.config.save()
 
-        self.log('info', 'Server stopped')
+        # 3. Reset UI Stats
+        self.transfer_stats['completed_files'] = 0
+        self.completed_files_set.clear() # Reset set
+        self.transfer_stats['start_time'] = datetime.now()
+        self.progress_delegate.progress_data.clear()
+        
+        for i in range(self.file_tree.topLevelItemCount()):
+            item = self.file_tree.topLevelItem(i)
+            self.update_file_status(item.text(1), '')
+            for col in range(self.file_tree.columnCount()):
+                index = self.file_tree.indexFromItem(item, col)
+                self.file_tree.update(index)
+
+        # 4. Initialize Handler with selected port
+        self.http_handler = HTTPHandler(checked_files, port=selected_port)
+        
+        self.http_handler.log_message.connect(self.log)
+        self.http_handler.server_started.connect(self.on_http_server_started)
+        self.http_handler.server_stopped.connect(self.on_http_server_stopped)
+        
+        self.http_handler.progress_updated.connect(self.on_progress_updated)
+        self.http_handler.file_progress.connect(self.on_file_progress)
+        self.http_handler.transfer_complete.connect(self.on_transfer_complete)
+        
+        self.http_handler.start()
+        self._set_server_ui_state(True)
+
+    def stop_http_server(self):
+        """Stop the HTTP server"""
+        if self.http_handler:
+            self.http_handler.stop()
+            self.http_handler = None
+        self._set_server_ui_state(False)
+
+    def on_http_server_started(self, ip, port):
+        """Handle HTTP server start confirmation"""
+        url = f"http://{ip}:{port}/"
+        dbi_config = f"Network repo=ApacheHTTP|{url}"
+        
+        self.log('success', f'HTTP Server listening at {url}')
+        self.ip_label.setText(f"IP: {url}")
+        self.ip_label.setVisible(True)
+        self.connection_status.setText("🟢 HTTP Running")
+        
+        # Copy to clipboard automatically for convenience
+        clipboard = QApplication.clipboard()
+        clipboard.setText(dbi_config)
+        self.log('info', 'DBI config line copied to clipboard!')
+
+    def on_http_server_stopped(self):
+        """Handle HTTP server stop"""
+        self.log('info', 'HTTP Server stopped')
+        self.ip_label.setVisible(False)
+        self.connection_status.setText("🌐 HTTP Mode")
+
+    def _set_server_ui_state(self, running: bool):
+        """Update UI based on server running state"""
+        if running:
+            self.start_server_btn.setText('⏹')
+            self.start_server_btn.setStyleSheet('''
+                QPushButton {
+                    background-color: #f44336;
+                    color: white;
+                    font-size: 32px;
+                }
+                QPushButton:hover {
+                    background-color: #da190b;
+                }
+            ''')
+            self.server_label.setText('Stop Server')
+            self.add_folder_btn.setEnabled(False)
+            self.add_files_btn.setEnabled(False)
+            self.clear_list_btn.setEnabled(False)
+            self.mode_combo.setEnabled(False)
+        else:
+            self.start_server_btn.setText('▶')
+            self.start_server_btn.setStyleSheet('''
+                QPushButton {
+                    background-color: #4CAF50;
+                    color: white;
+                    font-size: 32px;
+                }
+                QPushButton:hover:enabled {
+                    background-color: #45a049;
+                }
+                QPushButton:disabled {
+                    background-color: #BDBDBD;
+                }
+            ''')
+            mode = self.mode_combo.currentText()
+            self.server_label.setText(f'Start {"HTTP" if "HTTP" in mode else "USB"}')
+            self.add_folder_btn.setEnabled(True)
+            self.add_files_btn.setEnabled(True)
+            self.clear_list_btn.setEnabled(True)
+            self.mode_combo.setEnabled(True)
 
     def check_connection(self):
         """Check USB connection status"""
-        if self.usb_handler and self.usb_handler.is_running:
-            # Connection check is handled by USBHandler
-            pass
+        # Only meaningful in USB mode
+        if self.mode_combo.currentText() == "USB Backend":
+             if self.usb_handler and self.usb_handler.is_running:
+                 pass # USB Handler handles status updates
+             elif not self.usb_handler:
+                 # Check for idle connection? Usually we just wait for user to start
+                 pass
 
     def on_connection_changed(self, status: ConnectionStatus):
-        """Handle connection status changes"""
+        """Handle connection status changes (USB)"""
         if status == ConnectionStatus.CONNECTED:
             self.connection_status.setText('🟢 Connected')
             self.log('success', 'Connected to Switch')
@@ -976,18 +1667,26 @@ class MainWindow(QMainWindow):
             self.connection_status.setText('🟡 Connecting...')
         else:
             self.connection_status.setText('🔴 Not connected')
-            if self.usb_handler and self.usb_handler.is_running:
-                self.log('warning', 'Connection lost, retrying...')
+            if self.usb_handler and not self.usb_handler.is_running:
+                 self._set_server_ui_state(False)
 
     def on_progress_updated(self, filename: str, transferred_bytes: int, speed_mbps: float, total_requested_size: int, num_requested_files: int, current_file_bytes: int, current_file_size: int, _unused: int):
-        """Handle progress updates - with actual progress based on requested files and current file"""
+        """Handle progress updates"""
         try:
-            # Update current file
-            self.current_file_label.setText(f'Current: {filename}')
+            self.current_file_label.setText(filename) # Fixed double "Current:" text
+            is_transfer_phase = current_file_size > 1024 * 1024 
 
-            # Show current file progress (if we have size info)
+            if is_transfer_phase:
+                if self.current_processing_file != filename:
+                    if self.current_processing_file is not None:
+                        prev_status = self.get_file_status(self.current_processing_file)
+                        if prev_status == '🔄 Process':
+                            self.update_file_status(self.current_processing_file, 'done')
+
+                    self.current_processing_file = filename
+                    self.update_file_status(filename, 'process')
+
             if current_file_size > 0:
-                # Calculate progress, allow 100% when bytes match size
                 if current_file_bytes >= current_file_size:
                     current_percent = 100
                 else:
@@ -997,18 +1696,14 @@ class MainWindow(QMainWindow):
                 self.current_progress.setFormat(f'{current_percent}% ({current_bytes_str} / {current_size_str})')
                 self.current_progress.setValue(current_percent)
             else:
-                # Metadata phase or unknown size
                 current_bytes_str = self.format_size(current_file_bytes)
                 self.current_progress.setFormat(f'{current_bytes_str} transferred')
                 self.current_progress.setValue(0)
 
-            # Update overall progress (bottom progress bar) - DO NOT MODIFY THIS CALL
             self._update_overall_progress(transferred_bytes, total_requested_size, num_requested_files)
 
-            # Update speed
             self.speed_label.setText(f'Speed: {speed_mbps:.1f} MB/s')
 
-            # Update session time
             if self.transfer_stats.get('start_time'):
                 elapsed = datetime.now() - self.transfer_stats['start_time']
                 self.session_time_label.setText(f'Session: {self.format_time(int(elapsed.total_seconds()))}')
@@ -1018,120 +1713,117 @@ class MainWindow(QMainWindow):
 
     def on_file_progress(self, filename: str, progress: int):
         """Update visual progress for a file in the list"""
-        # Update progress in delegate
         self.progress_delegate.set_progress(filename, progress)
-
-        # Find the file item and trigger repaint + auto-scroll
-        for i in range(self.file_tree.topLevelItemCount()):
-            item = self.file_tree.topLevelItem(i)
-            if item.text(1) == filename:  # Column 1 is the filename
-                # Trigger repaint for all columns of this row
-                for col in range(self.file_tree.columnCount()):
-                    index = self.file_tree.indexFromItem(item, col)
-                    self.file_tree.update(index)
-
-                # Ensure item is visible (auto-scroll)
-                self.file_tree.scrollToItem(item, QTreeWidget.ScrollHint.PositionAtCenter)
-                break
-
-    def _update_overall_progress(self, transferred_bytes: int, total_requested_size: int, num_requested_files: int):
-        """
-        Update overall (bottom) progress bar based on transferred bytes.
-
-        ===================================================================
-        BYTE-BASED PROGRESS BAR
-        ===================================================================
-        Progress is based on transferred bytes vs total size.
-        Formula: (transferred_bytes / total_requested_size) * 100%
-
-        This ensures smooth, continuous progress as bytes are transferred.
-        ===================================================================
-        """
-        transferred_str = self.format_size(transferred_bytes)
-
-        if total_requested_size > 0 and num_requested_files > 0:
-            completed = self.transfer_stats['completed_files']
-            skipped = self.transfer_stats['skipped_files']
-            processed = completed + skipped  # Total files processed (completed + skipped)
-
-            # Calculate byte-based progress
-            overall_percent = int((transferred_bytes / total_requested_size) * 100)
-
-            # Cap at 99% until all files are actually processed (completed or skipped)
-            if processed >= num_requested_files:
-                overall_percent = 100
-            else:
-                overall_percent = min(99, overall_percent)
-
-            total_str = self.format_size(total_requested_size)
-
-            # Show byte-based progress percentage with transferred bytes
-            self.overall_progress.setFormat(f'{overall_percent}% ({transferred_str} / {total_str})')
-            self.overall_progress.setValue(overall_percent)
-
-            # Update files counter - show current file being installed (+1)
-            # But when all files are processed (processed == num_requested_files), don't add +1
-            if processed < num_requested_files:
-                display_current = processed + 1
-            else:
-                display_current = processed
-            self.overall_label.setText(f'{display_current} / {num_requested_files} files')
-
-            # Calculate ETA based on bytes transferred and elapsed time
-            if transferred_bytes > 0 and processed < num_requested_files:
-                if self.transfer_stats.get('start_time'):
-                    elapsed = (datetime.now() - self.transfer_stats['start_time']).total_seconds()
-                    if elapsed > 0:
-                        bytes_per_second = transferred_bytes / elapsed
-                        remaining_bytes = total_requested_size - transferred_bytes
-                        remaining_seconds = remaining_bytes / bytes_per_second if bytes_per_second > 0 else 0
-                        eta_str = self.format_time(int(max(0, remaining_seconds)))
-                        self.eta_label.setText(f'ETA: {eta_str}')
-                    else:
-                        self.eta_label.setText('ETA: Calculating...')
-                else:
-                    self.eta_label.setText('ETA: Calculating...')
-            else:
-                self.eta_label.setText('ETA: Calculating...')
-        else:
-            # Metadata phase or no data yet - show 0% progress
-            self.overall_progress.setFormat(f'{transferred_str} total')
-            self.overall_progress.setValue(0)
-            self.eta_label.setText('ETA: Calculating...')
-
-            if num_requested_files > 0:
-                self.overall_label.setText(f'0 / {num_requested_files} files')
-
-    def on_transfer_complete(self, filename: str):
-        """Handle transfer completion"""
-        self.transfer_stats['completed_files'] += 1
-        self.log('success', f'Transfer complete: {filename}')
-
-        # Mark file as 100% complete (delegate will show it with brighter color)
-        self.progress_delegate.set_progress(filename, 100)
-
-        # Update current progress bar to 100% for completed file
-        self.current_progress.setValue(100)
-        self.current_progress.setFormat('100%')
-
-        # Trigger repaint
         for i in range(self.file_tree.topLevelItemCount()):
             item = self.file_tree.topLevelItem(i)
             if item.text(1) == filename:
                 for col in range(self.file_tree.columnCount()):
                     index = self.file_tree.indexFromItem(item, col)
                     self.file_tree.update(index)
+                # REMOVED AUTO-SCROLL to fix jumping behavior
+                # self.file_tree.scrollToItem(item, QTreeWidget.ScrollHint.PositionAtCenter)
                 break
+
+    def _update_overall_progress(self, transferred_bytes: int, total_requested_size: int, num_requested_files: int):
+        """Update overall progress bar"""
+        transferred_str = self.format_size(transferred_bytes)
+
+        if total_requested_size > 0 and num_requested_files > 0:
+            completed = self.transfer_stats['completed_files']
+            skipped = self.transfer_stats['skipped_files']
+            processed = completed + skipped
+            
+            # Calculate percentage
+            if total_requested_size > 0:
+                raw_percent = (transferred_bytes / total_requested_size) * 100
+            else:
+                raw_percent = 0
+            
+            # Use standard rounding
+            overall_percent = int(round(raw_percent))
+            
+            # Allow 100% if we have transferred all bytes OR if all files are processed
+            if transferred_bytes >= total_requested_size or processed >= num_requested_files:
+                overall_percent = 100
+            else:
+                overall_percent = min(99, overall_percent)
+
+            total_str = self.format_size(total_requested_size)
+            self.overall_progress.setFormat(f'{overall_percent}% ({transferred_str} / {total_str})')
+            self.overall_progress.setValue(overall_percent)
+
+            # Cap display at num_requested_files
+            display_current = min(processed + 1, num_requested_files)
+            if processed >= num_requested_files:
+                display_current = num_requested_files
+                
+            self.overall_label.setText(f'{display_current} / {num_requested_files} files')
+
+            if transferred_bytes > 0 and processed < num_requested_files:
+                if self.transfer_stats.get('start_time'):
+                    elapsed = (datetime.now() - self.transfer_stats['start_time']).total_seconds()
+                    if elapsed > 0:
+                        bytes_per_second = transferred_bytes / elapsed
+                        if bytes_per_second > 0:
+                            remaining_bytes = max(0, total_requested_size - transferred_bytes)
+                            remaining_seconds = remaining_bytes / bytes_per_second
+                            eta_str = self.format_time(int(remaining_seconds))
+                            self.eta_label.setText(f'ETA: {eta_str}')
+                        else:
+                            self.eta_label.setText('ETA: --:--:--')
+                    else:
+                        self.eta_label.setText('ETA: Calculating...')
+            elif overall_percent >= 100:
+                 self.eta_label.setText('ETA: Done')
+        else:
+            self.overall_progress.setFormat(f'{transferred_str} total')
+            self.overall_progress.setValue(0)
+            self.eta_label.setText('ETA: Calculating...')
+            if num_requested_files > 0:
+                self.overall_label.setText(f'0 / {num_requested_files} files')
+
+    def on_transfer_complete(self, filename: str):
+        """Handle transfer completion"""
+        # Ensure we don't double count completed files in HTTP mode
+        if filename not in self.completed_files_set:
+            self.completed_files_set.add(filename)
+            self.transfer_stats['completed_files'] += 1
+            self.log('success', f'Transfer complete: {filename}')
+            self.update_file_status(filename, 'done')
+            self.progress_delegate.set_progress(filename, 100)
+            
+            # Update item visuals
+            for i in range(self.file_tree.topLevelItemCount()):
+                item = self.file_tree.topLevelItem(i)
+                if item.text(1) == filename:
+                    checkbox = self.file_tree.itemWidget(item, 0)
+                    if checkbox:
+                        checkbox.setChecked(False)
+                    for col in range(self.file_tree.columnCount()):
+                        index = self.file_tree.indexFromItem(item, col)
+                        self.file_tree.update(index)
+                    break
+        
+        self.current_progress.setValue(100)
+        self.current_progress.setFormat('100%')
+        
+        # Force update overall progress to check if we are at 100% now
+        if self.http_handler and self.http_handler.is_running:
+             # Use cached values from handler to refresh UI
+             self._update_overall_progress(
+                 self.http_handler.total_bytes_transferred, # approximation or get from thread safely
+                 self.http_handler.total_requested_size,
+                 len(self.http_handler.requested_files)
+             )
 
     def on_file_skipped(self, filename: str, file_size: int):
         """Handle file skip/interruption"""
         self.transfer_stats['skipped_files'] += 1
-        self.log('warning', f'File skipped by Switch: {filename} ({self.format_size(file_size)})')
-
-        # Mark file as skipped (delegate will show it with red background)
+        self.log('warning', f'File skipped by Switch: {filename}')
+        self.update_file_status(filename, 'failed')
+        if self.current_processing_file == filename:
+            self.current_processing_file = None
         self.progress_delegate.mark_skipped(filename)
-
-        # Trigger repaint for all columns of this file
         for i in range(self.file_tree.topLevelItemCount()):
             item = self.file_tree.topLevelItem(i)
             if item.text(1) == filename:
@@ -1141,45 +1833,36 @@ class MainWindow(QMainWindow):
                 break
 
     def on_transfer_reset(self):
-        """Handle transfer reset when Switch reselects files"""
+        """Handle transfer reset"""
         self.log('info', 'Transfer reset - Switch restarted file selection')
-
-        # Reset statistics
         self.transfer_stats['completed_files'] = 0
         self.transfer_stats['skipped_files'] = 0
+        self.completed_files_set.clear()
         self.transfer_stats['start_time'] = None
-
-        # Clear progress delegate data
         self.progress_delegate.progress_data.clear()
         self.progress_delegate.skipped_files.clear()
-
-        # Reset progress bars
-        self.current_progress.setValue(0)
-        self.current_progress.setFormat('0%')
-        self.overall_progress.setValue(0)
-        self.overall_progress.setFormat('0%')
-
-        # Reset labels
-        self.current_file_label.setText('No transfer in progress')
-        self.overall_label.setText('0 / ? files')
-        self.speed_label.setText('Speed: 0 MB/s')
-        self.eta_label.setText('ETA: --:--:--')
-        self.session_time_label.setText('Session: 00:00:00')
-
-        # Repaint all file items to clear progress visualization
+        self.current_processing_file = None
+        
         for i in range(self.file_tree.topLevelItemCount()):
             item = self.file_tree.topLevelItem(i)
+            self.update_file_status(item.text(1), '')
             for col in range(self.file_tree.columnCount()):
                 index = self.file_tree.indexFromItem(item, col)
                 self.file_tree.update(index)
 
-    def on_all_transfers_complete(self):
-        """Handle completion of all transfers (Switch sent EXIT command)"""
-        self.log('success', 'All transfers complete!')
+        self.current_progress.setValue(0)
+        self.overall_progress.setValue(0)
+        self.current_file_label.setText('No transfer in progress')
 
-        # Force both progress bars to 100%
+    def on_all_transfers_complete(self):
+        """Handle completion of all transfers"""
+        self.log('success', 'All transfers complete!')
+        if self.current_processing_file is not None:
+            prev_status = self.get_file_status(self.current_processing_file)
+            if prev_status == '🔄 Process':
+                self.update_file_status(self.current_processing_file, 'done')
+            self.current_processing_file = None
         self.current_progress.setValue(100)
-        self.current_progress.setFormat('100%')
         self.overall_progress.setValue(100)
 
     def log(self, level: str, message: str):
@@ -1234,24 +1917,19 @@ class MainWindow(QMainWindow):
             '<p>Enhanced GUI for transferring files to Nintendo Switch via DBI</p>'
             '<p><b>Features:</b></p>'
             '<ul>'
+            '<li>USB Backend (MTP/DBI Protocol)</li>'
+            '<li>HTTP Server (Install from HTTP)</li>'
             '<li>Modern Qt interface with visual progress</li>'
-            '<li>Accurate progress tracking (current & overall)</li>'
+            '<li>Accurate progress tracking</li>'
             '<li>Dark/Light themes</li>'
             '<li>Drag & drop support</li>'
-            '<li>Windows Send to integration</li>'
-            '<li>Batch file export (Ctrl+B)</li>'
-            '<li>Multiple file selection</li>'
-            '<li>Detailed logging to file</li>'
             '</ul>'
-            '<p><b>Version 2.3.1</b></p>'
-            '<p>Fixed progress bars, added visual feedback, detailed logging</p>'
+            '<p><b>Version 2.3.4</b></p>'
         )
 
     def handle_external_files(self, message: str):
-        """
-        Handle files sent from another instance (via Send to or command line)
-        Message format: file paths separated by newlines
-        """
+        """Handle files sent from another instance"""
+        current_checked_state = self._get_current_checked_state()
         paths = message.strip().split('\n')
         files_added = 0
         skipped_count = 0
@@ -1272,7 +1950,6 @@ class MainWindow(QMainWindow):
                 else:
                     skipped_count += 1
             elif file_path.is_dir():
-                # Recursively find all supported files in folder
                 for f in file_path.rglob('*'):
                     if f.is_file():
                         if self.is_supported_file(f):
@@ -1282,13 +1959,12 @@ class MainWindow(QMainWindow):
                             skipped_count += 1
 
         if files_added > 0:
-            self.update_file_list()
+            self.update_file_list(current_checked_state)
             self.log("info", f"Added {files_added} file(s) from external source")
 
             if skipped_count > 0:
                 self.log("warning", f"Skipped {skipped_count} unsupported file(s)")
 
-            # Bring window to front and focus
             self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
             self.activateWindow()
             self.raise_()
@@ -1307,16 +1983,16 @@ class MainWindow(QMainWindow):
                 if self.is_supported_file(path):
                     files.append(path)
             elif path.is_dir():
-                # Recursively find all supported files in dropped folder
                 files.extend([f for f in path.rglob('*') if f.is_file() and self.is_supported_file(f)])
 
+        current_checked_state = self._get_current_checked_state()
         added_count = 0
         for path in files:
             self.file_list[path.name] = path.resolve()
             added_count += 1
 
         if added_count > 0:
-            self.update_file_list()
+            self.update_file_list(current_checked_state)
             self.log('info', f'Added {added_count} file(s) via drag & drop')
 
     def restore_geometry(self):
@@ -1324,7 +2000,6 @@ class MainWindow(QMainWindow):
         geometry = self.config.get('window_geometry')
         if geometry:
             try:
-                # Decode from base64 string
                 geometry_bytes = base64.b64decode(geometry)
                 self.restoreGeometry(geometry_bytes)
             except Exception as e:
@@ -1335,48 +2010,56 @@ class MainWindow(QMainWindow):
         sizes = self.config.get('splitter_sizes')
         if sizes and isinstance(sizes, list) and len(sizes) == self.splitter.count():
             self.splitter.setSizes(sizes)
-            print(f'Restored splitter sizes: {sizes}')
+
+    def restore_zoom_level(self):
+        """Restore file tree zoom level from settings"""
+        zoom_level = self.config.get('file_tree_zoom', 0)
+        if isinstance(zoom_level, int):
+            self.file_tree.zoom_level = zoom_level
+            self.file_tree.apply_zoom()
 
     def closeEvent(self, event):
         """Handle window close event"""
-        # Save window geometry (encode to base64 string for JSON)
         geometry_bytes = self.saveGeometry()
         geometry_str = base64.b64encode(geometry_bytes).decode('utf-8')
         self.config.set('window_geometry', geometry_str)
-
-        # Save splitter sizes
         self.config.set('splitter_sizes', self.splitter.sizes())
+        self.config.set('file_tree_zoom', self.file_tree.zoom_level)
 
-        # Stop server if running
         if self.usb_handler and self.usb_handler.is_running:
             reply = QMessageBox.question(
-                self,
-                'Confirm Exit',
-                'Server is running. Are you sure you want to exit?',
+                self, 'Confirm Exit', 'USB Server is running. Exit?',
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply == QMessageBox.StandardButton.No:
                 event.ignore()
                 return
-            self.stop_server()
+            self.stop_usb_server()
+            
+        if self.http_handler and self.http_handler.is_running:
+            self.stop_http_server()
 
         self.config.save()
         event.accept()
 
+    def _init_log_file(self):
+        """Initialize log file for new session"""
+        try:
+            log_file = Path("log.txt")
+            with open(log_file, 'w', encoding='utf-8') as f:
+                f.write(f"=== DBI Backend Qt Log - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+        except Exception as e:
+            print(f"Cannot create log file: {e}")
+
     def update_splitter_handles(self):
         """Update splitter handle colors based on collapsed state"""
         sizes = self.splitter.sizes()
-
-        # There are count-1 handles for count widgets
         for i in range(self.splitter.count() - 1):
-            handle = self.splitter.handle(i + 1)  # Handle indices start at 1
+            handle = self.splitter.handle(i + 1)
             if isinstance(handle, CustomSplitterHandle):
-                # This handle is between widget i and widget i+1
-                # It should be blue ONLY if the widget AFTER it (i+1) is collapsed
                 widget_after_collapsed = sizes[i + 1] == 0
-
                 handle.is_collapsed = widget_after_collapsed
-                handle.update()  # Trigger repaint
+                handle.update()
 
     @staticmethod
     def format_size(size: int) -> str:
@@ -1394,3 +2077,22 @@ class MainWindow(QMainWindow):
         minutes = (seconds % 3600) // 60
         secs = seconds % 60
         return f'{hours:02d}:{minutes:02d}:{secs:02d}'
+
+    def _get_presets_directory(self) -> Path:
+        """Ensure and return the presets directory"""
+        if getattr(sys, 'frozen', False):
+            base_dir = Path(sys.executable).parent
+        else:
+            base_dir = Path(__file__).parent.parent
+
+        presets_dir = base_dir / 'presets'
+        presets_dir.mkdir(exist_ok=True)
+        return presets_dir
+
+    def keyPressEvent(self, event):
+        """Handle key press events"""
+        if event.key() == Qt.Key.Key_Space:
+            self.invert_selected_files()
+            event.accept()
+        else:
+            super().keyPressEvent(event)

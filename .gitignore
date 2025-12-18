@@ -16,6 +16,8 @@ dist/
 # Application files
 config.json
 log.txt
+build_output.log
+nul
 
 # Virtual environments
 venv/
@@ -31,3 +33,4 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+/CLAUDE.md

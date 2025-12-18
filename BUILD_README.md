@@ -1,42 +1,45 @@
-# Build Instructions
+# Build Instructions / Інструкція збірки
 
-## Building Executable
+## Quick Start / Швидкий старт
 
-### Prerequisites
+### Building Executable / Збірка EXE файлу
+
+**Method 1 (Recommended):**
+```bash
+build.bat          # Double-click in Windows Explorer / Подвійний клік у Провіднику
+```
+
+**Method 2 (Alternative):**
+```bash
+python build.py    # Run in terminal / Запустити в терміналі
+```
+
+Build time: 2-3 minutes / Час збірки: 2-3 хвилини
+
+### Build Output / Результат
+
+```
+dist\dbibackend-qt.exe  (~38 MB)
+```
+
+✅ Standalone executable - works WITHOUT Python installed!
+✅ Standalone executable - працює БЕЗ встановленого Python!
+
+---
+
+## Prerequisites / Вимоги (для збірки)
+
 - Python 3.11+
-- All dependencies from `requirements.txt`
+- PyQt6
+- pyusb
 - PyInstaller
 
-### Quick Build
+### Installing dependencies / Установка залежностей:
 
-Simply run the build script:
 ```bash
-build.bat
-```
-
-Or manually:
-```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Install PyInstaller (if not already installed)
 pip install pyinstaller
-
-# Clean previous build
-rmdir /s /q build dist
-
-# Build
-python -m PyInstaller dbibackend.spec --clean
 ```
-
-### Build Output
-
-The executable will be created at:
-```
-dist\dbibackend-qt.exe
-```
-
-This is a single-file executable with all dependencies bundled (around 50-100MB).
 
 ## Build Configuration
 
@@ -76,18 +79,22 @@ The `dist\dbibackend-qt.exe` file is fully portable and can be:
 
 **Note**: Users will still need libusb drivers installed for Nintendo Switch (VID: 057E, PID: 3000). Use Zadig to install WinUSB driver.
 
-## Troubleshooting
+## Troubleshooting / Вирішення проблем
 
-### Build fails with module not found
-- Ensure all dependencies are installed: `pip install -r requirements.txt`
-- Check that all `src/*.py` files are present
+### Build fails / Збірка не вдалась
+- Install dependencies: `pip install -r requirements.txt pyinstaller`
+- Встановіть залежності: `pip install -r requirements.txt pyinstaller`
+- Delete `build/` and `dist/` folders manually and try again
+- Видаліть папки `build/` та `dist/` вручну і спробуйте знову
 
-### Executable doesn't start
-- Run with console enabled (`console=True`) to see error messages
-- Check that libusb drivers are installed on target machine
-- Verify all PyQt6 dependencies are included
+### build.bat hangs / build.bat зависає
+- Use `python build.py` instead
+- Використайте `python build.py` замість цього
+- Check that Python is in PATH: `python --version`
+- Перевірте що Python в PATH: `python --version`
 
-### Executable is too large
-- Set `upx=True` and install UPX compressor
-- Remove unnecessary files from `datas` in spec file
-- Consider using `--exclude-module` for unused modules
+### Executable doesn't start / EXE не запускається
+- Run with console enabled (`console=True` in spec) to see errors
+- Запустіть з консоллю (`console=True` в spec) щоб побачити помилки
+- Check libusb drivers on target machine (Zadig: VID=057E, PID=3000)
+- Перевірте драйвери libusb на цільовому ПК (Zadig: VID=057E, PID=3000)
