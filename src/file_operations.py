@@ -6,8 +6,9 @@ import sys
 import json
 from pathlib import Path
 from typing import Dict, Set
+from datetime import datetime
 
-from PyQt6.QtWidgets import QFileDialog, QTreeWidgetItem, QMessageBox, QMenu
+from PyQt6.QtWidgets import QFileDialog, QTreeWidgetItem, QMessageBox, QMenu, QCheckBox, QWidget, QHBoxLayout
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QColor, QDesktopServices
 
@@ -17,7 +18,7 @@ from .utility_functions import format_size
 class FileManager:
     """Manages file lists and interactions with the file tree widget"""
 
-    # Supported file extensions
+    # Supported file extensions for Games
     SUPPORTED_EXTENSIONS = {'.nsp', '.nsz', '.xci', '.xcz'}
 
     def __init__(self, main_window):
@@ -30,9 +31,8 @@ class FileManager:
         if getattr(sys, 'frozen', False):
             base_dir = Path(sys.executable).parent
         else:
-            base_dir = Path(__file__).parent.parent.parent # src -> parent -> root
+            base_dir = Path(__file__).parent.parent.parent
         
-        # Fallback if running from src directly
         if base_dir.name == 'src':
              base_dir = base_dir.parent
 
@@ -41,7 +41,7 @@ class FileManager:
         return presets_dir
 
     def is_supported_file(self, path: Path) -> bool:
-        """Check if file extension is supported"""
+        """Check if file extension is supported (for games)"""
         return path.suffix.lower() in self.SUPPORTED_EXTENSIONS
 
     def add_files(self):
@@ -107,16 +107,16 @@ class FileManager:
         checked = set()
         for i in range(self.main_window.file_tree.topLevelItemCount()):
             item = self.main_window.file_tree.topLevelItem(i)
-            checkbox = self.main_window.file_tree.itemWidget(item, 0)
-            if checkbox and checkbox.isChecked():
-                checked.add(item.text(1))
+            checkbox_widget = self.main_window.file_tree.itemWidget(item, 0)
+            if checkbox_widget:
+                cb = checkbox_widget.findChild(QCheckBox)
+                if cb and cb.isChecked():
+                    checked.add(item.text(1))
         return checked
 
     def update_file_list(self, previously_checked: Set[str] = None):
         """Re-populate the tree widget from self.file_list"""
         self.main_window.file_tree.clear()
-        
-        # Block signals to prevent massive header checkbox toggling logic during build
         self.main_window.header_checkbox.blockSignals(True)
         
         for name, path in self.file_list.items():
@@ -125,9 +125,7 @@ class FileManager:
                 item = FileTreeWidgetItem(self.main_window.file_tree)
                 
                 # Checkbox setup
-                from PyQt6.QtWidgets import QCheckBox, QWidget, QHBoxLayout
                 checkbox = QCheckBox()
-                # Check if it was checked before (or default to checked if new)
                 should_check = True
                 if previously_checked is not None:
                     should_check = name in previously_checked
@@ -143,17 +141,13 @@ class FileManager:
                 layout.setContentsMargins(0,0,0,0)
                 widget.setLayout(layout)
                 
-                self.main_window.file_tree.setItemWidget(item, 0, checkbox)
+                self.main_window.file_tree.setItemWidget(item, 0, widget)
                 
-                # Set data
                 item.setText(1, name)
-                
                 item.setText(2, format_size(size))
-                item.setData(2, Qt.ItemDataRole.UserRole, size) # For sorting
-                
+                item.setData(2, Qt.ItemDataRole.UserRole, size)
                 item.setText(3, "Queued")
-                item.setData(3, Qt.ItemDataRole.UserRole, 0) # 0=Queued, 1=Process, 2=Done
-                
+                item.setData(3, Qt.ItemDataRole.UserRole, 0)
                 item.setText(4, str(path))
                 
             except FileNotFoundError:
@@ -161,8 +155,8 @@ class FileManager:
 
         self.main_window.header_checkbox.blockSignals(False)
         self.update_count_label()
+        self.main_window.on_item_checked()
         
-        # Re-apply filter if search is active
         if self.main_window.search_box.text():
             self.filter_files(self.main_window.search_box.text())
 
@@ -174,13 +168,11 @@ class FileManager:
             try:
                 total_size += path.stat().st_size
                 count += 1
-            except:
-                pass
+            except: pass
         self.main_window.file_count_label.setText(f'{count} files, {format_size(total_size)} total')
 
     def update_file_status(self, filename: str, status: str):
         """Update status column for a specific file"""
-        # Iterate items to find the file (Dict lookup doesn't map to TreeItem directly easily without aux map)
         for i in range(self.main_window.file_tree.topLevelItemCount()):
             item = self.main_window.file_tree.topLevelItem(i)
             if item.text(1) == filename:
@@ -203,7 +195,6 @@ class FileManager:
                 break
 
     def get_file_status(self, filename: str) -> str:
-        """Get the text status of a file"""
         for i in range(self.main_window.file_tree.topLevelItemCount()):
             item = self.main_window.file_tree.topLevelItem(i)
             if item.text(1) == filename:
@@ -211,20 +202,15 @@ class FileManager:
         return ""
 
     def invert_selected_files(self):
-        """Invert selection of highlighted rows (spacebar action)"""
         selected_items = self.main_window.file_tree.selectedItems()
         for item in selected_items:
-            checkbox = self.main_window.file_tree.itemWidget(item, 0)
-            if isinstance(checkbox, QCheckBox): # It's wrapped in a widget, need to find the child
-                # The widget set via setItemWidget is the container
-                container = checkbox
-                real_checkbox = container.findChild(QCheckBox)
-                if real_checkbox:
-                    real_checkbox.setChecked(not real_checkbox.isChecked())
-        self.main_window.on_item_checked() # Update header state
+            widget = self.main_window.file_tree.itemWidget(item, 0)
+            if widget:
+                cb = widget.findChild(QCheckBox)
+                if cb: cb.setChecked(not cb.isChecked())
+        self.main_window.on_item_checked()
 
     def filter_files(self, text: str):
-        """Filter the tree view based on search text"""
         search_text = text.lower()
         for i in range(self.main_window.file_tree.topLevelItemCount()):
             item = self.main_window.file_tree.topLevelItem(i)
@@ -234,7 +220,6 @@ class FileManager:
     # --- Presets & Batches ---
 
     def save_file_list_as_batch(self):
-        """Save current list as a .bat file for DBI CLI"""
         if not self.file_list:
             QMessageBox.warning(self.main_window, "Empty List", "No files to save.")
             return
@@ -244,42 +229,82 @@ class FileManager:
         )
         if path:
             try:
+                checked_files = []
+                for i in range(self.main_window.file_tree.topLevelItemCount()):
+                    item = self.main_window.file_tree.topLevelItem(i)
+                    widget = self.main_window.file_tree.itemWidget(item, 0)
+                    if widget and widget.findChild(QCheckBox).isChecked():
+                        filename = item.text(1)
+                        if filename in self.file_list:
+                            checked_files.append(self.file_list[filename])
+
+                if not checked_files:
+                    QMessageBox.warning(self.main_window, "No Selection", "No checked files to save.")
+                    return
+
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write('@echo off\n')
                     f.write('dbi_backend.exe -- files ^\n')
-                    for p in self.file_list.values():
+                    for p in checked_files:
                         f.write(f'"{p}" ^\n')
                 self.main_window.log('success', f'Saved batch file to {path}')
             except Exception as e:
                 self.main_window.log('error', f'Failed to save batch: {e}')
 
     def save_preset(self):
-        """Save current file list as a JSON preset"""
+        """Save current file list as a .dbi preset"""
         if not self.file_list:
             QMessageBox.warning(self.main_window, "Empty List", "No files to save.")
             return
 
         name_dialog = QFileDialog(self.main_window)
+        # CHANGED: Filter to .dbi
         path, _ = name_dialog.getSaveFileName(
-            self.main_window, "Save Preset", str(self.presets_dir), "JSON Files (*.json)"
+            self.main_window, "Save Preset", str(self.presets_dir), "DBI Presets (*.dbi)"
         )
 
         if path:
-            data = {name: str(p) for name, p in self.file_list.items()}
+            # Build file list with status
+            files_data = []
+            
+            for i in range(self.main_window.file_tree.topLevelItemCount()):
+                item = self.main_window.file_tree.topLevelItem(i)
+                filename = item.text(1)
+                
+                is_checked = True
+                widget = self.main_window.file_tree.itemWidget(item, 0)
+                if widget:
+                    cb = widget.findChild(QCheckBox)
+                    if cb: is_checked = cb.isChecked()
+                
+                if filename in self.file_list:
+                    files_data.append({
+                        "name": filename,
+                        "path": str(self.file_list[filename]),
+                        "checked": is_checked
+                    })
+
+            preset_data = {
+                "name": Path(path).stem,
+                "created_at": datetime.now().isoformat(),
+                "files": files_data
+            }
+
             try:
                 with open(path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, indent=2)
+                    json.dump(preset_data, f, indent=2)
                 self.main_window.update_presets_menu()
                 self.main_window.log('success', f'Preset saved: {Path(path).name}')
             except Exception as e:
                 self.main_window.log('error', f'Failed to save preset: {e}')
 
     def load_preset(self, path: Path = None):
-        """Load a preset from file"""
+        """Load a .dbi preset (json content)"""
         if not path:
             file_dialog = QFileDialog(self.main_window)
+            # CHANGED: Filter to .dbi
             path_str, _ = file_dialog.getOpenFileName(
-                self.main_window, "Load Preset", str(self.presets_dir), "JSON Files (*.json)"
+                self.main_window, "Load Preset", str(self.presets_dir), "DBI Presets (*.dbi);;All Files (*)"
             )
             if path_str:
                 path = Path(path_str)
@@ -290,20 +315,35 @@ class FileManager:
                     data = json.load(f)
                 
                 self.file_list.clear()
-                for name, p_str in data.items():
-                    p = Path(p_str)
-                    if p.exists():
-                        self.file_list[name] = p
+                files_to_check = set()
                 
-                self.update_file_list()
+                # Format: {"files": [ { "name": "...", "path": "...", "checked": true }, ... ]}
+                if isinstance(data, dict) and "files" in data and isinstance(data["files"], list):
+                    for entry in data["files"]:
+                        p = Path(entry.get("path", ""))
+                        if p.exists():
+                            self.file_list[p.name] = p
+                            if entry.get("checked", True):
+                                files_to_check.add(p.name)
+                # Fallback for old/raw json
+                else:
+                    items = data.items() if isinstance(data, dict) else []
+                    for name, p_str in items:
+                        p = Path(p_str)
+                        if p.exists():
+                            self.file_list[name] = p
+                            files_to_check.add(name)
+                
+                self.update_file_list(files_to_check)
                 self.main_window.log('info', f'Loaded preset: {path.name}')
             except Exception as e:
                 self.main_window.log('error', f'Failed to load preset: {e}')
 
     def delete_preset(self):
         """Delete an existing preset"""
+        # CHANGED: Filter to .dbi
         path_str, _ = QFileDialog.getOpenFileName(
-            self.main_window, "Delete Preset", str(self.presets_dir), "JSON Files (*.json)"
+            self.main_window, "Delete Preset", str(self.presets_dir), "DBI Presets (*.dbi)"
         )
         if path_str:
             try:
