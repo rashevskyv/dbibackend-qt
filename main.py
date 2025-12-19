@@ -7,18 +7,17 @@ Enhanced GUI for DBI file transfer to Nintendo Switch
 import sys
 from pathlib import Path
 
-# Add src directory to path
-sys.path.insert(0, str(Path(__file__).parent / 'src'))
-
+sys.path.insert(0, str(Path(__file__).parent)) # Add parent directory of src to path
 from PyQt6.QtWidgets import QApplication
-from main_window import MainWindow
-from single_instance import SingleInstanceManager
+from src.main_window import MainWindow
+from src.single_instance import SingleInstanceManager
 
 
 def main():
     """Main application entry point"""
     app = QApplication(sys.argv)
     app.setApplicationName('DBI Backend Qt')
+    app.setStyle('Fusion') 
     app.setOrganizationName('DBI Backend')
 
     # Setup single instance manager

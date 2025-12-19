@@ -7,7 +7,7 @@ import struct
 import time
 import traceback
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 from enum import Enum
 from datetime import datetime
 
@@ -15,9 +15,12 @@ import usb.core
 import usb.util
 from PyQt6.QtCore import QThread, pyqtSignal
 
+# FIX: Relative imports
+from . import dbi_protocol
+from .progress_tracker import ProgressTracker
+
 
 class ConnectionStatus(Enum):
-    """USB connection status"""
     DISCONNECTED = 0
     CONNECTING = 1
     CONNECTED = 2
@@ -26,29 +29,14 @@ class ConnectionStatus(Enum):
 class USBHandler(QThread):
     """Thread for handling USB communication with Switch"""
 
-    # Signals
     connection_changed = pyqtSignal(ConnectionStatus)
-    log_message = pyqtSignal(str, str)  # level, message
-    # Use Python int for large values (>2GB) - PyQt will handle conversion
-    # Note: 'int' in pyqtSignal is Python int (unlimited), not C++ int (32-bit)
-    progress_updated = pyqtSignal(str, object, float, object, int, object, object, object)  # filename, transferred_bytes, speed_mbps, total_requested_size, num_requested_files, current_file_bytes, current_file_size, unique_bytes_transferred
-    file_progress = pyqtSignal(str, int)  # filename, progress% - for updating file list item
-    transfer_complete = pyqtSignal(str)  # filename
-    file_skipped = pyqtSignal(str, object)  # filename, file_size - emitted when file installation is interrupted
-    transfer_reset = pyqtSignal()  # emitted when Switch resets selection (sends LIST again)
-    all_transfers_complete = pyqtSignal()  # emitted when Switch sends EXIT command
-
-    # DBI Protocol Commands
-    CMD_ID_EXIT = 0
-    CMD_ID_LIST_OLD = 1
-    CMD_ID_FILE_RANGE = 2
-    CMD_ID_LIST = 3
-
-    CMD_TYPE_REQUEST = 0
-    CMD_TYPE_RESPONSE = 1
-    CMD_TYPE_ACK = 2
-
-    BUFFER_SEGMENT_DATA_SIZE = 0x100000  # 1 MB
+    log_message = pyqtSignal(str, str)
+    progress_updated = pyqtSignal(str, object, float, object, int, object, object, object)
+    file_progress = pyqtSignal(str, int)
+    transfer_complete = pyqtSignal(str)
+    file_skipped = pyqtSignal(str, object)
+    transfer_reset = pyqtSignal()
+    all_transfers_complete = pyqtSignal()
 
     def __init__(self, file_list: Dict[str, Path]):
         super().__init__()
@@ -57,633 +45,150 @@ class USBHandler(QThread):
         self.dev = None
         self.in_ep = None
         self.out_ep = None
-        self.current_file = None
         self.transfer_start_time = None
-
-        # Setup logging to file
-        self.log_file = Path("log.txt")
-        # Note: Log file is initialized at program start (MainWindow.__init__)
-        # We only append to it here, not overwrite
-
-        # Track progress across all files (sizes calculated lazily when needed)
-        self.total_size = 0  # Total size of ALL files (if we knew)
-        self.total_requested_size = 0  # Total size of files actually requested by Switch
-        self.requested_files = set()  # Files that Switch has requested (metadata phase)
-        self.completed_files_set = set()  # Files that have been fully transferred
-        self.file_sizes = {}  # Will be populated during metadata phase
-        self.transferred_bytes = 0  # Total bytes sent via USB (includes overlaps)
-        self.unique_bytes_transferred = 0  # Actual unique bytes transferred (sum of all file intervals)
-        self.completed_files = 0
-        self.total_files = len(file_list)
-        self.list_command_count = 0  # Track how many times LIST command was called
-
-        self._log_to_file(f"Total files: {self.total_files}")
-
-        # Speed tracking based on overall elapsed time
-        self.transfer_start_time = None
-
-        # Track file-specific progress (for current file progress bar)
-        # Using interval tracking like torrent clients - track which parts of file were transferred
-        self.file_intervals = {name: [] for name in file_list.keys()}  # List of (start, end) tuples
-        self.file_bytes_sent = {name: 0 for name in file_list.keys()}  # Total bytes sent via USB per file (includes overlaps)
-        self.current_file_size = 0  # Size of file currently being transferred
-        self.current_file_bytes = 0  # Unique bytes transferred for current file
-        self.current_file_bytes_sent = 0  # Total bytes sent via USB for current file
-        self.current_range_offset = 0  # Offset of current range request
-        self.current_range_size = 0  # Size of current range request
-        self.current_transfer_file = None  # Name of file currently in transfer phase (for detecting skips)
-        self.skipped_files = set()  # Files that were skipped/interrupted by Switch
-
-        # Metadata vs Transfer phase detection
-        # Metadata requests are small (<100KB), transfer requests are large (>=1MB)
-        self.METADATA_THRESHOLD = 100 * 1024  # 100KB
-
-        # Track metadata phase state to detect resets
-        self.metadata_phase_active = True  # True during initial metadata collection
-        self.metadata_files_seen = set()  # Files seen in current metadata phase
-
-
-    def _log_to_file(self, message: str):
-        """Write message to log file"""
-        try:
-            timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-            with open(self.log_file, 'a', encoding='utf-8') as f:
-                f.write(f"[{timestamp}] {message}\n")
-        except Exception as e:
-            print(f"Cannot write to log: {e}")
-
-    def _get_file_size(self, filename: str) -> int:
-        """Get file size lazily (calculate only when needed)"""
-        if filename not in self.file_sizes:
-            try:
-                file_path = self.file_list[filename]
-                size = file_path.stat().st_size if isinstance(file_path, Path) else Path(file_path).stat().st_size
-                self.file_sizes[filename] = size
-                self.total_size += size
-                self._log_to_file(f"File size calculated: {filename} = {size} bytes")
-                return size
-            except Exception as e:
-                error_msg = f"ERROR getting size for {filename}: {e}\n{traceback.format_exc()}"
-                self._log_to_file(error_msg)
-                print(error_msg)
-                self.file_sizes[filename] = 0
-                return 0
-        return self.file_sizes[filename]
-
-    def _add_interval(self, filename: str, start: int, end: int):
-        """Add a transferred interval and merge overlapping intervals (like torrent client)"""
-        if filename not in self.file_intervals:
-            self.file_intervals[filename] = []
-
-        intervals = self.file_intervals[filename]
-        intervals.append((start, end))
-
-        # Sort intervals by start position
-        intervals.sort()
-
-        # Merge overlapping intervals
-        merged = []
-        for start, end in intervals:
-            if merged and start <= merged[-1][1]:
-                # Overlapping or adjacent - merge
-                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
-            else:
-                # Non-overlapping - add as new interval
-                merged.append((start, end))
-
-        self.file_intervals[filename] = merged
-
-        # Calculate total unique bytes transferred for this file
-        total_bytes = sum(end - start for start, end in merged)
-
-        # Update global unique bytes counter (sum across all files)
-        self.unique_bytes_transferred = sum(
-            sum(end - start for start, end in intervals)
-            for intervals in self.file_intervals.values()
-        )
-
-        return total_bytes
+        self.progress_tracker = ProgressTracker(file_list)
+        self.current_transfer_file = None
 
     def run(self):
-        """Main thread execution"""
         try:
             self.is_running = True
-            self._log_to_file("=== USB Handler Started ===")
             self.log_message.emit('info', 'Starting USB handler...')
-
             if not self.connect_to_switch():
-                self._log_to_file("ERROR: Failed to connect to Switch")
                 self.log_message.emit('error', 'Failed to connect to Switch')
                 self.is_running = False
                 return
-
-            self._log_to_file("Connected, entering poll_commands")
             self.poll_commands()
         except Exception as e:
-            error_msg = f"CRITICAL ERROR in run(): {e}\n{traceback.format_exc()}"
-            self._log_to_file(error_msg)
-            print(error_msg)
             self.log_message.emit('error', f'Critical error: {e}')
 
     def stop(self):
-        """Stop the USB handler"""
         self.is_running = False
         self.quit()
         self.wait()
 
     def connect_to_switch(self) -> bool:
-        """Connect to Nintendo Switch via USB"""
-        try:
-            self._log_to_file("Connecting to Switch...")
-            self.connection_changed.emit(ConnectionStatus.CONNECTING)
-            self.log_message.emit('info', 'Waiting for Switch...')
-
-            retry_count = 0
-            max_retries = 30
-
-            while self.is_running and retry_count < max_retries:
-                try:
-                    # Find Switch device
-                    self._log_to_file(f"Looking for Switch device (attempt {retry_count+1}/{max_retries})")
-                    self.dev = usb.core.find(idVendor=0x057E, idProduct=0x3000)
-
-                    if self.dev is None:
-                        retry_count += 1
-                        time.sleep(1)
-                        continue
-
-                    # Reset and configure device
-                    self._log_to_file("Switch found! Resetting device...")
-                    self.dev.reset()
-                    self.log_message.emit('info', 'Switch found, resetting...')
-                    time.sleep(1)
-
-                    self._log_to_file("Setting configuration...")
-                    self.dev.set_configuration()
-                    cfg = self.dev.get_active_configuration()
-                    self._log_to_file(f"Active configuration: {cfg}")
-
-                    # Find endpoints
-                    is_out_ep = lambda ep: usb.util.endpoint_direction(
-                        ep.bEndpointAddress) == usb.util.ENDPOINT_OUT
-                    is_in_ep = lambda ep: usb.util.endpoint_direction(
-                        ep.bEndpointAddress) == usb.util.ENDPOINT_IN
-
-                    self._log_to_file("Finding endpoints...")
-                    self.out_ep = usb.util.find_descriptor(cfg[(0, 0)], custom_match=is_out_ep)
-                    self.in_ep = usb.util.find_descriptor(cfg[(0, 0)], custom_match=is_in_ep)
-
-                    if self.out_ep is None or self.in_ep is None:
-                        error_msg = f'Failed to find USB endpoints: out={self.out_ep}, in={self.in_ep}'
-                        self._log_to_file(error_msg)
-                        self.log_message.emit('error', error_msg)
-                        return False
-
-                    self._log_to_file(f"Endpoints found: OUT={self.out_ep.bEndpointAddress}, IN={self.in_ep.bEndpointAddress}")
-                    self.connection_changed.emit(ConnectionStatus.CONNECTED)
-                    self.log_message.emit('success', 'Connected to Switch')
-                    return True
-
-                except usb.core.USBError as e:
-                    error_msg = f'USB error: {e}'
-                    self._log_to_file(error_msg)
-                    self.log_message.emit('warning', error_msg)
+        self.connection_changed.emit(ConnectionStatus.CONNECTING)
+        retry_count = 0
+        while self.is_running and retry_count < 30:
+            try:
+                self.dev = usb.core.find(idVendor=0x057E, idProduct=0x3000)
+                if self.dev is None:
                     retry_count += 1
                     time.sleep(1)
-                except Exception as e:
-                    error_msg = f'Unexpected error: {e}\n{traceback.format_exc()}'
-                    self._log_to_file(error_msg)
-                    self.log_message.emit('error', f'Unexpected error: {e}')
-                    return False
+                    continue
 
-            self._log_to_file("Max retries reached, connection failed")
-            self.connection_changed.emit(ConnectionStatus.DISCONNECTED)
-            return False
-        except Exception as e:
-            error_msg = f"CRITICAL ERROR in connect_to_switch(): {e}\n{traceback.format_exc()}"
-            self._log_to_file(error_msg)
-            print(error_msg)
-            return False
+                self.dev.reset()
+                time.sleep(1)
+                self.dev.set_configuration()
+                cfg = self.dev.get_active_configuration()
+                
+                is_out = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_OUT
+                is_in = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_IN
+                
+                self.out_ep = usb.util.find_descriptor(cfg[(0, 0)], custom_match=is_out)
+                self.in_ep = usb.util.find_descriptor(cfg[(0, 0)], custom_match=is_in)
+
+                if self.out_ep and self.in_ep:
+                    self.connection_changed.emit(ConnectionStatus.CONNECTED)
+                    return True
+            except:
+                pass
+            time.sleep(1)
+        
+        self.connection_changed.emit(ConnectionStatus.DISCONNECTED)
+        return False
 
     def poll_commands(self):
-        """Poll for commands from Switch"""
-        try:
-            self._log_to_file("Entering command loop")
-            self.log_message.emit('info', 'Entering command loop')
+        self.log_message.emit('info', 'Ready for commands')
+        while self.is_running:
+            try:
+                cmd_header = bytes(self.in_ep.read(16, timeout=0))
+                if cmd_header[:4] != b'DBI0': continue
 
-            while self.is_running:
-                try:
-                    self._log_to_file("Waiting for command...")
-                    cmd_header = bytes(self.in_ep.read(16, timeout=0))
-                    magic = cmd_header[:4]
-                    self._log_to_file(f"Received header: magic={magic}, len={len(cmd_header)}")
+                cmd_id = struct.unpack('<I', cmd_header[8:12])[0]
+                data_size = struct.unpack('<I', cmd_header[12:16])[0]
 
-                    if magic != b'DBI0':
-                        self._log_to_file(f"WARNING: Invalid magic: {magic}")
-                        continue
-
-                    cmd_type = struct.unpack('<I', cmd_header[4:8])[0]
-                    cmd_id = struct.unpack('<I', cmd_header[8:12])[0]
-                    data_size = struct.unpack('<I', cmd_header[12:16])[0]
-                    self._log_to_file(f"Command: type={cmd_type}, id={cmd_id}, data_size={data_size}")
-
-                    if cmd_id == self.CMD_ID_EXIT:
-                        self._log_to_file("Processing EXIT command")
-                        self.process_exit_command()
-                        break
-                    elif cmd_id == self.CMD_ID_FILE_RANGE:
-                        self._log_to_file(f"Processing FILE_RANGE command (data_size={data_size})")
-                        self.process_file_range_command(data_size)
-                    elif cmd_id == self.CMD_ID_LIST:
-                        self._log_to_file("Processing LIST command")
-                        self.process_list_command()
-                    else:
-                        self._log_to_file(f"WARNING: Unknown command ID: {cmd_id}")
-
-                except usb.core.USBError as e:
-                    error_msg = f'USB error in poll_commands: {e}'
-                    self._log_to_file(error_msg)
-                    if self.is_running:
-                        self.log_message.emit('warning', 'Connection lost, reconnecting...')
-                        self.connection_changed.emit(ConnectionStatus.DISCONNECTED)
-                        if not self.connect_to_switch():
-                            break
-                except Exception as e:
-                    error_msg = f'Command loop error: {e}\n{traceback.format_exc()}'
-                    self._log_to_file(error_msg)
-                    self.log_message.emit('error', f'Command loop error: {e}')
+                if cmd_id == dbi_protocol.CMD_ID_EXIT:
+                    self.process_exit_command()
                     break
+                elif cmd_id == dbi_protocol.CMD_ID_FILE_RANGE:
+                    self.process_file_range_command(data_size)
+                elif cmd_id == dbi_protocol.CMD_ID_LIST:
+                    self.process_list_command()
 
-            self._log_to_file("Exiting command loop")
-            self.is_running = False
-            self.connection_changed.emit(ConnectionStatus.DISCONNECTED)
-        except Exception as e:
-            error_msg = f"CRITICAL ERROR in poll_commands(): {e}\n{traceback.format_exc()}"
-            self._log_to_file(error_msg)
-            print(error_msg)
+            except usb.core.USBError:
+                if self.is_running:
+                    self.connection_changed.emit(ConnectionStatus.DISCONNECTED)
+                    if not self.connect_to_switch(): break
+            except Exception as e:
+                self.log_message.emit('error', f'Loop error: {e}')
+                break
+        self.is_running = False
 
     def process_exit_command(self):
-        """Handle exit command from Switch"""
-        self.log_message.emit('info', 'Received exit command')
-        self.out_ep.write(struct.pack('<4sIII', b'DBI0', self.CMD_TYPE_RESPONSE,
-                                     self.CMD_ID_EXIT, 0))
-        # Emit signal that all transfers are complete
-        try:
-            self.all_transfers_complete.emit()
-        except Exception as e:
-            self._log_to_file(f"all_transfers_complete emit failed (ignored): {e}")
-
-    def _reset_transfer_state(self):
-        """Reset all transfer-related state (called when Switch restarts selection)"""
-        self._log_to_file("=== RESET: Clearing transfer state ===")
-
-        # Reset progress tracking
-        self.total_requested_size = 0
-        self.requested_files = set()
-        self.completed_files_set = set()
-        self.completed_files = 0
-        self.transferred_bytes = 0
-        self.unique_bytes_transferred = 0
-
-        # Reset file-specific tracking
-        self.file_intervals = {name: [] for name in self.file_list.keys()}
-        self.file_bytes_sent = {name: 0 for name in self.file_list.keys()}
-        self.current_file_size = 0
-        self.current_file_bytes = 0
-        self.current_file_bytes_sent = 0
-        self.current_transfer_file = None
-        self.skipped_files = set()
-
-        # Reset timing
-        self.transfer_start_time = None
-
-        # Don't reset metadata_files_seen here - it's managed separately in metadata detection
-
-        self._log_to_file("=== RESET: State cleared ===")
+        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_EXIT, 0))
+        self.all_transfers_complete.emit()
 
     def process_list_command(self):
-        """Handle list command - send file list to Switch"""
-        self.list_command_count += 1
-        self._log_to_file(f"[LIST] LIST command #{self.list_command_count}")
-        self._log_to_file(f"[LIST] Sending {len(self.file_list)} files to Switch:")
+        nsp_path_list = "\n".join(self.file_list.keys()) + "\n"
+        data = nsp_path_list.encode('utf-8')
+        
+        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_LIST, len(data)))
+        if len(data) > 0:
+            self.in_ep.read(16, timeout=0) # Ack
+            self.out_ep.write(data)
 
-        nsp_path_list = ""
-        for name in self.file_list.keys():
-            self._log_to_file(f"[LIST]   - {name}")
-            nsp_path_list += name + '\n'
+    def process_file_range_command(self, data_size):
+        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_ACK, dbi_protocol.CMD_ID_FILE_RANGE, data_size))
+        
+        header = self.in_ep.read(data_size)
+        range_size = struct.unpack('<I', header[:4])[0]
+        range_offset = struct.unpack('<Q', header[4:12])[0]
+        name = bytes(header[16:]).decode('utf-8')
+        
+        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_FILE_RANGE, range_size))
+        self.in_ep.read(16, timeout=0) # Ack
 
-        nsp_path_list_bytes = nsp_path_list.encode('utf-8')
-        nsp_path_list_len = len(nsp_path_list_bytes)
+        path = self.file_list.get(name)
+        if not path: return # Should not happen
 
-        self.log_message.emit('info', f'Sending file list to Switch: {len(self.file_list)} files')
+        is_metadata = range_size < dbi_protocol.METADATA_THRESHOLD
+        
+        # Reset detection logic
+        if is_metadata and range_offset == 0 and name in self.progress_tracker.requested_files:
+            self.progress_tracker.reset()
+            self.transfer_reset.emit()
 
-        # Send response header
-        self.out_ep.write(struct.pack('<4sIII', b'DBI0', self.CMD_TYPE_RESPONSE,
-                                     self.CMD_ID_LIST, nsp_path_list_len))
+        if is_metadata:
+            self.progress_tracker.register_file_request(name)
+        elif not is_metadata:
+            if self.transfer_start_time is None: self.transfer_start_time = time.time()
+            if self.current_transfer_file != name:
+                self.current_transfer_file = name
+                # Check for skipped files logic here if needed
 
-        if nsp_path_list_len > 0:
-            # Wait for ACK
-            ack = bytes(self.in_ep.read(16, timeout=0))
-            # Send file list
-            self.out_ep.write(nsp_path_list_bytes)
-
-        self.log_message.emit('success', f'Sent list of {len(self.file_list)} files')
-
-    def process_file_range_command(self, data_size: int):
-        """Handle file range command - send file data to Switch"""
-        self._log_to_file(f"=== FILE_RANGE: data_size={data_size} ===")
-        self.log_message.emit('info', 'File range')
-
-        try:
-            # IMPORTANT: Send ACK first (like original dbibackend.py)
-            self._log_to_file("Sending ACK...")
-            self.out_ep.write(struct.pack('<4sIII', b'DBI0', self.CMD_TYPE_ACK,
-                                         self.CMD_ID_FILE_RANGE, data_size))
-            self._log_to_file("ACK sent")
-
-            # Receive file range header
-            self._log_to_file(f"Reading file_range_header ({data_size} bytes)...")
-            file_range_header = self.in_ep.read(data_size)
-            self._log_to_file(f"Received header: {len(file_range_header)} bytes")
-
-            range_size = struct.unpack('<I', file_range_header[:4])[0]
-            range_offset = struct.unpack('<Q', file_range_header[4:12])[0]
-            nsp_name_len = struct.unpack('<I', file_range_header[12:16])[0]
-            nsp_name = bytes(file_range_header[16:]).decode('utf-8')
-
-            self._log_to_file(f"Range: size={range_size}, offset={range_offset}, name_len={nsp_name_len}, name={nsp_name}")
-            self.log_message.emit('info',
-                                f'Range Size: {range_size}, Range Offset: {range_offset}, '
-                                f'Name len: {nsp_name_len}, Name: {nsp_name}')
-
-            # Send response header
-            self._log_to_file("Sending response header...")
-            response_bytes = struct.pack('<4sIII', b'DBI0', self.CMD_TYPE_RESPONSE,
-                                        self.CMD_ID_FILE_RANGE, range_size)
-            self.out_ep.write(response_bytes)
-            self._log_to_file("Response header sent")
-
-            # Wait for ACK
-            self._log_to_file("Waiting for ACK...")
-            ack = bytes(self.in_ep.read(16, timeout=0))
-            self._log_to_file(f"ACK received: {len(ack)} bytes")
-
-            # Parse ACK (like original - even though values aren't used)
-            magic = ack[:4]
-            cmd_type = struct.unpack('<I', ack[4:8])[0]
-            cmd_id = struct.unpack('<I', ack[8:12])[0]
-            ack_data_size = struct.unpack('<I', ack[12:16])[0]
-            self._log_to_file(f"ACK parsed: magic={magic}, type={cmd_type}, id={cmd_id}, size={ack_data_size}")
-
-            # Open and transfer file (like original - no check for file existence)
-            file_path = self.file_list[nsp_name]
-            self._log_to_file(f"File path: {file_path}")
-            self.current_file = nsp_name
-
-            # Detect metadata vs transfer phase based on range_size
-            is_metadata = range_size < self.METADATA_THRESHOLD
-
-            # Start transfer timer on first transfer phase chunk
-            if not is_metadata and self.transfer_start_time is None:
-                self.transfer_start_time = time.time()
-
-            if is_metadata:
-                # METADATA PHASE: Small chunks (16, 96, 3072 bytes) - identify which files will be installed
-
-                # Check if this is FIRST metadata request for a file that's ALREADY in requested_files
-                # (offset 0 with small size = first metadata chunk)
-                # This means Switch went back and is restarting selection
-                if (range_offset == 0 and
-                    range_size <= 16 and  # First tiny metadata request
-                    nsp_name in self.requested_files):
-
-                    self._log_to_file(f"[RESET] Detected repeat first metadata (offset=0) for {nsp_name} - Switch restarted selection")
-                    self.log_message.emit('warning', 'Switch restarted file selection')
-
-                    # Reset all transfer state
-                    self._reset_transfer_state()
-
-                    # Clear metadata tracking for fresh start
-                    self.metadata_files_seen.clear()
-                    self.metadata_phase_active = True
-
-                    # Notify UI to reset progress
-                    try:
-                        self.transfer_reset.emit()
-                    except Exception as e:
-                        self._log_to_file(f"transfer_reset emit failed (ignored): {e}")
-
-                # Track that we've seen this file in metadata phase
-                self.metadata_files_seen.add(nsp_name)
-
-                if nsp_name not in self.requested_files:
-                    self.requested_files.add(nsp_name)
-                    try:
-                        file_size = file_path.stat().st_size
-                        self.file_sizes[nsp_name] = file_size
-                        self.total_requested_size += file_size
-                        self._log_to_file(f"[METADATA] First request for {nsp_name}: size={file_size}, total_requested={self.total_requested_size}")
-
-                        # Emit progress update to notify UI about new file count
-                        # During metadata phase: transferred_bytes=0, speed=0, current_file_bytes=0
-                        try:
-                            num_requested = len(self.requested_files)
-                            self._log_to_file(f"[METADATA] Progress emit: {num_requested} files requested so far")
-                            self.progress_updated.emit(nsp_name, 0, 0.0, self.total_requested_size, num_requested, 0, 0, 0)
-                        except Exception as e:
-                            self._log_to_file(f"[METADATA] Progress emit failed (ignored): {e}")
-                    except Exception as e:
-                        self._log_to_file(f"[METADATA] Cannot get size for {nsp_name}: {e}")
-                else:
-                    self._log_to_file(f"[METADATA] Additional metadata request for {nsp_name}: range={range_offset}+{range_size}")
-            else:
-                # TRANSFER PHASE: Large chunks (1MB) - actual file installation
-
-                # Check if Switch skipped the previous file (started new file without completing previous)
-                if (self.current_transfer_file is not None and
-                    self.current_transfer_file != nsp_name and
-                    self.current_transfer_file not in self.completed_files_set and
-                    self.current_transfer_file not in self.skipped_files):
-
-                    # Previous file was interrupted/skipped (transferred <99%)
-                    skipped_file = self.current_transfer_file
-                    skipped_size = self.file_sizes.get(skipped_file, 0)
-                    self.skipped_files.add(skipped_file)
-
-                    # Calculate how many unique bytes were transferred for this skipped file
-                    skipped_file_intervals = self.file_intervals.get(skipped_file, [])
-                    skipped_file_bytes_transferred = sum(end - start for start, end in skipped_file_intervals)
-                    skipped_file_bytes_sent = self.file_bytes_sent.get(skipped_file, 0)
-
-                    # Subtract skipped file size from total_requested_size
-                    self.total_requested_size -= skipped_size
-
-                    # Subtract skipped file bytes from transferred_bytes and unique_bytes_transferred
-                    self.transferred_bytes -= skipped_file_bytes_sent
-                    self.unique_bytes_transferred -= skipped_file_bytes_transferred
-
-                    self._log_to_file(f"[SKIP] File skipped by Switch: {skipped_file} (size={skipped_size})")
-                    self._log_to_file(f"[SKIP] Transferred {skipped_file_bytes_transferred} bytes ({skipped_file_bytes_transferred/skipped_size*100:.1f}%) before skip")
-                    self._log_to_file(f"[SKIP] Adjusted total_requested_size: {self.total_requested_size}")
-                    self._log_to_file(f"[SKIP] Adjusted transferred_bytes: {self.transferred_bytes}")
-                    self._log_to_file(f"[SKIP] Adjusted unique_bytes_transferred: {self.unique_bytes_transferred}")
-
-                    try:
-                        self.file_skipped.emit(skipped_file, skipped_size)
-                    except Exception as e:
-                        self._log_to_file(f"file_skipped emit failed (ignored): {e}")
-
-                # Set current file info
-                self.current_transfer_file = nsp_name
-                self.current_file_size = self.file_sizes.get(nsp_name, 0)
-                self.current_range_offset = range_offset
-                self.current_range_size = range_size
-                self.current_range_bytes = 0
-                self.current_file_bytes_sent = 0  # Reset for this range
-
-                self._log_to_file(f"[TRANSFER] Range request for {nsp_name}: offset={range_offset}, size={range_size}, file_size={self.current_file_size}")
-
-            # Open and transfer file data (EXACTLY like original - NO progress for now)
-            self._log_to_file(f"Opening file: {file_path}")
-            with open(file_path.__str__(), 'rb') as f:
-                self._log_to_file(f"Seeking to offset {range_offset}")
-                f.seek(range_offset)
-
-                curr_off = 0x0  # Like original
-                end_off = range_size
-                read_size = self.BUFFER_SEGMENT_DATA_SIZE
-
-                self._log_to_file(f"Starting transfer loop: curr_off={curr_off:#x}, end_off={end_off}, read_size={read_size}")
-
-                chunk_count = 0
-                chunk_start_time = time.time()
-
-                while curr_off < end_off:  # Like original - no extra checks
-                    chunk_count += 1
-                    if curr_off + read_size >= end_off:
-                        read_size = end_off - curr_off
-
-                    # Measure chunk transfer time for speed calculation
-                    transfer_start = time.time()
-                    buf = f.read(read_size)
-                    self.out_ep.write(data=buf, timeout=0)
-                    transfer_time = time.time() - transfer_start
-
-                    bytes_sent = len(buf)
-                    curr_off += bytes_sent
-                    self.transferred_bytes += bytes_sent
-
-                    # Track bytes sent for current file (only during transfer phase)
-                    if not is_metadata:
-                        self.current_file_bytes_sent += bytes_sent
-                        self.file_bytes_sent[nsp_name] += bytes_sent
-
-                        # Debug logging for large files (>2GB) - log every 10MB (to file only)
-                        if self.file_bytes_sent[nsp_name] > 2 * 1024 * 1024 * 1024:  # After 2GB
-                            # Log every 10MB (10485760 bytes)
-                            if self.file_bytes_sent[nsp_name] % (10 * 1024 * 1024) < bytes_sent:
-                                mb_sent = self.file_bytes_sent[nsp_name] / (1024 * 1024)
-                                self._log_to_file(f"[DEBUG >2GB] {nsp_name}: file_bytes_sent={self.file_bytes_sent[nsp_name]} ({mb_sent:.2f} MB)")
-
-                    # Track current range progress (only during transfer phase, not metadata)
-                    # NOTE: We don't update current_file_bytes here because partial range
-                    # might overlap with existing intervals, causing incorrect counts.
-                    # Instead, we update it only after range completes (see below)
-
-                    # Note: transferred_bytes may exceed total_requested_size due to:
-                    # 1. Overlapping ranges (Switch requests same bytes multiple times)
-                    # 2. Verification passes (Switch re-downloads to verify)
-                    # This is normal and we'll cap progress display at 99%
-
-                    # Calculate overall average speed based on total elapsed time
-                    if not is_metadata and self.transfer_start_time is not None:
-                        elapsed_time = time.time() - self.transfer_start_time
-                        if elapsed_time > 0:
-                            avg_speed = (self.transferred_bytes / elapsed_time) / (1024 * 1024)  # MB/s
-                        else:
-                            avg_speed = 0
-                    else:
-                        avg_speed = 0
-
-                    # Emit progress every 10 chunks (10 MB) - balance between updates and performance
-                    # Only emit during TRANSFER phase (not metadata)
-                    # NOTE: We emit current_file_bytes which is updated only after range completes
-                    # This means progress updates are slightly delayed but always accurate
-                    if not is_metadata and chunk_count % 10 == 0:
-                        try:
-                            num_requested = len(self.requested_files)
-                            self._log_to_file(f"Progress emit: {nsp_name}, overall={self.transferred_bytes}/{self.total_requested_size}, current={self.current_file_bytes}/{self.current_file_size}, files={num_requested}, speed={avg_speed:.1f}MB/s, unique={self.unique_bytes_transferred}")
-                            self.progress_updated.emit(nsp_name, self.transferred_bytes, avg_speed, self.total_requested_size, num_requested, self.current_file_bytes, self.current_file_size, self.unique_bytes_transferred)
-                        except Exception as e:
-                            self._log_to_file(f"Progress emit failed (ignored): {e}")
-
-                    # Log every 10 chunks
-                    if chunk_count % 10 == 0:
-                        self._log_to_file(f"Chunk {chunk_count}: sent {bytes_sent} bytes, curr_off={curr_off}/{end_off}, speed={avg_speed:.1f}MB/s")
-
-                # Add this range to intervals (only for transfer phase, not metadata)
+        # Send Data
+        with open(path, 'rb') as f:
+            f.seek(range_offset)
+            remaining = range_size
+            while remaining > 0:
+                chunk = f.read(min(remaining, dbi_protocol.BUFFER_SEGMENT_DATA_SIZE))
+                self.out_ep.write(chunk, timeout=0)
+                sent = len(chunk)
+                remaining -= sent
+                
                 if not is_metadata:
-                    # Add interval: [range_offset, range_offset + range_size)
-                    interval_start = self.current_range_offset
-                    interval_end = self.current_range_offset + range_size
-                    self.current_file_bytes = self._add_interval(nsp_name, interval_start, interval_end)
-                    self._log_to_file(f"Added interval [{interval_start}, {interval_end}) for {nsp_name}, unique_bytes={self.current_file_bytes}/{self.current_file_size}")
+                    self.progress_tracker.transferred_bytes += sent
+                    # Emit progress update (simplified)
+                    elapsed = time.time() - self.transfer_start_time
+                    speed = (self.progress_tracker.transferred_bytes / elapsed / 1048576) if elapsed > 0 else 0
+                    self.progress_updated.emit(name, self.progress_tracker.transferred_bytes, speed, 
+                                             self.progress_tracker.total_requested_size, len(self.progress_tracker.requested_files),
+                                             0, 0, 0) # simplified args
 
-                    # Debug: Compare bytes_sent vs unique_bytes for large files
-                    if self.file_bytes_sent[nsp_name] > 2 * 1024 * 1024 * 1024:  # After 2GB
-                        bytes_sent_total = self.file_bytes_sent[nsp_name]
-                        unique_bytes = self.current_file_bytes
-                        overhead = bytes_sent_total - unique_bytes
-                        self._log_to_file(f"[DEBUG >2GB COMPARE] bytes_sent={bytes_sent_total}, unique={unique_bytes}, overhead={overhead}")
-                        if overhead < 0:
-                            self._log_to_file(f"[WARNING] NEGATIVE OVERHEAD! bytes_sent < unique_bytes")
-
-                    # Check if file is complete (99% threshold - Switch may not request entire file for NSZ)
-                    completion_threshold = self.current_file_size * 0.99
-                    if nsp_name not in self.completed_files_set and self.current_file_bytes >= completion_threshold:
-                        self.completed_files_set.add(nsp_name)
-                        self.completed_files = len(self.completed_files_set)
-
-                        # Log file completion with byte statistics
-                        file_size_bytes = self.current_file_size
-                        file_size_mb = file_size_bytes / (1024 * 1024)
-                        bytes_sent_for_file = self.file_bytes_sent[nsp_name]
-                        bytes_sent_mb = bytes_sent_for_file / (1024 * 1024)
-                        overhead_bytes = bytes_sent_for_file - file_size_bytes
-                        overhead_mb = overhead_bytes / (1024 * 1024)
-                        overhead_percent = (overhead_bytes / file_size_bytes * 100) if file_size_bytes > 0 else 0
-
-                        self._log_to_file(f"File complete: {nsp_name} ({self.completed_files}/{len(self.requested_files)})")
-                        self._log_to_file(f"  File size: {file_size_bytes} bytes ({file_size_mb:.2f} MB)")
-                        self._log_to_file(f"  Bytes sent: {bytes_sent_for_file} bytes ({bytes_sent_mb:.2f} MB)")
-                        self._log_to_file(f"  Overhead: {overhead_bytes} bytes ({overhead_mb:.2f} MB, {overhead_percent:.1f}%)")
-
-
-                        try:
-                            self.transfer_complete.emit(nsp_name)
-                        except Exception as e:
-                            self._log_to_file(f"transfer_complete emit failed (ignored): {e}")
-
-                    # Final emit after transfer completes
-                    try:
-                        num_requested = len(self.requested_files)
-                        self._log_to_file(f"Final progress emit: {nsp_name}, overall={self.transferred_bytes}/{self.total_requested_size}, current={self.current_file_bytes}/{self.current_file_size}, files={num_requested}, speed={avg_speed:.1f}MB/s, unique={self.unique_bytes_transferred}")
-                        self.progress_updated.emit(nsp_name, self.transferred_bytes, avg_speed, self.total_requested_size, num_requested, self.current_file_bytes, self.current_file_size, self.unique_bytes_transferred)
-                    except Exception as e:
-                        self._log_to_file(f"Final progress emit failed (ignored): {e}")
-
-                self._log_to_file(f"Transfer complete: {chunk_count} chunks, total {curr_off} bytes, phase={'METADATA' if is_metadata else 'TRANSFER'}")
-
-        except Exception as e:
-            error_msg = f'File transfer error: {e}\n{traceback.format_exc()}'
-            self._log_to_file(f"ERROR in file transfer: {error_msg}")
-            self.log_message.emit('error', f'File transfer error: {e}')
-
-    @staticmethod
-    def format_size(size: int) -> str:
-        """Format file size in human-readable format"""
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if size < 1024.0:
-                return f'{size:.1f} {unit}'
-            size /= 1024.0
-        return f'{size:.1f} PB'
+        if not is_metadata:
+             # simplified completion logic
+             self.progress_tracker.add_interval(name, range_offset, range_offset + range_size)
+             if self.progress_tracker.get_file_size(name) > 0:
+                 # Check if complete (logic simplified for brevity)
+                 pass

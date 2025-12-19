@@ -34,3 +34,4 @@ ENV/
 .DS_Store
 Thumbs.db
 /CLAUDE.md
+/src/__pycache__

@@ -1,343 +1,79 @@
 """
 Theme Manager
-Provides light and dark themes for the application
+Provides light and dark themes for the application.
+Hardcoded styles ensure independence from Windows System Theme settings.
 """
-
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import Qt
 
 class ThemeManager:
     """Manages application themes"""
 
+    # --- LIGHT THEME (Fixed for Dark Mode Windows) ---
     LIGHT_THEME = """
-    QMainWindow {
-        background-color: #f5f5f5;
-    }
-
-    QMenuBar {
-        background-color: #ffffff;
-        border-bottom: 1px solid #e0e0e0;
-    }
-
-    QMenu {
-        background-color: #ffffff;
-        border: 1px solid #e0e0e0;
-    }
-
-    QMenu::item:selected {
-        background-color: #e3f2fd;
-        color: #000000;
-    }
-
-    QPushButton {
-        background-color: #2196F3;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 4px;
-        font-size: 13px;
-    }
-
-    QPushButton:hover {
-        background-color: #1976D2;
-    }
-
-    QPushButton:pressed {
-        background-color: #0D47A1;
-    }
-
-    QPushButton:disabled {
-        background-color: #BDBDBD;
-    }
-
-    QLineEdit {
-        background-color: white;
-        border: 1px solid #BDBDBD;
-        border-radius: 4px;
-        padding: 6px;
-        font-size: 13px;
-    }
-
-    QLineEdit:focus {
-        border: 2px solid #2196F3;
-    }
-
-    QTreeWidget {
-        background-color: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 4px;
-        alternate-background-color: #f9f9f9;
-    }
-
-    QTreeWidget::item:selected {
-        background-color: #e3f2fd;
-        color: black;
-    }
-
-    QTreeWidget::item:hover {
-        background-color: rgba(0, 0, 0, 0.1);
-    }
-
-    QHeaderView::section {
-        background-color: #f5f5f5;
-        padding: 6px;
-        border: none;
-        border-bottom: 2px solid #2196F3;
-        font-weight: bold;
-    }
-
-    QProgressBar {
-        border: 1px solid #e0e0e0;
-        border-radius: 4px;
-        text-align: center;
-        background-color: white;
-    }
-
-    QProgressBar::chunk {
-        background-color: #4CAF50;
-        border-radius: 3px;
-    }
-
-    QTextEdit {
-        background-color: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 4px;
-        font-family: 'Consolas', 'Courier New', monospace;
-        font-size: 12px;
-    }
-
-    QGroupBox {
-        border: 1px solid #e0e0e0;
-        border-radius: 6px;
-        margin-top: 12px;
-        font-weight: bold;
-        padding-top: 10px;
-    }
-
-    QGroupBox::title {
-        subcontrol-origin: margin;
-        subcontrol-position: top left;
-        padding: 0 8px;
-        background-color: #f5f5f5;
-        color: #2196F3;
-    }
-
-    QLabel {
-        color: #424242;
-    }
-
-    QStatusBar {
-        background-color: #f5f5f5;
-        border-top: 1px solid #e0e0e0;
-    }
-
-    QScrollBar:vertical {
-        border: none;
-        background-color: #f5f5f5;
-        width: 12px;
-        margin: 0;
-    }
-
-    QScrollBar::handle:vertical {
-        background-color: #BDBDBD;
-        border-radius: 6px;
-        min-height: 20px;
-    }
-
-    QScrollBar::handle:vertical:hover {
-        background-color: #9E9E9E;
-    }
-
-    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-        height: 0;
-    }
+    QWidget { color: #000000; background-color: #f5f5f5; font-family: "Segoe UI", sans-serif; }
+    QMenuBar { background-color: #e0e0e0; color: #000000; border-bottom: 1px solid #cccccc; }
+    QMenuBar::item { background-color: transparent; color: #000000; padding: 4px 10px; }
+    QMenuBar::item:selected { background-color: #d0d0d0; }
+    QMenu { background-color: #ffffff; color: #000000; border: 1px solid #cccccc; }
+    QMenu::item { padding: 4px 24px 4px 10px; }
+    QMenu::item:selected { background-color: #2196F3; color: #ffffff; }
+    QLineEdit, QTextEdit, QPlainTextEdit { background-color: #ffffff; color: #000000; border: 1px solid #c0c0c0; border-radius: 4px; padding: 4px; }
+    QTreeWidget, QListWidget, QTableWidget { background-color: #ffffff; color: #000000; border: 1px solid #c0c0c0; alternate-background-color: #f9f9f9; }
+    QTreeWidget::item:selected { background-color: #2196F3; color: #ffffff; }
+    QHeaderView::section { background-color: #e0e0e0; color: #000000; padding: 4px; border: 1px solid #d0d0d0; }
+    QGroupBox { border: 1px solid #cccccc; border-radius: 4px; margin-top: 1.1em; padding-top: 10px; }
+    QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 3px; color: #333333; left: 10px; }
+    
+    /* Status Bar Fixes */
+    QStatusBar { background-color: #e0e0e0; color: #000000; border-top: 1px solid #cccccc; }
+    QStatusBar::item { border: none; }
+    QStatusBar QLabel { background: transparent; }
+    QSizeGrip { background: transparent; width: 16px; height: 16px; }
+    
+    /* Transparent splitter background to allow custom grip painting */
+    QSplitter::handle { background-color: transparent; }
     """
 
+    # --- DARK THEME ---
     DARK_THEME = """
-    QMainWindow {
-        background-color: #1e1e1e;
-        color: #e0e0e0;
-    }
+    QWidget { color: #ffffff; background-color: #1e1e1e; font-family: "Segoe UI", sans-serif; }
+    QMenuBar { background-color: #2d2d2d; color: #ffffff; border-bottom: 1px solid #3d3d3d; }
+    QMenuBar::item:selected { background-color: #3d3d3d; }
+    QMenu { background-color: #2d2d2d; color: #ffffff; border: 1px solid #3d3d3d; }
+    QMenu::item:selected { background-color: #2196F3; color: #ffffff; }
+    QLineEdit, QTextEdit, QPlainTextEdit { background-color: #2d2d2d; color: #ffffff; border: 1px solid #3d3d3d; border-radius: 4px; padding: 4px; }
+    QTreeWidget, QListWidget, QTableWidget { background-color: #252526; color: #cccccc; border: 1px solid #3d3d3d; alternate-background-color: #2d2d2d; }
+    QTreeWidget::item:selected { background-color: #37373d; color: #ffffff; border: 1px solid #2196F3; }
+    QHeaderView::section { background-color: #2d2d2d; color: #ffffff; padding: 4px; border: 1px solid #3d3d3d; }
+    QGroupBox { border: 1px solid #3d3d3d; border-radius: 4px; margin-top: 1.1em; padding-top: 10px; }
+    QGroupBox::title { color: #cccccc; subcontrol-origin: margin; left: 10px; }
+    
+    /* Status Bar Fixes */
+    QStatusBar { background-color: #2d2d2d; color: #ffffff; border-top: 1px solid #3d3d3d; }
+    QStatusBar::item { border: none; }
+    QStatusBar QLabel { background: transparent; }
+    QSizeGrip { background: transparent; width: 16px; height: 16px; }
 
-    QWidget {
-        color: #e0e0e0;
-    }
-
-    QMenuBar {
-        background-color: #2d2d2d;
-        border-bottom: 1px solid #3d3d3d;
-        color: #e0e0e0;
-    }
-
-    QMenu {
-        background-color: #2d2d2d;
-        border: 1px solid #3d3d3d;
-        color: #e0e0e0;
-    }
-
-    QMenu::item:selected {
-        background-color: #094771;
-        color: #ffffff;
-    }
-
-    QPushButton {
-        background-color: #0d7ec1;
-        color: white;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 4px;
-        font-size: 13px;
-    }
-
-    QPushButton:hover {
-        background-color: #1a8dd4;
-    }
-
-    QPushButton:pressed {
-        background-color: #076ba8;
-    }
-
-    QPushButton:disabled {
-        background-color: #3d3d3d;
-        color: #6d6d6d;
-    }
-
-    QLineEdit {
-        background-color: #2d2d2d;
-        border: 1px solid #3d3d3d;
-        border-radius: 4px;
-        padding: 6px;
-        color: #e0e0e0;
-        font-size: 13px;
-    }
-
-    QLineEdit:focus {
-        border: 2px solid #0d7ec1;
-    }
-
-    QTreeWidget {
-        background-color: #2d2d2d;
-        border: 1px solid #3d3d3d;
-        border-radius: 4px;
-        alternate-background-color: #252525;
-        color: #e0e0e0;
-    }
-
-    QTreeWidget::item:selected {
-        background-color: #094771;
-        color: #ffffff;
-    }
-
-    QTreeWidget::item:hover {
-        background-color: rgba(255, 255, 255, 0.1);
-    }
-
-    QHeaderView::section {
-        background-color: #2d2d2d;
-        padding: 6px;
-        border: none;
-        border-bottom: 2px solid #0d7ec1;
-        color: #e0e0e0;
-        font-weight: bold;
-    }
-
-    QProgressBar {
-        border: 1px solid #3d3d3d;
-        border-radius: 4px;
-        text-align: center;
-        background-color: #2d2d2d;
-        color: #e0e0e0;
-    }
-
-    QProgressBar::chunk {
-        background-color: #0d7ec1;
-        border-radius: 3px;
-    }
-
-    QTextEdit {
-        background-color: #2d2d2d;
-        border: 1px solid #3d3d3d;
-        border-radius: 4px;
-        color: #e0e0e0;
-        font-family: 'Consolas', 'Courier New', monospace;
-        font-size: 12px;
-    }
-
-    QGroupBox {
-        border: 1px solid #3d3d3d;
-        border-radius: 6px;
-        margin-top: 12px;
-        font-weight: bold;
-        padding-top: 10px;
-        color: #e0e0e0;
-    }
-
-    QGroupBox::title {
-        subcontrol-origin: margin;
-        subcontrol-position: top left;
-        padding: 0 8px;
-        background-color: #1e1e1e;
-        color: #0d7ec1;
-    }
-
-    QLabel {
-        color: #e0e0e0;
-    }
-
-    QStatusBar {
-        background-color: #2d2d2d;
-        border-top: 1px solid #3d3d3d;
-        color: #e0e0e0;
-    }
-
-    QScrollBar:vertical {
-        border: none;
-        background-color: #2d2d2d;
-        width: 12px;
-        margin: 0;
-    }
-
-    QScrollBar::handle:vertical {
-        background-color: #4d4d4d;
-        border-radius: 6px;
-        min-height: 20px;
-    }
-
-    QScrollBar::handle:vertical:hover {
-        background-color: #5d5d5d;
-    }
-
-    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-        height: 0;
-    }
-
-    QCheckBox {
-        color: #e0e0e0;
-    }
-
-    QCheckBox::indicator {
-        width: 16px;
-        height: 16px;
-        border: 1px solid #3d3d3d;
-        border-radius: 3px;
-        background-color: #2d2d2d;
-    }
-
-    QCheckBox::indicator:checked {
-        background-color: #0d7ec1;
-        border: 1px solid #0d7ec1;
-    }
+    /* Transparent splitter background to allow custom grip painting */
+    QSplitter::handle { background-color: transparent; }
+    
+    QScrollBar:vertical { border: none; background: #1e1e1e; width: 14px; margin: 0px; }
+    QScrollBar::handle:vertical { background: #424242; min-height: 20px; border-radius: 2px; }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
     """
 
     def __init__(self):
-        """Initialize theme manager"""
         self.themes = {
             'light': self.LIGHT_THEME,
             'dark': self.DARK_THEME
         }
 
     def get_theme(self, theme_name: str) -> str:
-        """Get theme stylesheet by name"""
         return self.themes.get(theme_name, self.LIGHT_THEME)
-
-    def get_available_themes(self) -> list:
-        """Get list of available theme names"""
-        return list(self.themes.keys())
+    
+    def get_system_theme(self) -> str:
+        """Detect system theme via Qt"""
+        if QApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark:
+            return 'dark'
+        return 'light'
