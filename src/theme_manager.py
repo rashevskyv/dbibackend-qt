@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt
 class ThemeManager:
     """Manages application themes"""
 
-    # --- LIGHT THEME (Fixed for Dark Mode Windows) ---
+    # --- LIGHT THEME ---
     LIGHT_THEME = """
     QWidget { color: #000000; background-color: #f5f5f5; font-family: "Segoe UI", sans-serif; }
     QMenuBar { background-color: #e0e0e0; color: #000000; border-bottom: 1px solid #cccccc; }
@@ -25,13 +25,26 @@ class ThemeManager:
     QGroupBox { border: 1px solid #cccccc; border-radius: 4px; margin-top: 1.1em; padding-top: 10px; }
     QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 3px; color: #333333; left: 10px; }
     
+    /* Progress Bar Light - Green */
+    QProgressBar {
+        border: 1px solid #cccccc;
+        border-radius: 4px;
+        text-align: center;
+        background-color: #e0e0e0;
+        color: #000000;
+    }
+    /* Explicitly define background-color to prevent graying out on focus loss */
+    QProgressBar::chunk {
+        background-color: #4CAF50;
+        width: 1px;
+    }
+
     /* Status Bar Fixes */
     QStatusBar { background-color: #e0e0e0; color: #000000; border-top: 1px solid #cccccc; }
     QStatusBar::item { border: none; }
     QStatusBar QLabel { background: transparent; }
     QSizeGrip { background: transparent; width: 16px; height: 16px; }
     
-    /* Transparent splitter background to allow custom grip painting */
     QSplitter::handle { background-color: transparent; }
     """
 
@@ -49,13 +62,26 @@ class ThemeManager:
     QGroupBox { border: 1px solid #3d3d3d; border-radius: 4px; margin-top: 1.1em; padding-top: 10px; }
     QGroupBox::title { color: #cccccc; subcontrol-origin: margin; left: 10px; }
     
+    /* Progress Bar Dark - Blue (Requested) */
+    QProgressBar {
+        border: 1px solid #3d3d3d;
+        border-radius: 4px;
+        text-align: center;
+        background-color: #252526;
+        color: #ffffff;
+    }
+    /* Explicitly define background-color to prevent graying out on focus loss */
+    QProgressBar::chunk {
+        background-color: #2196F3; /* Blue */
+        width: 1px;
+    }
+
     /* Status Bar Fixes */
     QStatusBar { background-color: #2d2d2d; color: #ffffff; border-top: 1px solid #3d3d3d; }
     QStatusBar::item { border: none; }
     QStatusBar QLabel { background: transparent; }
     QSizeGrip { background: transparent; width: 16px; height: 16px; }
 
-    /* Transparent splitter background to allow custom grip painting */
     QSplitter::handle { background-color: transparent; }
     
     QScrollBar:vertical { border: none; background: #1e1e1e; width: 14px; margin: 0px; }

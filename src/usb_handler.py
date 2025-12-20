@@ -9,28 +9,25 @@ import traceback
 from pathlib import Path
 from typing import Dict
 from enum import Enum
-from datetime import datetime
 
 import usb.core
 import usb.util
 from PyQt6.QtCore import QThread, pyqtSignal
 
-# FIX: Relative imports
 from . import dbi_protocol
 from .progress_tracker import ProgressTracker
-
 
 class ConnectionStatus(Enum):
     DISCONNECTED = 0
     CONNECTING = 1
     CONNECTED = 2
 
-
 class USBHandler(QThread):
     """Thread for handling USB communication with Switch"""
 
     connection_changed = pyqtSignal(ConnectionStatus)
     log_message = pyqtSignal(str, str)
+    # Signals for UI updates
     progress_updated = pyqtSignal(str, object, float, object, int, object, object, object)
     file_progress = pyqtSignal(str, int)
     transfer_complete = pyqtSignal(str)
@@ -47,7 +44,11 @@ class USBHandler(QThread):
         self.out_ep = None
         self.transfer_start_time = None
         self.progress_tracker = ProgressTracker(file_list)
+        
+        # State tracking for UI
         self.current_transfer_file = None
+        self.current_file_bytes_sent = 0
+        self.current_file_size = 0
 
     def run(self):
         try:
@@ -59,7 +60,7 @@ class USBHandler(QThread):
                 return
             self.poll_commands()
         except Exception as e:
-            self.log_message.emit('error', f'Critical error: {e}')
+            self.log_message.emit('error', f'Critical error in USB thread: {e}')
 
     def stop(self):
         self.is_running = False
@@ -69,6 +70,7 @@ class USBHandler(QThread):
     def connect_to_switch(self) -> bool:
         self.connection_changed.emit(ConnectionStatus.CONNECTING)
         retry_count = 0
+        
         while self.is_running and retry_count < 30:
             try:
                 self.dev = usb.core.find(idVendor=0x057E, idProduct=0x3000)
@@ -90,8 +92,10 @@ class USBHandler(QThread):
 
                 if self.out_ep and self.in_ep:
                     self.connection_changed.emit(ConnectionStatus.CONNECTED)
+                    self.log_message.emit('success', 'Connected to Switch via USB')
                     return True
-            except:
+            except Exception as e:
+                # self.log_message.emit('debug', f"Connection retry: {e}")
                 pass
             time.sleep(1)
         
@@ -99,9 +103,10 @@ class USBHandler(QThread):
         return False
 
     def poll_commands(self):
-        self.log_message.emit('info', 'Ready for commands')
+        self.log_message.emit('info', 'Waiting for DBI commands...')
         while self.is_running:
             try:
+                # Read header
                 cmd_header = bytes(self.in_ep.read(16, timeout=0))
                 if cmd_header[:4] != b'DBI0': continue
 
@@ -116,79 +121,119 @@ class USBHandler(QThread):
                 elif cmd_id == dbi_protocol.CMD_ID_LIST:
                     self.process_list_command()
 
-            except usb.core.USBError:
+            except usb.core.USBError as e:
+                if e.errno == 10060: # Timeout is normal
+                    continue
                 if self.is_running:
+                    self.log_message.emit('warning', 'USB connection lost. Reconnecting...')
                     self.connection_changed.emit(ConnectionStatus.DISCONNECTED)
                     if not self.connect_to_switch(): break
             except Exception as e:
-                self.log_message.emit('error', f'Loop error: {e}')
+                self.log_message.emit('error', f'Command loop error: {e}')
                 break
         self.is_running = False
 
     def process_exit_command(self):
+        self.log_message.emit('info', 'DBI requested exit.')
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_EXIT, 0))
         self.all_transfers_complete.emit()
 
     def process_list_command(self):
+        self.log_message.emit('info', f'Sending list of {len(self.file_list)} files...')
         nsp_path_list = "\n".join(self.file_list.keys()) + "\n"
         data = nsp_path_list.encode('utf-8')
         
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_LIST, len(data)))
         if len(data) > 0:
-            self.in_ep.read(16, timeout=0) # Ack
+            self.in_ep.read(16, timeout=0) # Read Ack
             self.out_ep.write(data)
 
     def process_file_range_command(self, data_size):
+        # Ack command
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_ACK, dbi_protocol.CMD_ID_FILE_RANGE, data_size))
         
+        # Read request details
         header = self.in_ep.read(data_size)
         range_size = struct.unpack('<I', header[:4])[0]
         range_offset = struct.unpack('<Q', header[4:12])[0]
         name = bytes(header[16:]).decode('utf-8')
         
+        # Respond
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_FILE_RANGE, range_size))
-        self.in_ep.read(16, timeout=0) # Ack
+        self.in_ep.read(16, timeout=0) # Final Ack
 
         path = self.file_list.get(name)
-        if not path: return # Should not happen
+        if not path: 
+            self.log_message.emit('error', f'Requested file not found in list: {name}')
+            return
 
         is_metadata = range_size < dbi_protocol.METADATA_THRESHOLD
         
-        # Reset detection logic
+        # --- Logic for UI State ---
         if is_metadata and range_offset == 0 and name in self.progress_tracker.requested_files:
+            # Switch restarted logic
+            self.log_message.emit('warning', 'Switch reset file selection.')
             self.progress_tracker.reset()
             self.transfer_reset.emit()
 
         if is_metadata:
             self.progress_tracker.register_file_request(name)
         elif not is_metadata:
-            if self.transfer_start_time is None: self.transfer_start_time = time.time()
+            if self.transfer_start_time is None: 
+                self.transfer_start_time = time.time()
+            
+            # New file started logic
             if self.current_transfer_file != name:
                 self.current_transfer_file = name
-                # Check for skipped files logic here if needed
+                self.current_file_size = self.progress_tracker.get_file_size(name)
+                self.current_file_bytes_sent = 0
+                self.log_message.emit('info', f'Sending: {name}')
 
-        # Send Data
+        # --- Data Transfer Loop ---
         with open(path, 'rb') as f:
             f.seek(range_offset)
             remaining = range_size
+            chunk_size = dbi_protocol.BUFFER_SEGMENT_DATA_SIZE
+            
             while remaining > 0:
-                chunk = f.read(min(remaining, dbi_protocol.BUFFER_SEGMENT_DATA_SIZE))
+                read_amount = min(remaining, chunk_size)
+                chunk = f.read(read_amount)
                 self.out_ep.write(chunk, timeout=0)
+                
                 sent = len(chunk)
                 remaining -= sent
                 
                 if not is_metadata:
                     self.progress_tracker.transferred_bytes += sent
-                    # Emit progress update (simplified)
+                    self.current_file_bytes_sent += sent # Track local file progress
+                    
+                    # Update UI every chunk
                     elapsed = time.time() - self.transfer_start_time
-                    speed = (self.progress_tracker.transferred_bytes / elapsed / 1048576) if elapsed > 0 else 0
-                    self.progress_updated.emit(name, self.progress_tracker.transferred_bytes, speed, 
-                                             self.progress_tracker.total_requested_size, len(self.progress_tracker.requested_files),
-                                             0, 0, 0) # simplified args
+                    speed = (self.progress_tracker.transferred_bytes / elapsed / 1048576) if elapsed > 0 else 0.0
+                    
+                    # IMPORTANT: Passing real values here restores the UI
+                    self.progress_updated.emit(
+                        name,
+                        self.progress_tracker.transferred_bytes,
+                        speed,
+                        self.progress_tracker.total_requested_size,
+                        len(self.progress_tracker.requested_files),
+                        self.current_file_bytes_sent,  # Current file progress
+                        self.current_file_size,        # Current file total
+                        self.progress_tracker.unique_bytes_transferred
+                    )
 
+        # --- Completion Logic ---
         if not is_metadata:
-             # simplified completion logic
-             self.progress_tracker.add_interval(name, range_offset, range_offset + range_size)
-             if self.progress_tracker.get_file_size(name) > 0:
-                 # Check if complete (logic simplified for brevity)
-                 pass
+             # Register valid data interval
+             total_file_transferred = self.progress_tracker.add_interval(name, range_offset, range_offset + range_size)
+             
+             # Calculate percentage for file list status
+             pct = int((total_file_transferred / self.current_file_size) * 100) if self.current_file_size > 0 else 0
+             self.file_progress.emit(name, pct)
+
+             # Check if file is essentially done (>99%)
+             if name not in self.progress_tracker.completed_files_set and total_file_transferred >= (self.current_file_size * 0.99):
+                 self.progress_tracker.completed_files_set.add(name)
+                 self.transfer_complete.emit(name)
+                 self.log_message.emit('success', f'Finished: {name}')

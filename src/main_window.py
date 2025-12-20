@@ -74,7 +74,7 @@ class MainWindow(QMainWindow):
         self.server_manager.reconnect_timer.start(2000)
 
     def init_ui(self):
-        self.setWindowTitle('DBI Backend Qt v2.3.6')
+        self.setWindowTitle('DBI Backend Qt v2.3.9')
         self.setMinimumSize(900, 700)
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -90,6 +90,10 @@ class MainWindow(QMainWindow):
 
         file_section = self.ui_manager.create_file_section()
         self.splitter.addWidget(file_section)
+        
+        # --- CONNECT SPACE SIGNAL ---
+        self.file_tree.space_pressed.connect(self.file_manager.invert_selected_files)
+
         progress_section = self.ui_manager.create_progress_section()
         self.splitter.addWidget(progress_section)
         log_section = self.ui_manager.create_log_section()
@@ -175,13 +179,11 @@ class MainWindow(QMainWindow):
         self.on_item_checked()
 
     def update_presets_menu(self):
-        """Update the list of presets in the menu (looking for .dbi files)"""
         if not self.presets_menu: return
         for action in self.presets_menu.actions():
             if action.menu() != self.manage_presets_menu:
                 self.presets_menu.removeAction(action)
         if self.file_manager.presets_dir.exists():
-            # CHANGED: Look for .dbi instead of .json
             for p in sorted(self.file_manager.presets_dir.glob('*.dbi')):
                 a = QAction(p.stem, self)
                 a.triggered.connect(lambda c, f=p: self.file_manager.load_preset(f))
@@ -202,23 +204,24 @@ class MainWindow(QMainWindow):
         self.config.set('theme', theme_mode)
         target = self.theme_manager.get_system_theme() if theme_mode == 'auto' else theme_mode
         self.setStyleSheet(self.theme_manager.get_theme(target))
+        
+        if self.progress_delegate:
+            if target == 'dark': self.progress_delegate.set_theme_color('#2196F3')
+            else: self.progress_delegate.set_theme_color('#4CAF50')
+            self.file_tree.viewport().update()
+
         if theme_mode != 'auto': self.log('info', f'Applied {theme_mode} theme')
 
     def on_system_theme_changed(self):
-        if self.config.get('theme') == 'auto':
-            self.setStyleSheet(self.theme_manager.get_theme(self.theme_manager.get_system_theme()))
+        if self.config.get('theme') == 'auto': self.apply_theme('auto')
 
     def show_about(self):
-        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.6</p>')
+        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.9</p>')
 
     def handle_external_files(self, message: str):
-        """Handle arguments from OS (Open With...)"""
         paths = message.strip().split('\n')
-        
-        # Check if it's a preset file being opened
         if len(paths) == 1:
             p = Path(paths[0].strip())
-            # CHANGED: If .dbi, load preset instead of adding as game
             if p.suffix.lower() == '.dbi' and p.exists():
                 self.file_manager.load_preset(p)
                 self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
@@ -226,7 +229,6 @@ class MainWindow(QMainWindow):
                 self.raise_()
                 return
 
-        # Regular logic: Add files to queue
         current = self.file_manager._get_current_checked_state()
         added = 0
         for p_str in paths:
@@ -251,24 +253,17 @@ class MainWindow(QMainWindow):
         if e.mimeData().hasUrls(): e.acceptProposedAction()
 
     def dropEvent(self, e: QDropEvent):
-        """Handle file drop (Supports games and .dbi presets)"""
         files = []
-        # Check for preset drop
         urls = e.mimeData().urls()
-        
-        # CHANGED: Single file drop logic for presets
         if len(urls) == 1:
             p = Path(urls[0].toLocalFile())
             if p.suffix.lower() == '.dbi':
                 self.file_manager.load_preset(p)
                 return
-
-        # Regular game drop
         for url in urls:
             p = Path(url.toLocalFile())
             if p.is_file() and self.file_manager.is_supported_file(p): files.append(p)
             elif p.is_dir(): files.extend([f for f in p.rglob('*') if f.is_file() and self.file_manager.is_supported_file(f)])
-        
         current = self.file_manager._get_current_checked_state()
         for p in files: self.file_manager.file_list[p.name] = p.resolve()
         if files:
