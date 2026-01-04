@@ -1,6 +1,6 @@
 {
   "name": "128",
-  "created_at": "2025-12-04T17:01:19.816548",
+  "created_at": "2026-01-04T22:32:41.550980",
   "files": [
     {
       "name": "AM2R_0100414d32524e00.nsp",
@@ -11,11 +11,6 @@
       "name": "Animal Crossing New Horizons [B+U+DLC].nsp",
       "path": "G:\\games\\Animal Crossing New Horizons [B+U+DLC].nsp",
       "checked": true
-    },
-    {
-      "name": "Burnout Paradise Remastered [0100DBF01000A000][v0] (3.98 GB).nsz",
-      "path": "G:\\games\\Burnout Paradise Remastered [0100DBF01000A000][v0] (3.98 GB).nsz",
-      "checked": false
     },
     {
       "name": "Castle Crashers Remastered [B+U].nsp",
@@ -33,16 +28,6 @@
       "checked": true
     },
     {
-      "name": "hbmenu_[0104444444440000].nsp",
-      "path": "D:\\git\\dev\\_kefir\\kefir\\games\\hbmenu_[0104444444440000].nsp",
-      "checked": true
-    },
-    {
-      "name": "Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
-      "path": "G:\\games\\Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
       "name": "Hollow Knight Silksong [010013C00E930000][v0] (2.32 GB).nsz",
       "path": "G:\\games\\Hollow Knight Silksong [010013C00E930000][v0] (2.32 GB).nsz",
       "checked": true
@@ -53,14 +38,9 @@
       "checked": true
     },
     {
-      "name": "Inmost[0100F1401161E000][US][v0].nsz",
-      "path": "G:\\games\\Inmost[0100F1401161E000][US][v0].nsz",
-      "checked": false
-    },
-    {
-      "name": "INMOST[0100F1401161E800][US][v393216].nsz",
-      "path": "G:\\games\\INMOST[0100F1401161E800][US][v393216].nsz",
-      "checked": false
+      "name": "Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
+      "path": "G:\\games\\Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
+      "checked": true
     },
     {
       "name": "Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
@@ -83,49 +63,9 @@
       "checked": true
     },
     {
-      "name": "SteamWorld Dig 2[0100CA9002322000][US][v0].nsz",
-      "path": "G:\\games\\SteamWorld Dig 2[0100CA9002322000][US][v0].nsz",
+      "name": "SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
+      "path": "G:\\games\\SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
       "checked": true
-    },
-    {
-      "name": "SteamWorld Dig 2[0100CA9002322800][US][v196608].nsz",
-      "path": "G:\\games\\SteamWorld Dig 2[0100CA9002322800][US][v196608].nsz",
-      "checked": true
-    },
-    {
-      "name": "SteamWorld Dig[01009320084A4000][US][v0].nsz",
-      "path": "G:\\games\\SteamWorld Dig[01009320084A4000][US][v0].nsz",
-      "checked": true
-    },
-    {
-      "name": "SteamWorld Dig[01009320084A4800][US][v65536][CR-12].nsz",
-      "path": "G:\\games\\SteamWorld Dig[01009320084A4800][US][v65536][CR-12].nsz",
-      "checked": true
-    },
-    {
-      "name": "SteamWorld Heist Ultimate Edition[0100A21007FFA000][US][v0].nsz",
-      "path": "G:\\games\\SteamWorld Heist Ultimate Edition[0100A21007FFA000][US][v0].nsz",
-      "checked": true
-    },
-    {
-      "name": "SteamWorld Heist Ultimate Edition[0100A21007FFA800][US][v65536][CR-06].nsz",
-      "path": "G:\\games\\SteamWorld Heist Ultimate Edition[0100A21007FFA800][US][v65536][CR-06].nsz",
-      "checked": true
-    },
-    {
-      "name": "SteamWorld Quest Hand of Gilgamech[0100F6D00D83E000][US][v0].nsz",
-      "path": "G:\\games\\SteamWorld Quest Hand of Gilgamech[0100F6D00D83E000][US][v0].nsz",
-      "checked": true
-    },
-    {
-      "name": "SteamWorld Quest Hand of Gilgamech[0100F6D00D83E800][US][v262144].nsz",
-      "path": "G:\\games\\SteamWorld Quest Hand of Gilgamech[0100F6D00D83E800][US][v262144].nsz",
-      "checked": true
-    },
-    {
-      "name": "Super Mario 3D All-Stars [B+U].nsp",
-      "path": "G:\\games\\Super Mario 3D All-Stars [B+U].nsp",
-      "checked": false
     },
     {
       "name": "Super Mario 3D World  Bowsers Fury [010028600EBDA000][v131072][UKR+REPACK].nsp",
@@ -138,18 +78,13 @@
       "checked": true
     },
     {
-      "name": "Super Mario Galaxy [B+U131072].nsp",
-      "path": "G:\\games\\Super Mario Galaxy [B+U131072].nsp",
-      "checked": true
-    },
-    {
       "name": "Super Mario Galaxy 2 [B+U131072].nsp",
       "path": "G:\\games\\Super Mario Galaxy 2 [B+U131072].nsp",
       "checked": true
     },
     {
-      "name": "SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
-      "path": "G:\\games\\SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
+      "name": "Super Mario Galaxy [010099C022B96000][v131072][UKR+REPACK].nsp",
+      "path": "G:\\games\\Super Mario Galaxy [010099C022B96000][v131072][UKR+REPACK].nsp",
       "checked": true
     },
     {
@@ -183,14 +118,79 @@
       "checked": true
     },
     {
-      "name": "Witcher 3 [B+U393216].nsp",
-      "path": "G:\\games\\Witcher 3 [B+U393216].nsp",
-      "checked": false
-    },
-    {
       "name": "YouTube [B+U196608].nsp",
       "path": "G:\\games\\YouTube [B+U196608].nsp",
       "checked": true
+    },
+    {
+      "name": "hbmenu_[0104444444440000].nsp",
+      "path": "D:\\git\\dev\\_kefir\\kefir\\games\\hbmenu_[0104444444440000].nsp",
+      "checked": true
+    },
+    {
+      "name": "Burnout Paradise Remastered [0100DBF01000A000][v0] (3.98 GB).nsz",
+      "path": "G:\\games\\Burnout Paradise Remastered [0100DBF01000A000][v0] (3.98 GB).nsz",
+      "checked": false
+    },
+    {
+      "name": "INMOST[0100F1401161E800][US][v393216].nsz",
+      "path": "G:\\games\\INMOST[0100F1401161E800][US][v393216].nsz",
+      "checked": false
+    },
+    {
+      "name": "Inmost[0100F1401161E000][US][v0].nsz",
+      "path": "G:\\games\\Inmost[0100F1401161E000][US][v0].nsz",
+      "checked": false
+    },
+    {
+      "name": "SteamWorld Dig 2[0100CA9002322000][US][v0].nsz",
+      "path": "G:\\games\\SteamWorld Dig 2[0100CA9002322000][US][v0].nsz",
+      "checked": false
+    },
+    {
+      "name": "SteamWorld Dig 2[0100CA9002322800][US][v196608].nsz",
+      "path": "G:\\games\\SteamWorld Dig 2[0100CA9002322800][US][v196608].nsz",
+      "checked": false
+    },
+    {
+      "name": "SteamWorld Dig[01009320084A4000][US][v0].nsz",
+      "path": "G:\\games\\SteamWorld Dig[01009320084A4000][US][v0].nsz",
+      "checked": false
+    },
+    {
+      "name": "SteamWorld Dig[01009320084A4800][US][v65536][CR-12].nsz",
+      "path": "G:\\games\\SteamWorld Dig[01009320084A4800][US][v65536][CR-12].nsz",
+      "checked": false
+    },
+    {
+      "name": "SteamWorld Heist Ultimate Edition[0100A21007FFA000][US][v0].nsz",
+      "path": "G:\\games\\SteamWorld Heist Ultimate Edition[0100A21007FFA000][US][v0].nsz",
+      "checked": false
+    },
+    {
+      "name": "SteamWorld Heist Ultimate Edition[0100A21007FFA800][US][v65536][CR-06].nsz",
+      "path": "G:\\games\\SteamWorld Heist Ultimate Edition[0100A21007FFA800][US][v65536][CR-06].nsz",
+      "checked": false
+    },
+    {
+      "name": "SteamWorld Quest Hand of Gilgamech[0100F6D00D83E000][US][v0].nsz",
+      "path": "G:\\games\\SteamWorld Quest Hand of Gilgamech[0100F6D00D83E000][US][v0].nsz",
+      "checked": false
+    },
+    {
+      "name": "SteamWorld Quest Hand of Gilgamech[0100F6D00D83E800][US][v262144].nsz",
+      "path": "G:\\games\\SteamWorld Quest Hand of Gilgamech[0100F6D00D83E800][US][v262144].nsz",
+      "checked": false
+    },
+    {
+      "name": "Super Mario 3D All-Stars [B+U].nsp",
+      "path": "G:\\games\\Super Mario 3D All-Stars [B+U].nsp",
+      "checked": false
+    },
+    {
+      "name": "Witcher 3 [B+U393216].nsp",
+      "path": "G:\\games\\Witcher 3 [B+U393216].nsp",
+      "checked": false
     }
   ]
 }

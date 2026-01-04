@@ -52,7 +52,6 @@ class UIManager:
         # View menu
         view_menu = menubar.addMenu('&View')
 
-        # --- NEW: Automatic Theme Action ---
         auto_theme_action = QAction('&Automatic Theme', self.main_window)
         auto_theme_action.triggered.connect(lambda: self.main_window.apply_theme('auto'))
         view_menu.addAction(auto_theme_action)
@@ -208,7 +207,9 @@ class UIManager:
         group = QGroupBox('File Queue')
         layout = QVBoxLayout()
 
-        self.main_window.file_tree = ZoomableTreeWidget()
+        # FIX: Pass self.main_window to the constructor
+        self.main_window.file_tree = ZoomableTreeWidget(self.main_window)
+        
         self.main_window.file_tree.setHeaderLabels(['', 'Filename', 'Size', 'Status', 'Path'])
         self.main_window.file_tree.setColumnWidth(0, 50)
         self.main_window.file_tree.setColumnWidth(1, 250)
@@ -219,7 +220,7 @@ class UIManager:
         self.main_window.file_tree.header().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
 
         self.main_window.file_tree.setSortingEnabled(True)
-        self.main_window.file_tree.sortByColumn(1, Qt.SortOrder.AscendingOrder) 
+        self.main_window.file_tree.sortByColumn(3, Qt.SortOrder.AscendingOrder) 
 
         self.main_window.file_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
 

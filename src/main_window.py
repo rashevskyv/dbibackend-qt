@@ -74,7 +74,7 @@ class MainWindow(QMainWindow):
         self.server_manager.reconnect_timer.start(2000)
 
     def init_ui(self):
-        self.setWindowTitle('DBI Backend Qt v2.3.9')
+        self.setWindowTitle('DBI Backend Qt v2.3.10')
         self.setMinimumSize(900, 700)
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -91,7 +91,6 @@ class MainWindow(QMainWindow):
         file_section = self.ui_manager.create_file_section()
         self.splitter.addWidget(file_section)
         
-        # --- CONNECT SPACE SIGNAL ---
         self.file_tree.space_pressed.connect(self.file_manager.invert_selected_files)
 
         progress_section = self.ui_manager.create_progress_section()
@@ -144,6 +143,8 @@ class MainWindow(QMainWindow):
             if w:
                 cb = w.findChild(QCheckBox)
                 if cb: cb.setChecked(is_checked)
+        # FIX: Update count when header is clicked
+        self.file_manager.update_count_label()
 
     def on_item_checked(self):
         self._updating_header_checkbox = True
@@ -160,6 +161,9 @@ class MainWindow(QMainWindow):
         elif checked == total: self.header_checkbox.setCheckState(Qt.CheckState.Checked)
         else: self.header_checkbox.setCheckState(Qt.CheckState.PartiallyChecked)
         self._updating_header_checkbox = False
+        
+        # FIX: Update count when any item is clicked
+        self.file_manager.update_count_label()
 
     def show_context_menu(self, position):
         menu = QMenu()
@@ -216,7 +220,7 @@ class MainWindow(QMainWindow):
         if self.config.get('theme') == 'auto': self.apply_theme('auto')
 
     def show_about(self):
-        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.9</p>')
+        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.10</p>')
 
     def handle_external_files(self, message: str):
         paths = message.strip().split('\n')
@@ -236,11 +240,13 @@ class MainWindow(QMainWindow):
             if not path.exists(): continue
             if path.is_file() and self.file_manager.is_supported_file(path):
                 self.file_manager.file_list[path.name] = path.resolve()
+                current.add(path.name)
                 added += 1
             elif path.is_dir():
                 for f in path.rglob('*'):
                     if f.is_file() and self.file_manager.is_supported_file(f):
                          self.file_manager.file_list[f.name] = f.resolve()
+                         current.add(f.name)
                          added += 1
         if added:
             self.file_manager.update_file_list(current)
@@ -264,8 +270,12 @@ class MainWindow(QMainWindow):
             p = Path(url.toLocalFile())
             if p.is_file() and self.file_manager.is_supported_file(p): files.append(p)
             elif p.is_dir(): files.extend([f for f in p.rglob('*') if f.is_file() and self.file_manager.is_supported_file(f)])
+        
         current = self.file_manager._get_current_checked_state()
-        for p in files: self.file_manager.file_list[p.name] = p.resolve()
+        for p in files: 
+            self.file_manager.file_list[p.name] = p.resolve()
+            current.add(p.name)
+            
         if files:
             self.file_manager.update_file_list(current)
             self.log('info', f'Dropped {len(files)} files')
@@ -314,6 +324,7 @@ class MainWindow(QMainWindow):
         except: pass
 
     def keyPressEvent(self, e):
+        # Tree widget handles space now via signal. This is a fallback/global handler.
         if e.key() == Qt.Key.Key_Space:
             self.file_manager.invert_selected_files()
             e.accept()

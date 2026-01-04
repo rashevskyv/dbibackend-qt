@@ -34,9 +34,7 @@ class ServerManager:
         self.reconnect_timer = QTimer()
 
     def toggle_server(self):
-        """Start or stop the server (USB or HTTP based on mode)"""
         mode = self.main_window.mode_combo.currentText()
-        
         if "USB" in mode:
             if self.usb_handler is None or not self.usb_handler.is_running:
                 self.start_usb_server()
@@ -51,7 +49,6 @@ class ServerManager:
                 self.stop_http_server()
 
     def get_checked_files(self) -> Dict[str, Path]:
-        """Get only checked files from the file list"""
         checked_files = {}
         for i in range(self.main_window.file_tree.topLevelItemCount()):
             item = self.main_window.file_tree.topLevelItem(i)
@@ -63,26 +60,20 @@ class ServerManager:
                     filename = item.text(1)
                     if filename in self.main_window.file_manager.file_list:
                         checked_files[filename] = self.main_window.file_manager.file_list[filename]
-
-        self.main_window.log('info', f'Selected {len(checked_files)} files')
         return checked_files
 
     def _reset_ui_for_start(self):
-        """Reset UI elements before starting a transfer session"""
         self.transfer_stats['completed_files'] = 0
         self.transfer_stats['skipped_files'] = 0
         self.completed_files_set.clear()
         self.current_processing_file = None
         
-        # Clear progress bars inside the tree
         self.main_window.progress_delegate.clear_all()
         
-        # Reset file statuses in tree
         for i in range(self.main_window.file_tree.topLevelItemCount()):
             item = self.main_window.file_tree.topLevelItem(i)
             self.main_window.file_manager.update_file_status(item.text(1), '')
             
-        # Reset bars
         self.main_window.current_progress.setValue(0)
         self.main_window.overall_progress.setValue(0)
         self.main_window.speed_label.setText('Speed: 0 MB/s')
@@ -90,16 +81,17 @@ class ServerManager:
         self.main_window.current_file_label.setText('Waiting for Switch...')
 
     def start_usb_server(self):
-        """Start the USB server"""
         checked_files = self.get_checked_files()
         if not checked_files:
             self.main_window.log('warning', 'No files selected!')
             return
 
         self._reset_ui_for_start()
-        # Dim unchecked items so user sees what is queued
         self.main_window.file_manager.dim_unchecked_items()
         
+        tree = self.main_window.file_tree
+        tree.sortItems(3, tree.header().sortIndicatorOrder())
+
         self.main_window.log('info', f'Starting USB server with {len(checked_files)} files')
         
         self.usb_handler = USBHandler(checked_files)
@@ -118,17 +110,15 @@ class ServerManager:
         self.main_window.overall_label.setText(f'0 / {len(checked_files)} files')
 
     def stop_usb_server(self):
-        """Stop the USB server"""
         if self.usb_handler:
             self.usb_handler.stop()
             self.usb_handler = None
         self._set_server_ui_state(False)
-        self.main_window.file_manager.reset_items_visuals() # Restore colors
+        self.main_window.file_manager.reset_items_visuals()
         self.main_window.log('info', 'USB Server stopped')
         self.main_window.current_file_label.setText('Server stopped')
 
     def start_http_server(self):
-        """Start the HTTP server after configuring port"""
         checked_files = self.get_checked_files()
         if not checked_files:
             self.main_window.log('warning', 'No files selected!')
@@ -138,31 +128,28 @@ class ServerManager:
         dialog.setWindowTitle("Start HTTP Server")
         layout = QVBoxLayout(dialog)
         form = QFormLayout()
-        
         ip_label = QLabel(HTTPHandler.get_local_ip())
         form.addRow("Your IP:", ip_label)
-        
         port_spin = QSpinBox()
         port_spin.setRange(1024, 65535)
         port_spin.setValue(self.main_window.config.get('http_port', 8080))
         form.addRow("Port:", port_spin)
-        
         layout.addLayout(form)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
-        
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
+        if dialog.exec() != QDialog.DialogCode.Accepted: return
             
         selected_port = port_spin.value()
         self.main_window.config.set('http_port', selected_port)
         self.main_window.config.save()
 
         self._reset_ui_for_start()
-        # Dim unchecked items
         self.main_window.file_manager.dim_unchecked_items()
+        
+        tree = self.main_window.file_tree
+        tree.sortItems(3, tree.header().sortIndicatorOrder())
 
         self.transfer_stats['start_time'] = datetime.now()
 
@@ -182,7 +169,7 @@ class ServerManager:
             self.http_handler.stop()
             self.http_handler = None
         self._set_server_ui_state(False)
-        self.main_window.file_manager.reset_items_visuals() # Restore colors
+        self.main_window.file_manager.reset_items_visuals()
 
     def on_http_server_started(self, ip, port):
         url = f"http://{ip}:{port}/"
@@ -217,7 +204,6 @@ class ServerManager:
             self.main_window.clear_list_btn.setEnabled(True)
 
     def check_connection(self):
-        """Called by timer to check USB status"""
         if "USB" in self.main_window.mode_combo.currentText():
             if self.usb_handler is None and self.main_window.file_tree.topLevelItemCount() > 0:
                  self.main_window.start_server_btn.setEnabled(True)
@@ -233,15 +219,12 @@ class ServerManager:
                  self._set_server_ui_state(False)
 
     def on_progress_updated(self, filename, transferred, speed, total_req_size, num_files, cur_bytes, cur_size, _unused):
-        # Update UI Labels
         self.main_window.current_file_label.setText(filename)
         
-        # Detect file change to update status
         if self.current_processing_file != filename:
             self.current_processing_file = filename
             self.main_window.file_manager.update_file_status(filename, 'process')
 
-        # Current File Progress
         if cur_size > 0:
             pct = int((cur_bytes / cur_size) * 100)
             self.main_window.current_progress.setFormat(f'{pct}% ({format_size(cur_bytes)} / {format_size(cur_size)})')
@@ -250,11 +233,9 @@ class ServerManager:
             self.main_window.current_progress.setValue(0)
             self.main_window.current_progress.setFormat('Starting...')
         
-        # Overall Progress
         self.main_window.speed_label.setText(f'Speed: {speed:.1f} MB/s')
         
         completed = self.transfer_stats['completed_files'] + self.transfer_stats['skipped_files']
-        
         if total_req_size > 0:
             overall_pct = int((transferred / total_req_size) * 100)
             self.main_window.overall_progress.setValue(min(100, overall_pct))
@@ -264,12 +245,10 @@ class ServerManager:
         if completed >= num_files: display_idx = num_files
         self.main_window.overall_label.setText(f'{display_idx} / {num_files} files')
 
-        # Session Time
         if self.transfer_stats['start_time']:
             elapsed = (datetime.now() - self.transfer_stats['start_time']).seconds
             self.main_window.session_time_label.setText(f"Time: {format_time(elapsed)}")
 
-        # ETA Calculation
         if speed > 0 and total_req_size > transferred:
             remaining_bytes = total_req_size - transferred
             sec = remaining_bytes / (speed * 1024 * 1024)
@@ -289,7 +268,6 @@ class ServerManager:
             self.main_window.file_manager.update_file_status(filename, 'done')
             self.main_window.progress_delegate.set_progress(filename, 100)
             
-            # Uncheck file
             for i in range(self.main_window.file_tree.topLevelItemCount()):
                 item = self.main_window.file_tree.topLevelItem(i)
                 if item.text(1) == filename:
@@ -310,7 +288,6 @@ class ServerManager:
     def on_transfer_reset(self):
         self.main_window.log('info', 'Switch reset file selection sequence.')
         self._reset_ui_for_start()
-        # Ensure items are dimmed again if queue restarted
         self.main_window.file_manager.dim_unchecked_items()
 
     def on_all_transfers_complete(self):
@@ -320,7 +297,6 @@ class ServerManager:
         self.main_window.eta_label.setText('ETA: Done')
         self.main_window.current_file_label.setText('Done')
         
-        # Calculate Stats for Popup
         success = self.transfer_stats['completed_files']
         skipped = self.transfer_stats['skipped_files']
         time_taken = "00:00:00"
@@ -335,10 +311,16 @@ class ServerManager:
             f"Time Taken: {time_taken}"
         )
         
-        # Show Popup
         QMessageBox.information(self.main_window, "Complete", msg)
         
-        # Reset Visuals ONLY AFTER POPUP CLOSED
+        # --- FIX: Formally stop the server to reset state and UI ---
+        if self.usb_handler:
+            self.usb_handler = None
+        if self.http_handler:
+            self.http_handler = None
+        
+        self._set_server_ui_state(False) # This resets the button
+        
         self.main_window.file_manager.reset_items_visuals()
         self.main_window.current_progress.setValue(0)
         self.main_window.overall_progress.setValue(0)
