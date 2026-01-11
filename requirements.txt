@@ -9,3 +9,5 @@ pyusb>=1.2.1
 # Note: On Windows, you'll also need to install libusb
 # Download libusb-win32 or use Zadig to install the WinUSB driver
 # for the Nintendo Switch device (VID: 057E, PID: 3000)
+
+comtypes

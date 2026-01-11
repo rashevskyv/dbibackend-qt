@@ -12,14 +12,11 @@ class FileTreeWidgetItem(QTreeWidgetItem):
     """Custom tree widget item with advanced sorting logic"""
 
     def _get_status_sort_tuple(self):
-        """
-        Generates a tuple for comparison based on the custom status sorting rules.
-        """
+        """Generates a tuple for comparison based on the custom status sorting rules."""
         tree = self.treeWidget()
         if not tree: return (9, 0, self.text(1))
 
-        # --- Get Item State ---
-        status_data = self.data(3, Qt.ItemDataRole.UserRole) or 0 # 0:Q, 1:P, 2:D, 3:F
+        status_data = self.data(3, Qt.ItemDataRole.UserRole) or 0
         size_data = self.data(2, Qt.ItemDataRole.UserRole) or 0
         
         is_checked = True
@@ -28,14 +25,13 @@ class FileTreeWidgetItem(QTreeWidgetItem):
             cb = widget.findChild(QCheckBox)
             if cb: is_checked = cb.isChecked()
         
-        # --- Determine Priority ---
-        primary_priority = 2 # Default for Queued/Failed
-        if status_data == 1: primary_priority = 0 # In Progress
-        elif status_data == 2: primary_priority = 1 # Done
-        elif not is_checked and tree.file_manager.preset_loaded: primary_priority = 3 # Unchecked in preset
+        primary_priority = 2
+        if status_data == 1: primary_priority = 0
+        elif status_data == 2: primary_priority = 1
+        elif not is_checked and tree.file_manager.preset_loaded: primary_priority = 3
         
         secondary_sort = 0
-        if primary_priority == 1: secondary_sort = -size_data # Descending size for 'Done'
+        if primary_priority == 1: secondary_sort = -size_data
         
         return (primary_priority, secondary_sort, self.text(1))
 
@@ -50,30 +46,26 @@ class FileTreeWidgetItem(QTreeWidgetItem):
 
         sort_column = tree.sortColumn()
 
-        # --- FIX: Apply custom sorting ONLY for the 'Status' column ---
         if sort_column == 3:
             self_tuple = self._get_status_sort_tuple()
             other_tuple = other._get_status_sort_tuple()
             return self_tuple < other_tuple
         
-        # For 'Size' column, use numeric comparison
         elif sort_column == 2:
             self_size = self.data(2, Qt.ItemDataRole.UserRole) or 0
             other_size = other.data(2, Qt.ItemDataRole.UserRole) or 0
             return self_size < other_size
             
-        # For all other columns (Filename, Path, etc.), use default text comparison
         else:
             return super().__lt__(other)
 
 
 class CustomSplitterHandle(QSplitterHandle):
     """Custom splitter handle with modern styling"""
-
+    # ... (no changes here, code is the same)
     def __init__(self, orientation, parent):
         super().__init__(orientation, parent)
         self.is_collapsed = False
-
     def mouseDoubleClickEvent(self, event):
         splitter = self.splitter()
         sizes = splitter.sizes()
@@ -91,7 +83,6 @@ class CustomSplitterHandle(QSplitterHandle):
                 if widget_after_index > 0: new_sizes[widget_after_index-1] += new_sizes[widget_after_index]
                 new_sizes[widget_after_index] = 0
                 splitter.setSizes(new_sizes)
-
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -112,6 +103,7 @@ class CustomSplitterHandle(QSplitterHandle):
 
 class CustomSplitter(QSplitter):
     """Custom splitter that uses custom handles"""
+    # ... (no changes here, code is the same)
     sizes_changed = pyqtSignal()
     def createHandle(self): return CustomSplitterHandle(self.orientation(), self)
     def setSizes(self, sizes): super().setSizes(sizes); self.sizes_changed.emit()
@@ -119,19 +111,17 @@ class CustomSplitter(QSplitter):
 
 class ZoomableTreeWidget(QTreeWidget):
     """QTreeWidget with Ctrl+Wheel zoom and context awareness"""
+    # ... (no changes here, code is the same)
     space_pressed = pyqtSignal()
-
     def __init__(self, main_window):
         super().__init__(main_window)
         self.file_manager = main_window.file_manager
-        
         self.zoom_level = 0
         self.base_font_size = 9
         self.min_zoom = -5
         self.max_zoom = 10
         self.sortByColumn(3, Qt.SortOrder.AscendingOrder)
         self.header().setSortIndicatorShown(True)
-
     def wheelEvent(self, event: QWheelEvent):
         if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
             delta = event.angleDelta().y()
@@ -141,14 +131,12 @@ class ZoomableTreeWidget(QTreeWidget):
             event.accept()
         else:
             super().wheelEvent(event)
-
     def apply_zoom(self):
         new_size = self.base_font_size + self.zoom_level
         font = self.font()
         font.setPointSize(new_size)
         self.setFont(font)
         self.setStyleSheet(f"QTreeWidget {{ font-size: {new_size}pt; }}")
-
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Space and not event.modifiers():
             self.space_pressed.emit()
@@ -179,17 +167,21 @@ class ProgressDelegate(QStyledItemDelegate):
             is_skipped = filename in self.skipped_files
             progress = self.progress_data.get(filename, 0)
 
+            # --- SIMPLIFIED: Only draw if skipped or has progress > 0 ---
             if is_skipped or (progress > 0):
                 painter.save()
                 total_width = sum(self.tree_widget.columnWidth(i) for i in range(self.tree_widget.columnCount()) if not self.tree_widget.isColumnHidden(i))
+                
                 if is_skipped:
                     fill_width = total_width
                     fill_color = self.skipped_color
                 else:
                     fill_width = int(total_width * (progress / 100.0))
                     fill_color = self.progress_color
+                    
                 progress_rect = QRect(0, option.rect.y(), fill_width, option.rect.height())
                 painter.setClipRect(option.rect)
                 painter.fillRect(progress_rect, QBrush(fill_color))
                 painter.restore()
+
         super().paint(painter, option, index)

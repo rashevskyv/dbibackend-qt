@@ -77,7 +77,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # Add icon path if you have one: icon='icon.ico'
+    icon='icons\\icon.ico',
     uac_admin=False,  # Set to True if you need admin privileges
     uac_uiaccess=False,
 )

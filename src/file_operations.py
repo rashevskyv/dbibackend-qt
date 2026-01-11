@@ -41,15 +41,18 @@ class FileManager:
         return path.suffix.lower() in self.SUPPORTED_EXTENSIONS
 
     def add_files(self):
+        """Add files using the last known files directory"""
         self.preset_loaded = False
         files, _ = QFileDialog.getOpenFileNames(
             self.main_window, "Select Files",
-            self.main_window.config.get('last_directory', ''),
+            self.main_window.config.get('last_file_directory', ''),
             "Switch Files (*.nsp *.nsz *.xci *.xcz);;All Files (*)"
         )
         if files:
             current_checked = self._get_current_checked_state()
-            self.main_window.config.set('last_directory', str(Path(files[0]).parent))
+            selected_dir = str(Path(files[0]).parent)
+            self.main_window.config.set('last_file_directory', selected_dir)
+            
             added_count = 0
             for f in files:
                 p = Path(f)
@@ -62,14 +65,15 @@ class FileManager:
                 self.main_window.log('info', f'Added {added_count} files')
 
     def add_folder(self):
+        """Add folder using the last known folder directory"""
         self.preset_loaded = False
         folder = QFileDialog.getExistingDirectory(
             self.main_window, "Select Folder",
-            self.main_window.config.get('last_directory', '')
+            self.main_window.config.get('last_folder_directory', '')
         )
         if folder:
             current_checked = self._get_current_checked_state()
-            self.main_window.config.set('last_directory', folder)
+            self.main_window.config.set('last_folder_directory', folder)
             added_count = 0
             for p in Path(folder).rglob('*'):
                 if p.is_file() and self.is_supported_file(p):
@@ -104,25 +108,21 @@ class FileManager:
     def update_file_list(self, previously_checked: Set[str] = None):
         self.main_window.file_tree.clear()
         self.main_window.header_checkbox.blockSignals(True)
-        
         for name, path in self.file_list.items():
             try:
                 size = path.stat().st_size
                 item = FileTreeWidgetItem(self.main_window.file_tree)
-                
                 checkbox = QCheckBox()
                 should = True
                 if previously_checked is not None: should = name in previously_checked
                 checkbox.setChecked(should)
                 checkbox.stateChanged.connect(self.main_window.on_item_checked)
-                
                 w = QWidget()
                 l = QHBoxLayout(w)
                 l.addWidget(checkbox)
                 l.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 l.setContentsMargins(0,0,0,0)
                 w.setLayout(l)
-                
                 self.main_window.file_tree.setItemWidget(item, 0, w)
                 item.setText(1, name)
                 item.setText(2, format_size(size))
@@ -131,7 +131,6 @@ class FileManager:
                 item.setData(3, Qt.ItemDataRole.UserRole, 0)
                 item.setText(4, str(path))
             except: continue
-
         self.main_window.header_checkbox.blockSignals(False)
         self.update_count_label()
         self.main_window.on_item_checked()
@@ -139,40 +138,25 @@ class FileManager:
             self.filter_files(self.main_window.search_box.text())
 
     def update_count_label(self):
-        """
-        Update the label showing detailed file count and total size.
-        Shows: Selected Count / Total Count, Selected Size / Total Size
-        """
         total_size = 0
         total_count = 0
-        
         selected_size = 0
         selected_count = 0
-        
-        # Iterate through the tree to respect current filter and check state
         for i in range(self.main_window.file_tree.topLevelItemCount()):
             item = self.main_window.file_tree.topLevelItem(i)
-            # Use data stored in item for size to avoid disk reads
             size = item.data(2, Qt.ItemDataRole.UserRole) or 0
-            
             total_count += 1
             total_size += size
-            
             w = self.main_window.file_tree.itemWidget(item, 0)
             is_checked = False
             if w:
                 cb = w.findChild(QCheckBox)
                 if cb: is_checked = cb.isChecked()
-            
             if is_checked:
                 selected_count += 1
                 selected_size += size
-
-        # Format the final string
-        text = (
-            f"Selected: {selected_count} / {total_count} files, "
-            f"{format_size(selected_size)} / {format_size(total_size)} total"
-        )
+        text = (f"Selected: {selected_count} / {total_count} files, "
+                f"{format_size(selected_size)} / {format_size(total_size)} total")
         self.main_window.file_count_label.setText(text)
 
     def update_file_status(self, filename: str, status: str):
@@ -195,7 +179,6 @@ class FileManager:
                     item.setText(3, 'Queued')
                     item.setForeground(3, QColor(self.main_window.palette().text().color()))
                     item.setData(3, Qt.ItemDataRole.UserRole, 0)
-                # After updating status, re-sort the tree
                 self.main_window.file_tree.sortItems(3, self.main_window.file_tree.header().sortIndicatorOrder())
                 break
 
@@ -208,15 +191,12 @@ class FileManager:
     def invert_selected_files(self):
         selected = self.main_window.file_tree.selectedItems()
         if not selected: return
-
         for item in selected:
             w = self.main_window.file_tree.itemWidget(item, 0)
             if w:
                 cb = w.findChild(QCheckBox)
                 if cb: cb.setChecked(not cb.isChecked())
-        
         self.main_window.on_item_checked()
-
         curr = self.main_window.file_tree.currentItem()
         if curr:
             idx = self.main_window.file_tree.indexOfTopLevelItem(curr)
@@ -247,7 +227,6 @@ class FileManager:
             if w:
                 cb = w.findChild(QCheckBox)
                 if cb: checked = cb.isChecked()
-            
             if not checked:
                 for c in range(self.main_window.file_tree.columnCount()):
                     item.setForeground(c, gray)
@@ -256,7 +235,6 @@ class FileManager:
         brush = QBrush(self.main_window.palette().text().color())
         self.main_window.progress_delegate.clear_all()
         self.main_window.file_tree.viewport().update()
-        
         for i in range(self.main_window.file_tree.topLevelItemCount()):
             item = self.main_window.file_tree.topLevelItem(i)
             for c in range(self.main_window.file_tree.columnCount()):
@@ -264,7 +242,8 @@ class FileManager:
             item.setText(3, "Queued")
             item.setData(3, Qt.ItemDataRole.UserRole, 0)
 
-    # --- Presets ---
+    # --- Presets & Batches ---
+
     def save_file_list_as_batch(self):
         if not self.file_list: return
         path, _ = QFileDialog.getSaveFileName(self.main_window, "Batch", "", "Batch (*.bat)")
@@ -287,9 +266,14 @@ class FileManager:
             except Exception as e: self.main_window.log('error', f'Error: {e}')
 
     def save_preset(self):
+        """Save preset using the last known preset directory"""
         if not self.file_list: return
-        path, _ = QFileDialog.getSaveFileName(self.main_window, "Save Preset", str(self.presets_dir), "DBI Presets (*.dbi)")
+        
+        default_dir = self.main_window.config.get('last_preset_directory', str(self.presets_dir))
+        path, _ = QFileDialog.getSaveFileName(self.main_window, "Save Preset", default_dir, "DBI Presets (*.dbi)")
+        
         if path:
+            self.main_window.config.set('last_preset_directory', str(Path(path).parent))
             data = []
             for i in range(self.main_window.file_tree.topLevelItemCount()):
                 item = self.main_window.file_tree.topLevelItem(i)
@@ -308,9 +292,14 @@ class FileManager:
             except Exception as e: self.main_window.log('error', f'Error: {e}')
 
     def load_preset(self, path: Path = None):
+        """Load preset using the last known preset directory"""
         if not path:
-            s, _ = QFileDialog.getOpenFileName(self.main_window, "Load Preset", str(self.presets_dir), "DBI Presets (*.dbi);;All Files (*)")
-            if s: path = Path(s)
+            default_dir = self.main_window.config.get('last_preset_directory', str(self.presets_dir))
+            s, _ = QFileDialog.getOpenFileName(self.main_window, "Load Preset", default_dir, "DBI Presets (*.dbi);;All Files (*)")
+            if s: 
+                path = Path(s)
+                self.main_window.config.set('last_preset_directory', str(path.parent))
+        
         if path and path.exists():
             try:
                 self.preset_loaded = True
@@ -335,7 +324,9 @@ class FileManager:
             except Exception as e: self.main_window.log('error', f'Error loading: {e}')
 
     def delete_preset(self):
-        s, _ = QFileDialog.getOpenFileName(self.main_window, "Delete", str(self.presets_dir), "DBI Presets (*.dbi)")
+        """Delete preset using the last known preset directory"""
+        default_dir = self.main_window.config.get('last_preset_directory', str(self.presets_dir))
+        s, _ = QFileDialog.getOpenFileName(self.main_window, "Delete", default_dir, "DBI Presets (*.dbi)")
         if s:
             try:
                 Path(s).unlink()

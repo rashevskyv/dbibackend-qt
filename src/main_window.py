@@ -13,7 +13,10 @@ from PyQt6.QtWidgets import (
     QMessageBox, QCheckBox, QMenu, QApplication
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QAction
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QAction, QIcon
+
+# NEW: Import our custom taskbar manager
+from .taskbar_manager import TaskbarManager
 
 from .config_manager import ConfigManager
 from .theme_manager import ThemeManager
@@ -59,6 +62,9 @@ class MainWindow(QMainWindow):
         self.connection_status = None
         self.presets_menu = None
         
+        # NEW: Taskbar manager instance
+        self.taskbar_manager = None
+            
         self.init_ui()
         
         self.apply_theme(self.config.get('theme', 'auto'))
@@ -73,9 +79,21 @@ class MainWindow(QMainWindow):
         self.server_manager.reconnect_timer.timeout.connect(self.server_manager.check_connection)
         self.server_manager.reconnect_timer.start(2000)
 
+    def showEvent(self, event):
+        """Override showEvent to initialize taskbar manager with window handle."""
+        super().showEvent(event)
+        # Initialize the taskbar manager here, now that the window handle exists
+        if sys.platform == 'win32' and self.taskbar_manager is None:
+            self.taskbar_manager = TaskbarManager(self.windowHandle())
+
     def init_ui(self):
-        self.setWindowTitle('DBI Backend Qt v2.3.10')
+        self.setWindowTitle('DBI Backend Qt v2.3.11')
         self.setMinimumSize(900, 700)
+
+        icon_path = Path('icons/icon.png')
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
+        
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
@@ -105,7 +123,6 @@ class MainWindow(QMainWindow):
         self.ui_manager.create_status_bar()
         self.setAcceptDrops(True)
 
-    # --- Delegation ---
     def add_files(self): self.file_manager.add_files()
     def add_folder(self): self.file_manager.add_folder()
     def clear_file_list(self): self.file_manager.clear_file_list()
@@ -114,7 +131,6 @@ class MainWindow(QMainWindow):
     def load_preset(self): self.file_manager.load_preset()
     def delete_preset(self): self.file_manager.delete_preset()
 
-    # --- UI Events ---
     def on_search_text_changed(self, text):
         self.search_clear_btn.setVisible(bool(text))
         self.file_manager.filter_files(text)
@@ -143,7 +159,6 @@ class MainWindow(QMainWindow):
             if w:
                 cb = w.findChild(QCheckBox)
                 if cb: cb.setChecked(is_checked)
-        # FIX: Update count when header is clicked
         self.file_manager.update_count_label()
 
     def on_item_checked(self):
@@ -161,8 +176,6 @@ class MainWindow(QMainWindow):
         elif checked == total: self.header_checkbox.setCheckState(Qt.CheckState.Checked)
         else: self.header_checkbox.setCheckState(Qt.CheckState.PartiallyChecked)
         self._updating_header_checkbox = False
-        
-        # FIX: Update count when any item is clicked
         self.file_manager.update_count_label()
 
     def show_context_menu(self, position):
@@ -193,7 +206,6 @@ class MainWindow(QMainWindow):
                 a.triggered.connect(lambda c, f=p: self.file_manager.load_preset(f))
                 self.presets_menu.addAction(a)
 
-    # --- Core ---
     def log(self, level, message):
         t = datetime.now().strftime('%H:%M:%S')
         c = {'debug':'#9E9E9E','info':'#2196F3','success':'#4CAF50','warning':'#FF9800','error':'#F44336'}.get(level,'#000')
@@ -220,7 +232,7 @@ class MainWindow(QMainWindow):
         if self.config.get('theme') == 'auto': self.apply_theme('auto')
 
     def show_about(self):
-        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.10</p>')
+        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.11</p>')
 
     def handle_external_files(self, message: str):
         paths = message.strip().split('\n')
@@ -324,7 +336,6 @@ class MainWindow(QMainWindow):
         except: pass
 
     def keyPressEvent(self, e):
-        # Tree widget handles space now via signal. This is a fallback/global handler.
         if e.key() == Qt.Key.Key_Space:
             self.file_manager.invert_selected_files()
             e.accept()

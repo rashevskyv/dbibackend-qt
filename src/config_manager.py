@@ -15,7 +15,10 @@ class ConfigManager:
         'theme': 'auto',
         'auto_connect': True,
         'http_port': 8080,
-        'last_directory': '',
+        # Separate directories for different actions
+        'last_file_directory': '',
+        'last_folder_directory': '',
+        'last_preset_directory': '',
         'window_geometry': None,
         'splitter_sizes': None,
         'file_tree_zoom': 0,
@@ -24,15 +27,12 @@ class ConfigManager:
     def __init__(self, config_path: Optional[Path] = None):
         """Initialize configuration manager"""
         if config_path is None:
-            # Determine path based on execution context (frozen exe vs script)
             import sys
             if getattr(sys, 'frozen', False):
                 app_dir = Path(sys.executable).parent
             else:
-                # Go up from src/config_manager.py to root
                 app_dir = Path(__file__).parent.parent.parent
             
-            # Fallback cleanup if running from src directly during dev
             if app_dir.name == 'src': 
                 app_dir = app_dir.parent
                 

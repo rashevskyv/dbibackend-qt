@@ -16,8 +16,10 @@ from src.single_instance import SingleInstanceManager
 def main():
     """Main application entry point"""
     app = QApplication(sys.argv)
+    # Set Fusion style for consistent cross-platform look and better QSS handling
+    app.setStyle('Fusion')
+    
     app.setApplicationName('DBI Backend Qt')
-    app.setStyle('Fusion') 
     app.setOrganizationName('DBI Backend')
 
     # Setup single instance manager
