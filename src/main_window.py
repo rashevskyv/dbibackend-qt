@@ -15,9 +15,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QAction, QIcon
 
-# NEW: Import our custom taskbar manager
 from .taskbar_manager import TaskbarManager
-
 from .config_manager import ConfigManager
 from .theme_manager import ThemeManager
 from .widgets import CustomSplitter, CustomSplitterHandle
@@ -62,7 +60,6 @@ class MainWindow(QMainWindow):
         self.connection_status = None
         self.presets_menu = None
         
-        # NEW: Taskbar manager instance
         self.taskbar_manager = None
             
         self.init_ui()
@@ -82,12 +79,11 @@ class MainWindow(QMainWindow):
     def showEvent(self, event):
         """Override showEvent to initialize taskbar manager with window handle."""
         super().showEvent(event)
-        # Initialize the taskbar manager here, now that the window handle exists
         if sys.platform == 'win32' and self.taskbar_manager is None:
             self.taskbar_manager = TaskbarManager(self.windowHandle())
 
     def init_ui(self):
-        self.setWindowTitle('DBI Backend Qt v2.3.11')
+        self.setWindowTitle('DBI Backend Qt v2.3.12')
         self.setMinimumSize(900, 700)
 
         icon_path = Path('icons/icon.png')
@@ -109,6 +105,7 @@ class MainWindow(QMainWindow):
         file_section = self.ui_manager.create_file_section()
         self.splitter.addWidget(file_section)
         
+        # Connect signals created by UIManager
         self.file_tree.space_pressed.connect(self.file_manager.invert_selected_files)
 
         progress_section = self.ui_manager.create_progress_section()
@@ -123,14 +120,16 @@ class MainWindow(QMainWindow):
         self.ui_manager.create_status_bar()
         self.setAcceptDrops(True)
 
+    # --- Delegation ---
     def add_files(self): self.file_manager.add_files()
     def add_folder(self): self.file_manager.add_folder()
     def clear_file_list(self): self.file_manager.clear_file_list()
     def save_file_list_as_batch(self): self.file_manager.save_file_list_as_batch()
     def save_preset(self): self.file_manager.save_preset()
-    def load_preset(self): self.file_manager.load_preset()
+    def load_preset(self, path=None): self.file_manager.load_preset(path)
     def delete_preset(self): self.file_manager.delete_preset()
 
+    # --- UI Events ---
     def on_search_text_changed(self, text):
         self.search_clear_btn.setVisible(bool(text))
         self.file_manager.filter_files(text)
@@ -196,13 +195,19 @@ class MainWindow(QMainWindow):
         self.on_item_checked()
 
     def update_presets_menu(self):
+        """Update the list of presets in the menu (looking for .dbi files)"""
         if not self.presets_menu: return
+        
+        # Remove only dynamic file actions (those with data set)
         for action in self.presets_menu.actions():
-            if action.menu() != self.manage_presets_menu:
+            if action.data(): 
                 self.presets_menu.removeAction(action)
+                
+        # Add new dynamic actions
         if self.file_manager.presets_dir.exists():
             for p in sorted(self.file_manager.presets_dir.glob('*.dbi')):
                 a = QAction(p.stem, self)
+                a.setData(str(p)) # Store path as data
                 a.triggered.connect(lambda c, f=p: self.file_manager.load_preset(f))
                 self.presets_menu.addAction(a)
 
@@ -226,13 +231,19 @@ class MainWindow(QMainWindow):
             else: self.progress_delegate.set_theme_color('#4CAF50')
             self.file_tree.viewport().update()
 
+        if hasattr(self, 'current_progress') and hasattr(self.current_progress, 'set_theme_color'):
+            if target == 'dark':
+                self.current_progress.set_theme_color('#2196F3')
+            else:
+                self.current_progress.set_theme_color('#4CAF50')
+
         if theme_mode != 'auto': self.log('info', f'Applied {theme_mode} theme')
 
     def on_system_theme_changed(self):
         if self.config.get('theme') == 'auto': self.apply_theme('auto')
 
     def show_about(self):
-        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.11</p>')
+        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.12</p>')
 
     def handle_external_files(self, message: str):
         paths = message.strip().split('\n')

@@ -10,7 +10,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 
-from .widgets import ZoomableTreeWidget, CustomSplitter, ProgressDelegate
+# Import custom widgets
+from .widgets import ZoomableTreeWidget, CustomSplitter, ProgressDelegate, AnimatedProgressBar
 
 class UIManager:
     """Manages the creation of UI components."""
@@ -76,21 +77,22 @@ class UIManager:
         self.main_window.presets_menu = menubar.addMenu('&Presets')
         self.main_window.presets_menu.aboutToShow.connect(self.main_window.update_presets_menu)
         
-        self.main_window.manage_presets_menu = self.main_window.presets_menu.addMenu('&Manage Presets')
-        
+        # Flattened Presets Menu
         save_preset_action = QAction('Save Preset...', self.main_window)
         save_preset_action.setShortcut('Ctrl+Shift+S')
         save_preset_action.triggered.connect(self.main_window.save_preset)
-        self.main_window.manage_presets_menu.addAction(save_preset_action)
+        self.main_window.presets_menu.addAction(save_preset_action)
 
-        load_preset_action = QAction('Load Preset...', self.main_window)
+        load_preset_action = QAction('Load Preset from File...', self.main_window)
         load_preset_action.setShortcut('Ctrl+Shift+L')
         load_preset_action.triggered.connect(self.main_window.load_preset)
-        self.main_window.manage_presets_menu.addAction(load_preset_action)
+        self.main_window.presets_menu.addAction(load_preset_action)
 
         delete_preset_action = QAction('Delete Preset...', self.main_window)
         delete_preset_action.triggered.connect(self.main_window.delete_preset)
-        self.main_window.manage_presets_menu.addAction(delete_preset_action)
+        self.main_window.presets_menu.addAction(delete_preset_action)
+
+        self.main_window.presets_menu.addSeparator()
 
         # Help menu
         help_menu = menubar.addMenu('&Help')
@@ -99,7 +101,6 @@ class UIManager:
         help_menu.addAction(about_action)
 
     def create_toolbar(self, layout):
-        """Create toolbar with main actions"""
         toolbar_layout = QHBoxLayout()
         toolbar_layout.setSpacing(10)
 
@@ -108,18 +109,15 @@ class UIManager:
             btn_layout = QVBoxLayout(btn_container)
             btn_layout.setContentsMargins(0, 0, 0, 0)
             btn_layout.setSpacing(2)
-
             btn = QPushButton(icon)
             btn.setFixedSize(60, 60)
             btn.setStyleSheet('QPushButton { font-size: 32px; }')
             btn.clicked.connect(callback)
             btn_layout.addWidget(btn)
-
             lbl = QLabel(label)
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet('font-size: 10px;')
             btn_layout.addWidget(lbl)
-
             return btn_container, btn
 
         files_container, self.main_window.add_files_btn = create_button('📄', 'Add Files', self.main_window.add_files)
@@ -147,20 +145,7 @@ class UIManager:
         self.main_window.search_clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.main_window.search_clear_btn.clicked.connect(self.main_window.clear_search)
         self.main_window.search_clear_btn.setVisible(False)
-        self.main_window.search_clear_btn.setStyleSheet('''
-            QPushButton {
-                border: none;
-                background-color: transparent;
-                color: #666;
-                font-size: 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                color: #f44336;
-                background-color: rgba(244, 67, 54, 0.1);
-                border-radius: 15px;
-            }
-        ''')
+        self.main_window.search_clear_btn.setStyleSheet('QPushButton { border: none; background: transparent; color: #666; font-size: 16px; font-weight: bold; } QPushButton:hover { color: #f44336; background: rgba(244, 67, 54, 0.1); border-radius: 15px; }')
         search_layout.addWidget(self.main_window.search_clear_btn)
 
         toolbar_layout.addWidget(search_container, 1)
@@ -174,23 +159,7 @@ class UIManager:
         self.main_window.start_server_btn.setFixedSize(60, 60)
         self.main_window.start_server_btn.clicked.connect(self.main_window.toggle_server)
         self.main_window.start_server_btn.setEnabled(True)
-        self.main_window.start_server_btn.setStyleSheet('''
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                font-size: 32px;
-            }
-            QPushButton:hover:enabled {
-                background-color: #45a049;
-            }
-            QPushButton:pressed {
-                background-color: #3d8b40;
-            }
-            QPushButton:disabled {
-                background-color: #BDBDBD;
-                color: #757575;
-            }
-        ''')
+        self.main_window.start_server_btn.setStyleSheet('QPushButton { background-color: #4CAF50; color: white; font-size: 32px; } QPushButton:hover:enabled { background-color: #45a049; } QPushButton:pressed { background-color: #3d8b40; } QPushButton:disabled { background-color: #BDBDBD; color: #757575; }')
         server_layout.addWidget(self.main_window.start_server_btn)
 
         self.main_window.server_label = QLabel('Start Server')
@@ -199,17 +168,14 @@ class UIManager:
         server_layout.addWidget(self.main_window.server_label)
 
         toolbar_layout.addWidget(server_container)
-
         layout.addLayout(toolbar_layout)
 
     def create_file_section(self):
-        """Create file list section with Mode Toggle and IP Label"""
         group = QGroupBox('File Queue')
         layout = QVBoxLayout()
 
-        # FIX: Pass self.main_window to the constructor
+        # Pass main_window to tree for file_manager access
         self.main_window.file_tree = ZoomableTreeWidget(self.main_window)
-        
         self.main_window.file_tree.setHeaderLabels(['', 'Filename', 'Size', 'Status', 'Path'])
         self.main_window.file_tree.setColumnWidth(0, 50)
         self.main_window.file_tree.setColumnWidth(1, 250)
@@ -218,65 +184,51 @@ class UIManager:
         self.main_window.file_tree.setColumnWidth(4, 300)
         self.main_window.file_tree.setAlternatingRowColors(True)
         self.main_window.file_tree.header().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-
         self.main_window.file_tree.setSortingEnabled(True)
         self.main_window.file_tree.sortByColumn(3, Qt.SortOrder.AscendingOrder) 
-
         self.main_window.file_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
-
         self.main_window.file_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.main_window.file_tree.customContextMenuRequested.connect(self.main_window.show_context_menu)
-
         self.main_window.progress_delegate = ProgressDelegate(self.main_window.file_tree, self.main_window.file_tree)
         self.main_window.file_tree.setItemDelegate(self.main_window.progress_delegate)
 
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(15, 0, 15, 0)
-        
         self.main_window.header_checkbox = QCheckBox()
         self.main_window.header_checkbox.setTristate(True)
         self.main_window.header_checkbox.setChecked(False) 
         self.main_window.header_checkbox.stateChanged.connect(self.main_window.on_header_checkbox_changed)
         header_layout.addWidget(self.main_window.header_checkbox)
-
         header_layout.addStretch()
-
         header_layout.addWidget(QLabel("Mode:"))
         self.main_window.mode_combo = QComboBox()
         self.main_window.mode_combo.addItems(["USB Backend", "HTTP Server"])
         self.main_window.mode_combo.currentIndexChanged.connect(self.main_window.on_mode_changed)
-        header_layout.addWidget(self.main_window.mode_combo)
-        
         self.main_window.ip_label = QLabel("")
         self.main_window.ip_label.setStyleSheet("color: #2196F3; font-weight: bold; margin-left: 10px;")
         self.main_window.ip_label.setVisible(False)
         header_layout.addWidget(self.main_window.ip_label)
-
         layout.insertWidget(0, header_widget)
-
         layout.addWidget(self.main_window.file_tree)
-
         self.main_window.file_count_label = QLabel('0 files, 0 B total')
         layout.addWidget(self.main_window.file_count_label)
-
         group.setLayout(layout)
         return group
     
     def create_progress_section(self):
-        """Create progress bars section"""
         group = QGroupBox('Transfer Progress')
         group.setMaximumHeight(180)
         layout = QVBoxLayout()
-
         current_layout = QHBoxLayout()
         current_layout.addWidget(QLabel('Current:'))
         self.main_window.current_file_label = QLabel('No transfer in progress')
         current_layout.addWidget(self.main_window.current_file_label)
         current_layout.addStretch()
         layout.addLayout(current_layout)
-
-        self.main_window.current_progress = QProgressBar()
+        
+        # Use AnimatedProgressBar
+        self.main_window.current_progress = AnimatedProgressBar()
         self.main_window.current_progress.setTextVisible(True)
         self.main_window.current_progress.setFormat('%p%')
         layout.addWidget(self.main_window.current_progress)
@@ -289,11 +241,9 @@ class UIManager:
         self.main_window.eta_label = QLabel('ETA: --:--:--')
         overall_layout.addWidget(self.main_window.eta_label)
         layout.addLayout(overall_layout)
-
-        self.main_window.overall_progress = QProgressBar()
+        self.main_window.overall_progress = QProgressBar() 
         self.main_window.overall_progress.setTextVisible(True)
         layout.addWidget(self.main_window.overall_progress)
-
         stats_layout = QHBoxLayout()
         self.main_window.speed_label = QLabel('Speed: 0 MB/s')
         stats_layout.addWidget(self.main_window.speed_label)
@@ -301,28 +251,21 @@ class UIManager:
         self.main_window.session_time_label = QLabel('')
         stats_layout.addWidget(self.main_window.session_time_label)
         layout.addLayout(stats_layout)
-
         group.setLayout(layout)
         return group
 
     def create_log_section(self):
-        """Create log section"""
         group = QGroupBox('Activity Log')
         layout = QVBoxLayout()
-
         self.main_window.log_text = QTextEdit()
         self.main_window.log_text.setReadOnly(True)
         self.main_window.log_text.setMinimumHeight(100)
-
         layout.addWidget(self.main_window.log_text)
-
         group.setLayout(layout)
         return group
 
     def create_status_bar(self):
-        """Create status bar"""
         self.main_window.statusBar = QStatusBar()
         self.main_window.setStatusBar(self.main_window.statusBar)
-
         self.main_window.connection_status = QLabel('🔴 Not connected')
         self.main_window.statusBar.addPermanentWidget(self.main_window.connection_status)

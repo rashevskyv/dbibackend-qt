@@ -3,16 +3,15 @@ Custom Widgets for DBI Backend
 """
 from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QSplitterHandle, QSplitter,
-    QStyledItemDelegate, QCheckBox
+    QStyledItemDelegate, QCheckBox, QProgressBar
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect
-from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QPen
+from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QPen, QLinearGradient
 
 class FileTreeWidgetItem(QTreeWidgetItem):
     """Custom tree widget item with advanced sorting logic"""
 
     def _get_status_sort_tuple(self):
-        """Generates a tuple for comparison based on the custom status sorting rules."""
         tree = self.treeWidget()
         if not tree: return (9, 0, self.text(1))
 
@@ -28,7 +27,7 @@ class FileTreeWidgetItem(QTreeWidgetItem):
         primary_priority = 2
         if status_data == 1: primary_priority = 0
         elif status_data == 2: primary_priority = 1
-        elif not is_checked and tree.file_manager.preset_loaded: primary_priority = 3
+        elif not is_checked and hasattr(tree, 'file_manager') and tree.file_manager.preset_loaded: primary_priority = 3
         
         secondary_sort = 0
         if primary_priority == 1: secondary_sort = -size_data
@@ -36,7 +35,6 @@ class FileTreeWidgetItem(QTreeWidgetItem):
         return (primary_priority, secondary_sort, self.text(1))
 
     def __lt__(self, other):
-        """Override comparison to handle different sort columns correctly."""
         if not isinstance(other, FileTreeWidgetItem):
             return super().__lt__(other)
             
@@ -47,25 +45,22 @@ class FileTreeWidgetItem(QTreeWidgetItem):
         sort_column = tree.sortColumn()
 
         if sort_column == 3:
-            self_tuple = self._get_status_sort_tuple()
-            other_tuple = other._get_status_sort_tuple()
-            return self_tuple < other_tuple
-        
+            return self._get_status_sort_tuple() < other._get_status_sort_tuple()
         elif sort_column == 2:
             self_size = self.data(2, Qt.ItemDataRole.UserRole) or 0
             other_size = other.data(2, Qt.ItemDataRole.UserRole) or 0
             return self_size < other_size
-            
         else:
             return super().__lt__(other)
 
 
 class CustomSplitterHandle(QSplitterHandle):
     """Custom splitter handle with modern styling"""
-    # ... (no changes here, code is the same)
+
     def __init__(self, orientation, parent):
         super().__init__(orientation, parent)
         self.is_collapsed = False
+
     def mouseDoubleClickEvent(self, event):
         splitter = self.splitter()
         sizes = splitter.sizes()
@@ -83,6 +78,7 @@ class CustomSplitterHandle(QSplitterHandle):
                 if widget_after_index > 0: new_sizes[widget_after_index-1] += new_sizes[widget_after_index]
                 new_sizes[widget_after_index] = 0
                 splitter.setSizes(new_sizes)
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -103,7 +99,6 @@ class CustomSplitterHandle(QSplitterHandle):
 
 class CustomSplitter(QSplitter):
     """Custom splitter that uses custom handles"""
-    # ... (no changes here, code is the same)
     sizes_changed = pyqtSignal()
     def createHandle(self): return CustomSplitterHandle(self.orientation(), self)
     def setSizes(self, sizes): super().setSizes(sizes); self.sizes_changed.emit()
@@ -111,17 +106,19 @@ class CustomSplitter(QSplitter):
 
 class ZoomableTreeWidget(QTreeWidget):
     """QTreeWidget with Ctrl+Wheel zoom and context awareness"""
-    # ... (no changes here, code is the same)
     space_pressed = pyqtSignal()
+
     def __init__(self, main_window):
         super().__init__(main_window)
-        self.file_manager = main_window.file_manager
+        self.file_manager = getattr(main_window, 'file_manager', None)
+        
         self.zoom_level = 0
         self.base_font_size = 9
         self.min_zoom = -5
         self.max_zoom = 10
         self.sortByColumn(3, Qt.SortOrder.AscendingOrder)
         self.header().setSortIndicatorShown(True)
+
     def wheelEvent(self, event: QWheelEvent):
         if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
             delta = event.angleDelta().y()
@@ -131,12 +128,14 @@ class ZoomableTreeWidget(QTreeWidget):
             event.accept()
         else:
             super().wheelEvent(event)
+
     def apply_zoom(self):
         new_size = self.base_font_size + self.zoom_level
         font = self.font()
         font.setPointSize(new_size)
         self.setFont(font)
         self.setStyleSheet(f"QTreeWidget {{ font-size: {new_size}pt; }}")
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Space and not event.modifiers():
             self.space_pressed.emit()
@@ -166,9 +165,11 @@ class ProgressDelegate(QStyledItemDelegate):
             filename = item.text(1)
             is_skipped = filename in self.skipped_files
             progress = self.progress_data.get(filename, 0)
+            
+            status_data = item.data(3, Qt.ItemDataRole.UserRole) or 0
+            is_done = (status_data == 2)
 
-            # --- SIMPLIFIED: Only draw if skipped or has progress > 0 ---
-            if is_skipped or (progress > 0):
+            if is_skipped or (progress > 0) or is_done:
                 painter.save()
                 total_width = sum(self.tree_widget.columnWidth(i) for i in range(self.tree_widget.columnCount()) if not self.tree_widget.isColumnHidden(i))
                 
@@ -176,7 +177,8 @@ class ProgressDelegate(QStyledItemDelegate):
                     fill_width = total_width
                     fill_color = self.skipped_color
                 else:
-                    fill_width = int(total_width * (progress / 100.0))
+                    fill_percent = 100.0 if is_done else progress
+                    fill_width = int(total_width * (fill_percent / 100.0))
                     fill_color = self.progress_color
                     
                 progress_rect = QRect(0, option.rect.y(), fill_width, option.rect.height())
@@ -185,3 +187,82 @@ class ProgressDelegate(QStyledItemDelegate):
                 painter.restore()
 
         super().paint(painter, option, index)
+
+
+class AnimatedProgressBar(QProgressBar):
+    """
+    A progress bar that shows a moving gradient animation.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.animation_offset = 0.0
+        self.bar_color = QColor("#4CAF50") # Default
+        self.is_animating = False
+
+    def set_theme_color(self, hex_color):
+        """Sets the base color for the progress bar"""
+        self.bar_color = QColor(hex_color)
+        self.update()
+
+    def step_animation(self):
+        """Call this on every chunk transfer."""
+        if self.value() >= 100 or self.value() <= 0:
+            return
+        self.animation_offset += 0.05
+        if self.animation_offset > 1.0:
+            self.animation_offset -= 1.0
+        self.update()
+
+    def paintEvent(self, event):
+        """Custom paint to draw the moving gradient over the chunk"""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        rect = self.rect()
+        
+        # --- FIX: Determine background color based on Palette/Text Color ---
+        # If text is light (Dark Mode), background should be dark.
+        # If text is dark (Light Mode), background should be light.
+        text_color = self.palette().text().color()
+        if text_color.lightness() > 128:
+            # Dark Mode detected
+            bg_color = QColor("#252526") # Matching theme
+        else:
+            # Light Mode detected
+            bg_color = QColor("#e0e0e0") # Matching theme
+            
+        painter.fillRect(rect, bg_color)
+        
+        # Calculate width
+        if self.maximum() > 0:
+            ratio = self.value() / self.maximum()
+        else:
+            ratio = 0
+            
+        filled_width = int(rect.width() * ratio)
+        
+        if filled_width > 0:
+            filled_rect = QRect(0, 0, filled_width, rect.height())
+            
+            gradient = QLinearGradient(0, 0, rect.width(), 0)
+            
+            c_base = self.bar_color
+            c_light = self.bar_color.lighter(160)
+            
+            gradient.setColorAt(0, c_base)
+            
+            wave_center = self.animation_offset
+            
+            if 0 <= wave_center - 0.1 <= 1: gradient.setColorAt(wave_center - 0.1, c_base)
+            if 0 <= wave_center <= 1:       gradient.setColorAt(wave_center, c_light)
+            if 0 <= wave_center + 0.1 <= 1: gradient.setColorAt(wave_center + 0.1, c_base)
+            
+            gradient.setColorAt(1, c_base)
+
+            painter.fillRect(filled_rect, QBrush(gradient))
+            
+        # Draw Text
+        text = self.text()
+        if self.isTextVisible() and text:
+            painter.setPen(text_color)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
