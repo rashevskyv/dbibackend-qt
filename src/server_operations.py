@@ -193,7 +193,11 @@ class ServerManager:
         
         if self.current_processing_file and self.current_processing_file != filename:
             status = self.main_window.file_manager.get_file_status_code(self.current_processing_file)
-            if status != 2: self.main_window.file_manager.update_file_status(self.current_processing_file, 'skipped')
+            if status != 2: # Not Completed
+                self.main_window.file_manager.update_file_status(self.current_processing_file, 'skipped')
+                if self.usb_handler:
+                    self.usb_handler.progress_tracker.mark_file_skipped(self.current_processing_file)
+                self.main_window.log('debug', f'Implicitly skipped: {self.current_processing_file}')
         
         if self.current_processing_file != filename:
             self.current_processing_file = filename
@@ -270,7 +274,8 @@ class ServerManager:
             path = self.main_window.file_manager.file_list.get(filename)
             fsize = path.stat().st_size if path else 0
             prog_fmt = self.main_window.overall_progress.format()
-            print(f"[PROGRESS] Completed: {filename} ({format_size(fsize)}) | Total: {prog_fmt}")
+            new_target = format_size(self.usb_handler.progress_tracker.total_requested_size) if self.usb_handler else "N/A"
+            print(f"[PROGRESS] Completed: {filename} ({format_size(fsize)}) | Overall: {prog_fmt} / Target: {new_target}")
 
             total = self.transfer_stats['total_files']
             done = self.transfer_stats['completed_files'] + self.transfer_stats['skipped_files']
