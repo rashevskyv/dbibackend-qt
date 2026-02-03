@@ -198,6 +198,7 @@ class ServerManager:
         if self.current_processing_file != filename:
             self.current_processing_file = filename
             self.main_window.file_manager.update_file_status(filename, 'process')
+            self.main_window.file_tree.sortItems(3, self.main_window.file_tree.header().sortIndicatorOrder())
 
         if cur_size > 0:
             pct = int((cur_bytes / cur_size) * 100)
@@ -252,6 +253,7 @@ class ServerManager:
             self.completed_files_set.add(filename)
             self.transfer_stats['completed_files'] += 1
             self.main_window.file_manager.update_file_status(filename, 'done')
+            self.main_window.file_tree.sortItems(3, self.main_window.file_tree.header().sortIndicatorOrder())
             self.main_window.progress_delegate.set_progress(filename, 100)
             for i in range(self.main_window.file_tree.topLevelItemCount()):
                 item = self.main_window.file_tree.topLevelItem(i)
@@ -305,11 +307,13 @@ class ServerManager:
         self.main_window.on_item_checked()
 
     def on_installation_begun(self, requested_filenames):
+        self.main_window.log('info', 'Switch initiated installation phase...')
         self.main_window.file_manager.handle_installation_start(requested_filenames)
         if self.usb_handler:
+            requested_set = set(requested_filenames)
             checked = self.get_checked_files()
             for filename in checked:
-                if filename not in requested_filenames:
+                if filename not in requested_set:
                     self.usb_handler.progress_tracker.mark_file_skipped(filename)
         self.main_window.log('info', 'Progress recalculated for installation phase.')
 

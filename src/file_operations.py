@@ -185,7 +185,7 @@ class FileManager:
                     item.setText(3, 'Queued')
                     item.setForeground(3, QColor(self.main_window.palette().text().color()))
                     item.setData(3, Qt.ItemDataRole.UserRole, 0)
-                self.main_window.file_tree.sortItems(3, self.main_window.file_tree.header().sortIndicatorOrder())
+                # DEFER SORTING: break
                 break
 
     def get_file_status_code(self, filename: str) -> int:
@@ -265,6 +265,7 @@ class FileManager:
     def handle_installation_start(self, requested_filenames: list):
         """Called when the first real data request arrives. 
         Marks checked but unrequested files as Skipped."""
+        requested_set = set(requested_filenames)
         for i in range(self.main_window.file_tree.topLevelItemCount()):
             item = self.main_window.file_tree.topLevelItem(i)
             filename = item.text(1)
@@ -276,8 +277,12 @@ class FileManager:
                 cb = w.findChild(QCheckBox)
                 if cb: is_checked = cb.isChecked()
             
-            if is_checked and filename not in requested_filenames:
+            if is_checked and filename not in requested_set:
+                # Use a flag to avoid internal sort
                 self.update_file_status(filename, 'skipped')
+        
+        # Sort once at the end
+        self.main_window.file_tree.sortItems(3, self.main_window.file_tree.header().sortIndicatorOrder())
 
     # --- Presets & Batches ---
 
