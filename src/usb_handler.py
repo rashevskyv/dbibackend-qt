@@ -119,6 +119,7 @@ class USBHandler(QThread):
 
                 cmd_id = struct.unpack('<I', cmd_header[8:12])[0]
                 data_size = struct.unpack('<I', cmd_header[12:16])[0]
+                # print(f"Received Command ID: {cmd_id}, Size: {data_size}") # Debug
 
                 if cmd_id == dbi_protocol.CMD_ID_EXIT:
                     self.process_exit_command()
@@ -128,15 +129,23 @@ class USBHandler(QThread):
                 elif cmd_id == dbi_protocol.CMD_ID_LIST:
                     self.process_list_command()
 
+            except usb.core.USBTimeoutError:
+                # Timeout is normal in poll loop
+                continue
             except usb.core.USBError as e:
-                if e.errno == 10060: # Timeout is normal
+                # On some Windows backends, timeout is a generic USBError with a specific string or errno
+                error_str = str(e).lower()
+                if "timeout" in error_str or e.errno == 10060 or (hasattr(e, 'backend_error_code') and e.backend_error_code == -7):
                     continue
+                
                 if self.is_running:
-                    self.log_message.emit('warning', 'USB connection lost. Reconnecting...')
+                    self.log_message.emit('warning', f'USB connection lost: {e}')
+                    print(f"USB Error details: {traceback.format_exc()}") # Print to console
                     self.connection_changed.emit(ConnectionStatus.DISCONNECTED)
                     if not self.connect_to_switch(): break
             except Exception as e:
                 self.log_message.emit('error', f'Command loop error: {e}')
+                print(f"Critical error: {traceback.format_exc()}")
                 break
         self.is_running = False
 
@@ -157,10 +166,10 @@ class USBHandler(QThread):
 
     def process_file_range_command(self, data_size):
         # Ack command
-        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_ACK, dbi_protocol.CMD_ID_FILE_RANGE, data_size))
+        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_ACK, dbi_protocol.CMD_ID_FILE_RANGE, data_size), timeout=0)
         
         # Read request details
-        header = self.in_ep.read(data_size)
+        header = self.in_ep.read(data_size, timeout=0)
         range_size = struct.unpack('<I', header[:4])[0]
         range_offset = struct.unpack('<Q', header[4:12])[0]
         name = bytes(header[16:]).decode('utf-8')
