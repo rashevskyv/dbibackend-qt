@@ -73,7 +73,12 @@ class ProgressTracker:
             # If 30% was transferred, we subtract the 70% that won't be sent.
             bytes_sent = self.file_bytes_sent.get(filename, 0)
             file_size = self.get_file_size(filename)
+            old_size = self.total_requested_size
             self.total_requested_size -= (file_size - bytes_sent)
+            print(f"[DEBUG] Tracker: Skipped {filename}. Total size: {old_size} -> {self.total_requested_size}")
+        else:
+            if filename not in self.requested_files:
+                print(f"[DEBUG] Tracker: Cannot skip {filename} - not in requested_files")
     
     def reset(self):
         """Reset all transfer-related state."""

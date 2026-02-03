@@ -172,7 +172,7 @@ class USBHandler(QThread):
         header = self.in_ep.read(data_size, timeout=0)
         range_size = struct.unpack('<I', header[:4])[0]
         range_offset = struct.unpack('<Q', header[4:12])[0]
-        name = bytes(header[16:]).decode('utf-8')
+        name = bytes(header[16:]).decode('utf-8').rstrip('\x00')
         
         # Respond
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_FILE_RANGE, range_size))

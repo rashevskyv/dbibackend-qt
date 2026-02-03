@@ -307,14 +307,22 @@ class ServerManager:
         self.main_window.on_item_checked()
 
     def on_installation_begun(self, requested_filenames):
+        # Clean null terminators from incoming requested names
+        requested_set = {n.rstrip('\x00') for n in requested_filenames}
+        print(f"[DEBUG] Installation Begun. Requested files by DBI: {requested_set}")
+        
         self.main_window.log('info', 'Switch initiated installation phase...')
-        self.main_window.file_manager.handle_installation_start(requested_filenames)
+        self.main_window.file_manager.handle_installation_start(list(requested_set))
+        
         if self.usb_handler:
-            requested_set = set(requested_filenames)
             checked = self.get_checked_files()
             for filename in checked:
                 if filename not in requested_set:
-                    self.usb_handler.progress_tracker.mark_file_skipped(filename)
+                    path = self.main_window.file_manager.file_list.get(filename)
+                    size = path.stat().st_size if path else 0
+                    print(f"[DEBUG] Mark as skip (not in metadata): {filename}")
+                    self.on_file_skipped(filename, size)
+                    
         self.main_window.log('info', 'Progress recalculated for installation phase.')
 
     def on_all_transfers_complete(self):
