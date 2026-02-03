@@ -147,7 +147,7 @@ class ProgressDelegate(QStyledItemDelegate):
         self.progress_data = {}
         self.skipped_files = set()
         self.progress_color = QColor(33, 150, 243, 50) 
-        self.skipped_color = QColor(244, 67, 54, 80)
+        self.skipped_color = QColor(128, 128, 128, 40) # Neutral gray background for skipped
 
     def set_progress(self, filename: str, progress: int): self.progress_data[filename] = max(0, min(100, progress))
     def mark_skipped(self, filename: str): self.skipped_files.add(filename)

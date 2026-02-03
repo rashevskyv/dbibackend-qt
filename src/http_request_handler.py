@@ -164,7 +164,7 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
             with open(file_path, 'rb') as f:
                 f.seek(start)
                 bytes_to_send = content_length
-                chunk_size = 1024 * 1024 # Increased to 1MB for speed
+                chunk_size = 128 * 1024 # 128KB chunks
                 
                 bytes_sent_this_session = 0
                 bytes_since_last_log = 0
