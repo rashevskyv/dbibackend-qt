@@ -164,7 +164,7 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
             with open(file_path, 'rb') as f:
                 f.seek(start)
                 bytes_to_send = content_length
-                chunk_size = 128 * 1024 # 128KB chunks
+                chunk_size = 1024 * 1024 # Increased to 1MB for speed
                 
                 bytes_sent_this_session = 0
                 bytes_since_last_log = 0
@@ -192,9 +192,9 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
                         handler_thread.log_message.emit('debug', f"Sending {original_filename}: {mb_sent:.1f} MB session...")
                         bytes_since_last_log = 0
 
-                    # Calculate speed and emit progress periodically
+                    # Calculate speed and emit progress periodically (Throttled to 0.5s for speed)
                     current_time = time.time()
-                    if current_time - last_emit_time > 0.1:
+                    if current_time - last_emit_time > 0.5:
                         elapsed = current_time - start_time
                         speed_mbps = (bytes_sent_this_session / elapsed) / (1024 * 1024) if elapsed > 0 else 0
                         

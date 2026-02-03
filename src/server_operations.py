@@ -125,6 +125,7 @@ class ServerManager:
         self.main_window.setWindowTitle("DBI Backend Qt v2.3.14")
         self.main_window.log('info', 'USB Server stopped')
         self.main_window.current_file_label.setText('Server stopped')
+        self.main_window.overall_label.setText("0 / 0 files") # Ensure clean UI reset
 
     def start_http_server(self):
         checked_files = self.get_checked_files()
@@ -189,6 +190,10 @@ class ServerManager:
         self.main_window.current_progress.setValue(0)
         self.main_window.overall_progress.setValue(0)
         if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
+        self.main_window.setWindowTitle("DBI Backend Qt v2.3.14") # Ensure clean UI reset
+        self.main_window.log('info', 'HTTP Server stopped') # Ensure clean UI reset
+        self.main_window.current_file_label.setText('Server stopped') # Ensure clean UI reset
+        self.main_window.overall_label.setText("0 / 0 files") # Ensure clean UI reset
 
     def on_progress_updated(self, filename, transferred, speed, total_req_size, num_files, cur_bytes, cur_size, _unused):
         self.main_window.current_file_label.setText(filename)
@@ -304,10 +309,10 @@ class ServerManager:
             # so we check if it's already in skipped_files to avoid recursion if called from there
             if filename not in self.http_handler.progress_tracker.skipped_files:
                 self.http_handler.mark_file_skipped(filename)
-                return # Avoid duplicate UI logs below if called recursively
+                return 
             
         self.transfer_stats['skipped_files'] += 1
-        self.main_window.file_manager.update_file_status(filename, 'failed')
+        self.main_window.file_manager.update_file_status(filename, 'skipped') # Fixed from 'failed'
         self.main_window.progress_delegate.mark_skipped(filename)
         self.main_window.log('warning', f'Skipped: {filename}')
         

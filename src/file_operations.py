@@ -261,6 +261,16 @@ class FileManager:
     def handle_server_stop(self):
         """Called when server stops. Resets visuals."""
         self.reset_items_visuals()
+        # Reset progress bars and labels
+        self.main_window.current_progress.setValue(0)
+        self.main_window.current_progress.setFormat("0%")
+        self.main_window.overall_progress.setValue(0)
+        self.main_window.overall_progress.setFormat("0%")
+        self.main_window.current_file_label.setText("No transfer in progress")
+        self.main_window.overall_label.setText("0 / 0 files")
+        self.main_window.speed_label.setText("Speed: 0 MB/s")
+        self.main_window.eta_label.setText("ETA: --:--:--")
+        if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
 
     def handle_installation_start(self, requested_filenames: list):
         """Called when the first real data request arrives. 
