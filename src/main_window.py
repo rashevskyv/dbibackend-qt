@@ -47,7 +47,11 @@ class MainWindow(QMainWindow):
         self.search_clear_btn = None
         self.start_server_btn = None
         self.server_label = None
-        self.mode_combo = None
+        
+        self.mode_switch = None
+        self.usb_label = None
+        self.http_label = None
+        
         self.ip_label = None
         self.current_file_label = None
         self.current_progress = None
@@ -77,13 +81,12 @@ class MainWindow(QMainWindow):
         self.server_manager.reconnect_timer.start(2000)
 
     def showEvent(self, event):
-        """Override showEvent to initialize taskbar manager with window handle."""
         super().showEvent(event)
         if sys.platform == 'win32' and self.taskbar_manager is None:
             self.taskbar_manager = TaskbarManager(self.windowHandle())
 
     def init_ui(self):
-        self.setWindowTitle('DBI Backend Qt v2.3.12')
+        self.setWindowTitle('DBI Backend Qt v2.3.13')
         self.setMinimumSize(900, 700)
 
         icon_path = Path('icons/icon.png')
@@ -105,7 +108,6 @@ class MainWindow(QMainWindow):
         file_section = self.ui_manager.create_file_section()
         self.splitter.addWidget(file_section)
         
-        # Connect signals created by UIManager
         self.file_tree.space_pressed.connect(self.file_manager.invert_selected_files)
 
         progress_section = self.ui_manager.create_progress_section()
@@ -138,14 +140,40 @@ class MainWindow(QMainWindow):
         self.search_box.clear()
         self.file_manager.filter_files("")
 
-    def on_mode_changed(self, index):
-        mode = self.mode_combo.currentText()
-        if "HTTP" in mode:
+    def _get_btn_style(self, color, hover_color):
+        return f'''
+            QPushButton {{
+                background-color: {color};
+                color: white;
+                font-size: 32px;
+            }}
+            QPushButton:hover:enabled {{
+                background-color: {hover_color};
+            }}
+            QPushButton:pressed {{
+                background-color: {color};
+            }}
+            QPushButton:disabled {{
+                background-color: #BDBDBD;
+                color: #757575;
+            }}
+        '''
+
+    def on_mode_switched(self, checked):
+        # Checked = HTTP, Unchecked = USB
+        if checked: # HTTP Mode
             self.server_label.setText("Start HTTP")
             self.connection_status.setText("🌐 HTTP Mode")
-        else:
+            self.usb_label.setStyleSheet("color: gray;")
+            self.http_label.setStyleSheet("font-weight: bold; color: #2196F3;")
+            self.start_server_btn.setStyleSheet(self._get_btn_style("#2196F3", "#1976D2"))
+            
+        else: # USB Mode
             self.server_label.setText("Start USB")
             self.connection_status.setText("🔴 Not connected")
+            self.usb_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
+            self.http_label.setStyleSheet("color: gray;")
+            self.start_server_btn.setStyleSheet(self._get_btn_style("#4CAF50", "#45a049"))
 
     def toggle_server(self): self.server_manager.toggle_server()
 
@@ -195,19 +223,13 @@ class MainWindow(QMainWindow):
         self.on_item_checked()
 
     def update_presets_menu(self):
-        """Update the list of presets in the menu (looking for .dbi files)"""
         if not self.presets_menu: return
-        
-        # Remove only dynamic file actions (those with data set)
         for action in self.presets_menu.actions():
-            if action.data(): 
-                self.presets_menu.removeAction(action)
-                
-        # Add new dynamic actions
+            if action.data(): self.presets_menu.removeAction(action)
         if self.file_manager.presets_dir.exists():
             for p in sorted(self.file_manager.presets_dir.glob('*.dbi')):
                 a = QAction(p.stem, self)
-                a.setData(str(p)) # Store path as data
+                a.setData(str(p))
                 a.triggered.connect(lambda c, f=p: self.file_manager.load_preset(f))
                 self.presets_menu.addAction(a)
 
@@ -232,10 +254,8 @@ class MainWindow(QMainWindow):
             self.file_tree.viewport().update()
 
         if hasattr(self, 'current_progress') and hasattr(self.current_progress, 'set_theme_color'):
-            if target == 'dark':
-                self.current_progress.set_theme_color('#2196F3')
-            else:
-                self.current_progress.set_theme_color('#4CAF50')
+            if target == 'dark': self.current_progress.set_theme_color('#2196F3')
+            else: self.current_progress.set_theme_color('#4CAF50')
 
         if theme_mode != 'auto': self.log('info', f'Applied {theme_mode} theme')
 
@@ -243,7 +263,7 @@ class MainWindow(QMainWindow):
         if self.config.get('theme') == 'auto': self.apply_theme('auto')
 
     def show_about(self):
-        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.12</p>')
+        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.13</p>')
 
     def handle_external_files(self, message: str):
         paths = message.strip().split('\n')

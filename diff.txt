@@ -1,0 +1,835 @@
+diff --git a/src/main_window.py b/src/main_window.py
+index b192e64..764df91 100644
+--- a/src/main_window.py
++++ b/src/main_window.py
+@@ -47,7 +47,11 @@ class MainWindow(QMainWindow):
+         self.search_clear_btn = None
+         self.start_server_btn = None
+         self.server_label = None
+-        self.mode_combo = None
++        
++        self.mode_switch = None
++        self.usb_label = None
++        self.http_label = None
++        
+         self.ip_label = None
+         self.current_file_label = None
+         self.current_progress = None
+@@ -77,13 +81,12 @@ class MainWindow(QMainWindow):
+         self.server_manager.reconnect_timer.start(2000)
+ 
+     def showEvent(self, event):
+-        """Override showEvent to initialize taskbar manager with window handle."""
+         super().showEvent(event)
+         if sys.platform == 'win32' and self.taskbar_manager is None:
+             self.taskbar_manager = TaskbarManager(self.windowHandle())
+ 
+     def init_ui(self):
+-        self.setWindowTitle('DBI Backend Qt v2.3.12')
++        self.setWindowTitle('DBI Backend Qt v2.3.13')
+         self.setMinimumSize(900, 700)
+ 
+         icon_path = Path('icons/icon.png')
+@@ -105,7 +108,6 @@ class MainWindow(QMainWindow):
+         file_section = self.ui_manager.create_file_section()
+         self.splitter.addWidget(file_section)
+         
+-        # Connect signals created by UIManager
+         self.file_tree.space_pressed.connect(self.file_manager.invert_selected_files)
+ 
+         progress_section = self.ui_manager.create_progress_section()
+@@ -138,14 +140,40 @@ class MainWindow(QMainWindow):
+         self.search_box.clear()
+         self.file_manager.filter_files("")
+ 
+-    def on_mode_changed(self, index):
+-        mode = self.mode_combo.currentText()
+-        if "HTTP" in mode:
++    def _get_btn_style(self, color, hover_color):
++        return f'''
++            QPushButton {{
++                background-color: {color};
++                color: white;
++                font-size: 32px;
++            }}
++            QPushButton:hover:enabled {{
++                background-color: {hover_color};
++            }}
++            QPushButton:pressed {{
++                background-color: {color};
++            }}
++            QPushButton:disabled {{
++                background-color: #BDBDBD;
++                color: #757575;
++            }}
++        '''
++
++    def on_mode_switched(self, checked):
++        # Checked = HTTP, Unchecked = USB
++        if checked: # HTTP Mode
+             self.server_label.setText("Start HTTP")
+             self.connection_status.setText("🌐 HTTP Mode")
+-        else:
++            self.usb_label.setStyleSheet("color: gray;")
++            self.http_label.setStyleSheet("font-weight: bold; color: #2196F3;")
++            self.start_server_btn.setStyleSheet(self._get_btn_style("#2196F3", "#1976D2"))
++            
++        else: # USB Mode
+             self.server_label.setText("Start USB")
+             self.connection_status.setText("🔴 Not connected")
++            self.usb_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
++            self.http_label.setStyleSheet("color: gray;")
++            self.start_server_btn.setStyleSheet(self._get_btn_style("#4CAF50", "#45a049"))
+ 
+     def toggle_server(self): self.server_manager.toggle_server()
+ 
+@@ -195,19 +223,13 @@ class MainWindow(QMainWindow):
+         self.on_item_checked()
+ 
+     def update_presets_menu(self):
+-        """Update the list of presets in the menu (looking for .dbi files)"""
+         if not self.presets_menu: return
+-        
+-        # Remove only dynamic file actions (those with data set)
+         for action in self.presets_menu.actions():
+-            if action.data(): 
+-                self.presets_menu.removeAction(action)
+-                
+-        # Add new dynamic actions
++            if action.data(): self.presets_menu.removeAction(action)
+         if self.file_manager.presets_dir.exists():
+             for p in sorted(self.file_manager.presets_dir.glob('*.dbi')):
+                 a = QAction(p.stem, self)
+-                a.setData(str(p)) # Store path as data
++                a.setData(str(p))
+                 a.triggered.connect(lambda c, f=p: self.file_manager.load_preset(f))
+                 self.presets_menu.addAction(a)
+ 
+@@ -232,10 +254,8 @@ class MainWindow(QMainWindow):
+             self.file_tree.viewport().update()
+ 
+         if hasattr(self, 'current_progress') and hasattr(self.current_progress, 'set_theme_color'):
+-            if target == 'dark':
+-                self.current_progress.set_theme_color('#2196F3')
+-            else:
+-                self.current_progress.set_theme_color('#4CAF50')
++            if target == 'dark': self.current_progress.set_theme_color('#2196F3')
++            else: self.current_progress.set_theme_color('#4CAF50')
+ 
+         if theme_mode != 'auto': self.log('info', f'Applied {theme_mode} theme')
+ 
+@@ -243,7 +263,7 @@ class MainWindow(QMainWindow):
+         if self.config.get('theme') == 'auto': self.apply_theme('auto')
+ 
+     def show_about(self):
+-        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.12</p>')
++        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.13</p>')
+ 
+     def handle_external_files(self, message: str):
+         paths = message.strip().split('\n')
+diff --git a/src/server_operations.py b/src/server_operations.py
+index 08869e5..dfd230a 100644
+--- a/src/server_operations.py
++++ b/src/server_operations.py
+@@ -22,31 +22,33 @@ class ServerManager:
+         self.http_handler = None
+         
+         self.transfer_stats = {
+-            'total_files': 0,
+-            'completed_files': 0,
+-            'skipped_files': 0,
+-            'start_time': None
++            'total_files': 0, 'completed_files': 0, 'skipped_files': 0, 'start_time': None
+         }
+         self.completed_files_set = set()
+         self.current_processing_file = None
+-
+         self.reconnect_timer = QTimer()
+ 
+     def toggle_server(self):
+-        mode = self.main_window.mode_combo.currentText()
+-        is_usb = "USB" in mode
++        # FIX: Replaced mode_combo with mode_switch
++        # Unchecked = USB (False), Checked = HTTP (True)
++        is_http = self.main_window.mode_switch.isChecked()
++        is_usb = not is_http
+         
+         is_running = (self.usb_handler and self.usb_handler.is_running) or \
+                      (self.http_handler and self.http_handler.is_running)
+ 
+         if not is_running:
+-            if is_usb: self.start_usb_server()
+-            else: self.start_http_server()
++            if is_usb:
++                self.start_usb_server()
++            else:
++                self.start_http_server()
+         else:
+             if QMessageBox.question(self.main_window, 'Stop Server', 
+-                'Stop the current server? Any ongoing transfers will be interrupted.') == QMessageBox.StandardButton.Yes:
+-                if is_usb: self.stop_usb_server()
+-                else: self.stop_http_server()
++                'Stop the current server?') == QMessageBox.StandardButton.Yes:
++                if self.usb_handler:
++                    self.stop_usb_server()
++                elif self.http_handler:
++                    self.stop_http_server()
+ 
+     def get_checked_files(self) -> Dict[str, Path]:
+         checked_files = {}
+@@ -66,13 +68,10 @@ class ServerManager:
+         self.transfer_stats['skipped_files'] = 0
+         self.completed_files_set.clear()
+         self.current_processing_file = None
+-        
+         self.main_window.progress_delegate.clear_all()
+-        
+         for i in range(self.main_window.file_tree.topLevelItemCount()):
+             item = self.main_window.file_tree.topLevelItem(i)
+             self.main_window.file_manager.update_file_status(item.text(1), '')
+-            
+         self.main_window.current_progress.setValue(0)
+         self.main_window.overall_progress.setValue(0)
+         self.main_window.speed_label.setText('Speed: 0 MB/s')
+@@ -91,7 +90,6 @@ class ServerManager:
+         
+         tree = self.main_window.file_tree
+         tree.sortItems(3, tree.header().sortIndicatorOrder())
+-
+         self.main_window.log('info', f'Starting USB server with {len(checked_files)} files')
+         
+         if self.main_window.taskbar_manager:
+@@ -107,7 +105,6 @@ class ServerManager:
+         self.usb_handler.file_skipped.connect(self.on_file_skipped)
+         self.usb_handler.transfer_reset.connect(self.on_transfer_reset)
+         self.usb_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
+-
+         self.usb_handler.start()
+         self._set_server_ui_state(True)
+         self.transfer_stats['start_time'] = datetime.now()
+@@ -118,11 +115,10 @@ class ServerManager:
+             self.usb_handler.stop()
+             self.usb_handler = None
+         self._set_server_ui_state(False)
+-        self.main_window.file_manager.reset_items_visuals()
+-        
+-        if self.main_window.taskbar_manager:
+-            self.main_window.taskbar_manager.hide_progress()
+-            
++        self.main_window.file_manager.handle_server_stop()
++        self.main_window.current_progress.setValue(0)
++        self.main_window.overall_progress.setValue(0)
++        if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
+         self.main_window.log('info', 'USB Server stopped')
+         self.main_window.current_file_label.setText('Server stopped')
+ 
+@@ -182,18 +178,22 @@ class ServerManager:
+             self.http_handler.stop()
+             self.http_handler = None
+         self._set_server_ui_state(False)
+-        self.main_window.file_manager.reset_items_visuals()
+-
+-        if self.main_window.taskbar_manager:
+-            self.main_window.taskbar_manager.hide_progress()
++        self.main_window.file_manager.handle_server_stop()
++        self.main_window.current_progress.setValue(0)
++        self.main_window.overall_progress.setValue(0)
++        if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
+ 
+     def on_progress_updated(self, filename, transferred, speed, total_req_size, num_files, cur_bytes, cur_size, _unused):
+         self.main_window.current_file_label.setText(filename)
++        
++        if self.current_processing_file and self.current_processing_file != filename:
++            status = self.main_window.file_manager.get_file_status_code(self.current_processing_file)
++            if status != 2: self.main_window.file_manager.update_file_status(self.current_processing_file, 'skipped')
++        
+         if self.current_processing_file != filename:
+             self.current_processing_file = filename
+             self.main_window.file_manager.update_file_status(filename, 'process')
+ 
+-        # Current File Progress
+         if cur_size > 0:
+             pct = int((cur_bytes / cur_size) * 100)
+             self.main_window.current_progress.setFormat(f'{pct}% ({format_size(cur_bytes)} / {format_size(cur_size)})')
+@@ -206,16 +206,12 @@ class ServerManager:
+         
+         self.main_window.speed_label.setText(f'Speed: {speed:.1f} MB/s')
+         
+-        # Overall Progress Logic
+         completed = self.transfer_stats['completed_files'] + self.transfer_stats['skipped_files']
+         total_files = self.transfer_stats['total_files']
+         
+         if total_req_size > 0:
+             raw_pct = (transferred / total_req_size) * 100
+             overall_pct = int(raw_pct)
+-            
+-            # --- FIX: Aggressive 100% forcing ---
+-            # If we are basically done (>99.9%) or all files are accounted for
+             is_finished = (completed >= total_files and total_files > 0)
+             
+             if is_finished or raw_pct >= 99.9:
+@@ -236,7 +232,6 @@ class ServerManager:
+             elapsed = (datetime.now() - self.transfer_stats['start_time']).seconds
+             self.main_window.session_time_label.setText(f"Time: {format_time(elapsed)}")
+ 
+-        # ETA
+         if completed < total_files:
+             if speed > 0 and total_req_size > transferred:
+                 remaining_bytes = total_req_size - transferred
+@@ -251,10 +246,8 @@ class ServerManager:
+         if filename not in self.completed_files_set:
+             self.completed_files_set.add(filename)
+             self.transfer_stats['completed_files'] += 1
+-            
+             self.main_window.file_manager.update_file_status(filename, 'done')
+             self.main_window.progress_delegate.set_progress(filename, 100)
+-            
+             for i in range(self.main_window.file_tree.topLevelItemCount()):
+                 item = self.main_window.file_tree.topLevelItem(i)
+                 if item.text(1) == filename:
+@@ -265,21 +258,16 @@ class ServerManager:
+                     break
+             self.main_window.on_item_checked()
+             
+-            # --- FIX: Check if THIS was the last file and force UI update immediately ---
+             total = self.transfer_stats['total_files']
+             done = self.transfer_stats['completed_files'] + self.transfer_stats['skipped_files']
+-            
+             if total > 0 and done >= total:
+                 self.main_window.overall_progress.setValue(100)
+-                # Parse current format to keep size info but say 100%
+                 current_text = self.main_window.overall_progress.text() 
+                 if "(" in current_text:
+-                    # Keep the sizes part: "99% (102GB / 102GB)" -> "100% (102GB / 102GB)"
+                     sizes_part = current_text.split("(", 1)[1]
+                     self.main_window.overall_progress.setFormat(f"100% ({sizes_part}")
+                 else:
+                     self.main_window.overall_progress.setFormat("100%")
+-                    
+                 self.main_window.eta_label.setText('ETA: Done')
+                 if self.main_window.taskbar_manager:
+                     self.main_window.taskbar_manager.set_progress_value(100)
+@@ -288,7 +276,7 @@ class ServerManager:
+         self.transfer_stats['skipped_files'] += 1
+         self.main_window.file_manager.update_file_status(filename, 'failed')
+         self.main_window.progress_delegate.mark_skipped(filename)
+-        self.main_window.log('warning', f'Skipped by Switch: {filename}')
++        self.main_window.log('warning', f'Skipped: {filename}')
+ 
+     def on_transfer_reset(self):
+         self.main_window.log('info', 'Switch reset sequence.')
+@@ -297,15 +285,12 @@ class ServerManager:
+ 
+     def on_all_transfers_complete(self):
+         self.main_window.log('success', 'All transfers complete!')
+-        
+-        # Double ensure 100% visually
+         self.main_window.current_progress.setValue(100)
+         self.main_window.overall_progress.setValue(100)
+         self.main_window.eta_label.setText('ETA: Done')
+         self.main_window.current_file_label.setText('Done')
+         
+-        if self.main_window.taskbar_manager:
+-            self.main_window.taskbar_manager.hide_progress()
++        if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
+         
+         success = self.transfer_stats['completed_files']
+         skipped = self.transfer_stats['skipped_files']
+@@ -314,21 +299,14 @@ class ServerManager:
+             elapsed = (datetime.now() - self.transfer_stats['start_time']).seconds
+             time_taken = format_time(elapsed)
+ 
+-        msg = (
+-            f"Transfer Session Complete!\n\n"
+-            f"Installed: {success}\n"
+-            f"Skipped/Failed: {skipped}\n"
+-            f"Time Taken: {time_taken}"
+-        )
+-        
++        msg = (f"Session Complete!\n\nInstalled: {success}\nSkipped: {skipped}\nTime: {time_taken}")
+         QMessageBox.information(self.main_window, "Complete", msg)
+         
+         if self.usb_handler: self.usb_handler = None
+         if self.http_handler: self.http_handler = None
+         
+         self._set_server_ui_state(False)
+-        
+-        self.main_window.file_manager.reset_items_visuals()
++        self.main_window.file_manager.handle_server_stop()
+         self.main_window.current_progress.setValue(0)
+         self.main_window.overall_progress.setValue(0)
+         self.main_window.current_file_label.setText("No transfer in progress")
+@@ -337,27 +315,40 @@ class ServerManager:
+     # (Unchanged stubs)
+     def on_http_server_started(self, ip, port): pass
+     def on_http_server_stopped(self): pass
++
+     def _set_server_ui_state(self, running: bool):
+         btn = self.main_window.start_server_btn
+         if running:
+             btn.setText('⏹')
+             btn.setStyleSheet('QPushButton { background-color: #f44336; color: white; font-size: 32px; } QPushButton:hover { background-color: #da190b; }')
+             self.main_window.server_label.setText('Stop Server')
+-            self.main_window.mode_combo.setEnabled(False)
++            self.main_window.mode_switch.setEnabled(False) 
+             self.main_window.add_files_btn.setEnabled(False)
+             self.main_window.clear_list_btn.setEnabled(False)
+         else:
+             btn.setText('▶')
+-            btn.setStyleSheet('QPushButton { background-color: #4CAF50; color: white; font-size: 32px; } QPushButton:hover:enabled { background-color: #45a049; } QPushButton:disabled { background-color: #BDBDBD; }')
+-            mode = self.main_window.mode_combo.currentText()
+-            self.main_window.server_label.setText(f'Start {"HTTP" if "HTTP" in mode else "USB"}')
+-            self.main_window.mode_combo.setEnabled(True)
++            
++            # --- FIX: Check toggle state instead of combo text ---
++            is_http = self.main_window.mode_switch.isChecked()
++            
++            if is_http:
++                btn.setStyleSheet(self.main_window._get_btn_style("#2196F3", "#1976D2"))
++                self.main_window.server_label.setText('Start HTTP')
++            else:
++                btn.setStyleSheet(self.main_window._get_btn_style("#4CAF50", "#45a049"))
++                self.main_window.server_label.setText('Start USB')
++                
++            self.main_window.mode_switch.setEnabled(True)
+             self.main_window.add_files_btn.setEnabled(True)
+             self.main_window.clear_list_btn.setEnabled(True)
++
+     def check_connection(self):
+-        if "USB" in self.main_window.mode_combo.currentText():
++        # FIX: Check toggle state instead of combo text
++        is_usb = not self.main_window.mode_switch.isChecked()
++        if is_usb:
+             if self.usb_handler is None and self.main_window.file_tree.topLevelItemCount() > 0:
+                  self.main_window.start_server_btn.setEnabled(True)
++    
+     def on_connection_changed(self, status):
+         if status == ConnectionStatus.CONNECTED: self.main_window.connection_status.setText('🟢 Connected')
+         elif status == ConnectionStatus.CONNECTING: self.main_window.connection_status.setText('🟡 Connecting...')
+diff --git a/src/ui_manager.py b/src/ui_manager.py
+index dedb144..53287c6 100644
+--- a/src/ui_manager.py
++++ b/src/ui_manager.py
+@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt
+ from PyQt6.QtGui import QAction
+ 
+ # Import custom widgets
+-from .widgets import ZoomableTreeWidget, CustomSplitter, ProgressDelegate, AnimatedProgressBar
++from .widgets import ZoomableTreeWidget, CustomSplitter, ProgressDelegate, AnimatedProgressBar, ToggleSwitch
+ 
+ class UIManager:
+     """Manages the creation of UI components."""
+@@ -77,7 +77,7 @@ class UIManager:
+         self.main_window.presets_menu = menubar.addMenu('&Presets')
+         self.main_window.presets_menu.aboutToShow.connect(self.main_window.update_presets_menu)
+         
+-        # Flattened Presets Menu
++        # Flattened Presets Menu Actions
+         save_preset_action = QAction('Save Preset...', self.main_window)
+         save_preset_action.setShortcut('Ctrl+Shift+S')
+         save_preset_action.triggered.connect(self.main_window.save_preset)
+@@ -101,6 +101,7 @@ class UIManager:
+         help_menu.addAction(about_action)
+ 
+     def create_toolbar(self, layout):
++        """Create toolbar with main actions"""
+         toolbar_layout = QHBoxLayout()
+         toolbar_layout.setSpacing(10)
+ 
+@@ -109,15 +110,18 @@ class UIManager:
+             btn_layout = QVBoxLayout(btn_container)
+             btn_layout.setContentsMargins(0, 0, 0, 0)
+             btn_layout.setSpacing(2)
++
+             btn = QPushButton(icon)
+             btn.setFixedSize(60, 60)
+             btn.setStyleSheet('QPushButton { font-size: 32px; }')
+             btn.clicked.connect(callback)
+             btn_layout.addWidget(btn)
++
+             lbl = QLabel(label)
+             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+             lbl.setStyleSheet('font-size: 10px;')
+             btn_layout.addWidget(lbl)
++
+             return btn_container, btn
+ 
+         files_container, self.main_window.add_files_btn = create_button('📄', 'Add Files', self.main_window.add_files)
+@@ -145,7 +149,20 @@ class UIManager:
+         self.main_window.search_clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+         self.main_window.search_clear_btn.clicked.connect(self.main_window.clear_search)
+         self.main_window.search_clear_btn.setVisible(False)
+-        self.main_window.search_clear_btn.setStyleSheet('QPushButton { border: none; background: transparent; color: #666; font-size: 16px; font-weight: bold; } QPushButton:hover { color: #f44336; background: rgba(244, 67, 54, 0.1); border-radius: 15px; }')
++        self.main_window.search_clear_btn.setStyleSheet('''
++            QPushButton {
++                border: none;
++                background-color: transparent;
++                color: #666;
++                font-size: 16px;
++                font-weight: bold;
++            }
++            QPushButton:hover {
++                color: #f44336;
++                background-color: rgba(244, 67, 54, 0.1);
++                border-radius: 15px;
++            }
++        ''')
+         search_layout.addWidget(self.main_window.search_clear_btn)
+ 
+         toolbar_layout.addWidget(search_container, 1)
+@@ -159,7 +176,23 @@ class UIManager:
+         self.main_window.start_server_btn.setFixedSize(60, 60)
+         self.main_window.start_server_btn.clicked.connect(self.main_window.toggle_server)
+         self.main_window.start_server_btn.setEnabled(True)
+-        self.main_window.start_server_btn.setStyleSheet('QPushButton { background-color: #4CAF50; color: white; font-size: 32px; } QPushButton:hover:enabled { background-color: #45a049; } QPushButton:pressed { background-color: #3d8b40; } QPushButton:disabled { background-color: #BDBDBD; color: #757575; }')
++        self.main_window.start_server_btn.setStyleSheet('''
++            QPushButton {
++                background-color: #4CAF50;
++                color: white;
++                font-size: 32px;
++            }
++            QPushButton:hover:enabled {
++                background-color: #45a049;
++            }
++            QPushButton:pressed {
++                background-color: #3d8b40;
++            }
++            QPushButton:disabled {
++                background-color: #BDBDBD;
++                color: #757575;
++            }
++        ''')
+         server_layout.addWidget(self.main_window.start_server_btn)
+ 
+         self.main_window.server_label = QLabel('Start Server')
+@@ -168,9 +201,11 @@ class UIManager:
+         server_layout.addWidget(self.main_window.server_label)
+ 
+         toolbar_layout.addWidget(server_container)
++
+         layout.addLayout(toolbar_layout)
+ 
+     def create_file_section(self):
++        """Create file list section with Mode Toggle and IP Label"""
+         group = QGroupBox('File Queue')
+         layout = QVBoxLayout()
+ 
+@@ -184,49 +219,71 @@ class UIManager:
+         self.main_window.file_tree.setColumnWidth(4, 300)
+         self.main_window.file_tree.setAlternatingRowColors(True)
+         self.main_window.file_tree.header().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
++
+         self.main_window.file_tree.setSortingEnabled(True)
+         self.main_window.file_tree.sortByColumn(3, Qt.SortOrder.AscendingOrder) 
++
+         self.main_window.file_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
++
+         self.main_window.file_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+         self.main_window.file_tree.customContextMenuRequested.connect(self.main_window.show_context_menu)
++
+         self.main_window.progress_delegate = ProgressDelegate(self.main_window.file_tree, self.main_window.file_tree)
+         self.main_window.file_tree.setItemDelegate(self.main_window.progress_delegate)
+ 
+         header_widget = QWidget()
+         header_layout = QHBoxLayout(header_widget)
+         header_layout.setContentsMargins(15, 0, 15, 0)
++        
+         self.main_window.header_checkbox = QCheckBox()
+         self.main_window.header_checkbox.setTristate(True)
+         self.main_window.header_checkbox.setChecked(False) 
+         self.main_window.header_checkbox.stateChanged.connect(self.main_window.on_header_checkbox_changed)
+         header_layout.addWidget(self.main_window.header_checkbox)
++        
+         header_layout.addStretch()
+-        header_layout.addWidget(QLabel("Mode:"))
+-        self.main_window.mode_combo = QComboBox()
+-        self.main_window.mode_combo.addItems(["USB Backend", "HTTP Server"])
+-        self.main_window.mode_combo.currentIndexChanged.connect(self.main_window.on_mode_changed)
++        
++        # --- Mode Switch ---
++        self.main_window.usb_label = QLabel("USB")
++        self.main_window.usb_label.setStyleSheet("font-weight: bold; color: #4CAF50;") # Default USB active
++        header_layout.addWidget(self.main_window.usb_label)
++
++        self.main_window.mode_switch = ToggleSwitch()
++        self.main_window.mode_switch.toggled.connect(self.main_window.on_mode_switched)
++        header_layout.addWidget(self.main_window.mode_switch)
++
++        self.main_window.http_label = QLabel("HTTP")
++        self.main_window.http_label.setStyleSheet("color: gray;")
++        header_layout.addWidget(self.main_window.http_label)
++        
+         self.main_window.ip_label = QLabel("")
+         self.main_window.ip_label.setStyleSheet("color: #2196F3; font-weight: bold; margin-left: 10px;")
+         self.main_window.ip_label.setVisible(False)
+         header_layout.addWidget(self.main_window.ip_label)
++        
+         layout.insertWidget(0, header_widget)
++
+         layout.addWidget(self.main_window.file_tree)
++
+         self.main_window.file_count_label = QLabel('0 files, 0 B total')
+         layout.addWidget(self.main_window.file_count_label)
++
+         group.setLayout(layout)
+         return group
+     
+     def create_progress_section(self):
++        """Create progress bars section"""
+         group = QGroupBox('Transfer Progress')
+         group.setMaximumHeight(180)
+         layout = QVBoxLayout()
++
+         current_layout = QHBoxLayout()
+         current_layout.addWidget(QLabel('Current:'))
+         self.main_window.current_file_label = QLabel('No transfer in progress')
+         current_layout.addWidget(self.main_window.current_file_label)
+         current_layout.addStretch()
+         layout.addLayout(current_layout)
+-        
++
+         # Use AnimatedProgressBar
+         self.main_window.current_progress = AnimatedProgressBar()
+         self.main_window.current_progress.setTextVisible(True)
+@@ -241,9 +298,11 @@ class UIManager:
+         self.main_window.eta_label = QLabel('ETA: --:--:--')
+         overall_layout.addWidget(self.main_window.eta_label)
+         layout.addLayout(overall_layout)
+-        self.main_window.overall_progress = QProgressBar() 
++
++        self.main_window.overall_progress = QProgressBar()
+         self.main_window.overall_progress.setTextVisible(True)
+         layout.addWidget(self.main_window.overall_progress)
++
+         stats_layout = QHBoxLayout()
+         self.main_window.speed_label = QLabel('Speed: 0 MB/s')
+         stats_layout.addWidget(self.main_window.speed_label)
+@@ -251,21 +310,28 @@ class UIManager:
+         self.main_window.session_time_label = QLabel('')
+         stats_layout.addWidget(self.main_window.session_time_label)
+         layout.addLayout(stats_layout)
++
+         group.setLayout(layout)
+         return group
+ 
+     def create_log_section(self):
++        """Create log section"""
+         group = QGroupBox('Activity Log')
+         layout = QVBoxLayout()
++
+         self.main_window.log_text = QTextEdit()
+         self.main_window.log_text.setReadOnly(True)
+         self.main_window.log_text.setMinimumHeight(100)
++
+         layout.addWidget(self.main_window.log_text)
++
+         group.setLayout(layout)
+         return group
+ 
+     def create_status_bar(self):
++        """Create status bar"""
+         self.main_window.statusBar = QStatusBar()
+         self.main_window.setStatusBar(self.main_window.statusBar)
++
+         self.main_window.connection_status = QLabel('🔴 Not connected')
+         self.main_window.statusBar.addPermanentWidget(self.main_window.connection_status)
+\ No newline at end of file
+diff --git a/src/widgets.py b/src/widgets.py
+index 6efe208..6ebd769 100644
+--- a/src/widgets.py
++++ b/src/widgets.py
+@@ -3,10 +3,10 @@ Custom Widgets for DBI Backend
+ """
+ from PyQt6.QtWidgets import (
+     QTreeWidget, QTreeWidgetItem, QSplitterHandle, QSplitter,
+-    QStyledItemDelegate, QCheckBox, QProgressBar
++    QStyledItemDelegate, QCheckBox, QProgressBar, QWidget
+ )
+-from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect
+-from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QPen, QLinearGradient
++from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect, QPropertyAnimation, QPoint, pyqtProperty
++from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QPen, QLinearGradient, QPaintEvent
+ 
+ class FileTreeWidgetItem(QTreeWidgetItem):
+     """Custom tree widget item with advanced sorting logic"""
+@@ -37,13 +37,10 @@ class FileTreeWidgetItem(QTreeWidgetItem):
+     def __lt__(self, other):
+         if not isinstance(other, FileTreeWidgetItem):
+             return super().__lt__(other)
+-            
+         tree = self.treeWidget()
+         if not tree:
+             return super().__lt__(other)
+-
+         sort_column = tree.sortColumn()
+-
+         if sort_column == 3:
+             return self._get_status_sort_tuple() < other._get_status_sort_tuple()
+         elif sort_column == 2:
+@@ -56,7 +53,6 @@ class FileTreeWidgetItem(QTreeWidgetItem):
+ 
+ class CustomSplitterHandle(QSplitterHandle):
+     """Custom splitter handle with modern styling"""
+-
+     def __init__(self, orientation, parent):
+         super().__init__(orientation, parent)
+         self.is_collapsed = False
+@@ -111,7 +107,6 @@ class ZoomableTreeWidget(QTreeWidget):
+     def __init__(self, main_window):
+         super().__init__(main_window)
+         self.file_manager = getattr(main_window, 'file_manager', None)
+-        
+         self.zoom_level = 0
+         self.base_font_size = 9
+         self.min_zoom = -5
+@@ -165,7 +160,6 @@ class ProgressDelegate(QStyledItemDelegate):
+             filename = item.text(1)
+             is_skipped = filename in self.skipped_files
+             progress = self.progress_data.get(filename, 0)
+-            
+             status_data = item.data(3, Qt.ItemDataRole.UserRole) or 0
+             is_done = (status_data == 2)
+ 
+@@ -185,84 +179,98 @@ class ProgressDelegate(QStyledItemDelegate):
+                 painter.setClipRect(option.rect)
+                 painter.fillRect(progress_rect, QBrush(fill_color))
+                 painter.restore()
+-
+         super().paint(painter, option, index)
+ 
+ 
+ class AnimatedProgressBar(QProgressBar):
+-    """
+-    A progress bar that shows a moving gradient animation.
+-    """
++    """A progress bar that shows a moving gradient animation."""
+     def __init__(self, parent=None):
+         super().__init__(parent)
+         self.animation_offset = 0.0
+-        self.bar_color = QColor("#4CAF50") # Default
++        self.bar_color = QColor("#4CAF50")
+         self.is_animating = False
+ 
+     def set_theme_color(self, hex_color):
+-        """Sets the base color for the progress bar"""
+         self.bar_color = QColor(hex_color)
+         self.update()
+ 
+     def step_animation(self):
+-        """Call this on every chunk transfer."""
+-        if self.value() >= 100 or self.value() <= 0:
+-            return
++        if self.value() >= 100 or self.value() <= 0: return
+         self.animation_offset += 0.05
+-        if self.animation_offset > 1.0:
+-            self.animation_offset -= 1.0
++        if self.animation_offset > 1.0: self.animation_offset -= 1.0
+         self.update()
+ 
+     def paintEvent(self, event):
+-        """Custom paint to draw the moving gradient over the chunk"""
+         painter = QPainter(self)
+         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+-        
+         rect = self.rect()
+-        
+-        # --- FIX: Determine background color based on Palette/Text Color ---
+-        # If text is light (Dark Mode), background should be dark.
+-        # If text is dark (Light Mode), background should be light.
+         text_color = self.palette().text().color()
+-        if text_color.lightness() > 128:
+-            # Dark Mode detected
+-            bg_color = QColor("#252526") # Matching theme
+-        else:
+-            # Light Mode detected
+-            bg_color = QColor("#e0e0e0") # Matching theme
+-            
++        bg_color = QColor("#252526") if text_color.lightness() > 128 else QColor("#e0e0e0")
+         painter.fillRect(rect, bg_color)
+-        
+-        # Calculate width
+-        if self.maximum() > 0:
+-            ratio = self.value() / self.maximum()
+-        else:
+-            ratio = 0
+-            
++        if self.maximum() > 0: ratio = self.value() / self.maximum()
++        else: ratio = 0
+         filled_width = int(rect.width() * ratio)
+-        
+         if filled_width > 0:
+             filled_rect = QRect(0, 0, filled_width, rect.height())
+-            
+             gradient = QLinearGradient(0, 0, rect.width(), 0)
+-            
+             c_base = self.bar_color
+             c_light = self.bar_color.lighter(160)
+-            
+             gradient.setColorAt(0, c_base)
+-            
+             wave_center = self.animation_offset
+-            
+             if 0 <= wave_center - 0.1 <= 1: gradient.setColorAt(wave_center - 0.1, c_base)
+             if 0 <= wave_center <= 1:       gradient.setColorAt(wave_center, c_light)
+             if 0 <= wave_center + 0.1 <= 1: gradient.setColorAt(wave_center + 0.1, c_base)
+-            
+             gradient.setColorAt(1, c_base)
+-
+             painter.fillRect(filled_rect, QBrush(gradient))
+-            
+-        # Draw Text
+         text = self.text()
+         if self.isTextVisible() and text:
+             painter.setPen(text_color)
+-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
+\ No newline at end of file
++            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
++
++# --- Toggle Switch ---
++class ToggleSwitch(QCheckBox):
++    """A custom toggle switch widget."""
++    def __init__(self, parent=None):
++        super().__init__(parent)
++        self.setCursor(Qt.CursorShape.PointingHandCursor)
++        self.setFixedSize(40, 22)
++        
++        # --- FIX: Set specific colors for USB (Off) and HTTP (On) ---
++        self._bg_color_off = QColor("#4CAF50") # Green (USB)
++        self._bg_color_on = QColor("#2196F3")  # Blue (HTTP)
++        self._handle_color = QColor("#FFFFFF")
++        
++        self._handle_position = 3.0
++        self.animation = QPropertyAnimation(self, b"handle_position", self)
++        self.animation.setDuration(200)
++        self.stateChanged.connect(self.setup_animation)
++
++    @pyqtProperty(float)
++    def handle_position(self): return self._handle_position
++
++    @handle_position.setter
++    def handle_position(self, pos): self._handle_position = pos; self.update()
++
++    def set_theme_color(self, color_hex):
++        # Override ON color if needed, but defaults are usually fine
++        self._bg_color_on = QColor(color_hex)
++        self.update()
++
++    def setup_animation(self, state):
++        self.animation.stop()
++        if state: self.animation.setEndValue(float(self.width() - 19))
++        else: self.animation.setEndValue(3.0)
++        self.animation.start()
++
++    def hitButton(self, pos: QPoint): return self.rect().contains(pos)
++
++    def paintEvent(self, e: QPaintEvent):
++        p = QPainter(self)
++        p.setRenderHint(QPainter.RenderHint.Antialiasing)
++        rect = self.rect()
++        track_color = self._bg_color_on if self.isChecked() else self._bg_color_off
++        p.setPen(Qt.PenStyle.NoPen)
++        p.setBrush(track_color)
++        p.drawRoundedRect(0, 0, rect.width(), rect.height(), 11, 11)
++        p.setBrush(self._handle_color)
++        p.drawEllipse(int(self._handle_position), 3, 16, 16)
+\ No newline at end of file

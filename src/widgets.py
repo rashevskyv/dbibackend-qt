@@ -3,10 +3,10 @@ Custom Widgets for DBI Backend
 """
 from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QSplitterHandle, QSplitter,
-    QStyledItemDelegate, QCheckBox, QProgressBar
+    QStyledItemDelegate, QCheckBox, QProgressBar, QWidget
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect
-from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QPen, QLinearGradient
+from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect, QPropertyAnimation, QPoint, pyqtProperty
+from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QPen, QLinearGradient, QPaintEvent
 
 class FileTreeWidgetItem(QTreeWidgetItem):
     """Custom tree widget item with advanced sorting logic"""
@@ -37,13 +37,10 @@ class FileTreeWidgetItem(QTreeWidgetItem):
     def __lt__(self, other):
         if not isinstance(other, FileTreeWidgetItem):
             return super().__lt__(other)
-            
         tree = self.treeWidget()
         if not tree:
             return super().__lt__(other)
-
         sort_column = tree.sortColumn()
-
         if sort_column == 3:
             return self._get_status_sort_tuple() < other._get_status_sort_tuple()
         elif sort_column == 2:
@@ -56,7 +53,6 @@ class FileTreeWidgetItem(QTreeWidgetItem):
 
 class CustomSplitterHandle(QSplitterHandle):
     """Custom splitter handle with modern styling"""
-
     def __init__(self, orientation, parent):
         super().__init__(orientation, parent)
         self.is_collapsed = False
@@ -111,7 +107,6 @@ class ZoomableTreeWidget(QTreeWidget):
     def __init__(self, main_window):
         super().__init__(main_window)
         self.file_manager = getattr(main_window, 'file_manager', None)
-        
         self.zoom_level = 0
         self.base_font_size = 9
         self.min_zoom = -5
@@ -165,7 +160,6 @@ class ProgressDelegate(QStyledItemDelegate):
             filename = item.text(1)
             is_skipped = filename in self.skipped_files
             progress = self.progress_data.get(filename, 0)
-            
             status_data = item.data(3, Qt.ItemDataRole.UserRole) or 0
             is_done = (status_data == 2)
 
@@ -185,84 +179,98 @@ class ProgressDelegate(QStyledItemDelegate):
                 painter.setClipRect(option.rect)
                 painter.fillRect(progress_rect, QBrush(fill_color))
                 painter.restore()
-
         super().paint(painter, option, index)
 
 
 class AnimatedProgressBar(QProgressBar):
-    """
-    A progress bar that shows a moving gradient animation.
-    """
+    """A progress bar that shows a moving gradient animation."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.animation_offset = 0.0
-        self.bar_color = QColor("#4CAF50") # Default
+        self.bar_color = QColor("#4CAF50")
         self.is_animating = False
 
     def set_theme_color(self, hex_color):
-        """Sets the base color for the progress bar"""
         self.bar_color = QColor(hex_color)
         self.update()
 
     def step_animation(self):
-        """Call this on every chunk transfer."""
-        if self.value() >= 100 or self.value() <= 0:
-            return
+        if self.value() >= 100 or self.value() <= 0: return
         self.animation_offset += 0.05
-        if self.animation_offset > 1.0:
-            self.animation_offset -= 1.0
+        if self.animation_offset > 1.0: self.animation_offset -= 1.0
         self.update()
 
     def paintEvent(self, event):
-        """Custom paint to draw the moving gradient over the chunk"""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
         rect = self.rect()
-        
-        # --- FIX: Determine background color based on Palette/Text Color ---
-        # If text is light (Dark Mode), background should be dark.
-        # If text is dark (Light Mode), background should be light.
         text_color = self.palette().text().color()
-        if text_color.lightness() > 128:
-            # Dark Mode detected
-            bg_color = QColor("#252526") # Matching theme
-        else:
-            # Light Mode detected
-            bg_color = QColor("#e0e0e0") # Matching theme
-            
+        bg_color = QColor("#252526") if text_color.lightness() > 128 else QColor("#e0e0e0")
         painter.fillRect(rect, bg_color)
-        
-        # Calculate width
-        if self.maximum() > 0:
-            ratio = self.value() / self.maximum()
-        else:
-            ratio = 0
-            
+        if self.maximum() > 0: ratio = self.value() / self.maximum()
+        else: ratio = 0
         filled_width = int(rect.width() * ratio)
-        
         if filled_width > 0:
             filled_rect = QRect(0, 0, filled_width, rect.height())
-            
             gradient = QLinearGradient(0, 0, rect.width(), 0)
-            
             c_base = self.bar_color
             c_light = self.bar_color.lighter(160)
-            
             gradient.setColorAt(0, c_base)
-            
             wave_center = self.animation_offset
-            
             if 0 <= wave_center - 0.1 <= 1: gradient.setColorAt(wave_center - 0.1, c_base)
             if 0 <= wave_center <= 1:       gradient.setColorAt(wave_center, c_light)
             if 0 <= wave_center + 0.1 <= 1: gradient.setColorAt(wave_center + 0.1, c_base)
-            
             gradient.setColorAt(1, c_base)
-
             painter.fillRect(filled_rect, QBrush(gradient))
-            
-        # Draw Text
         text = self.text()
         if self.isTextVisible() and text:
             painter.setPen(text_color)
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
+
+# --- Toggle Switch ---
+class ToggleSwitch(QCheckBox):
+    """A custom toggle switch widget."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(40, 22)
+        
+        # --- FIX: Set specific colors for USB (Off) and HTTP (On) ---
+        self._bg_color_off = QColor("#4CAF50") # Green (USB)
+        self._bg_color_on = QColor("#2196F3")  # Blue (HTTP)
+        self._handle_color = QColor("#FFFFFF")
+        
+        self._handle_position = 3.0
+        self.animation = QPropertyAnimation(self, b"handle_position", self)
+        self.animation.setDuration(200)
+        self.stateChanged.connect(self.setup_animation)
+
+    @pyqtProperty(float)
+    def handle_position(self): return self._handle_position
+
+    @handle_position.setter
+    def handle_position(self, pos): self._handle_position = pos; self.update()
+
+    def set_theme_color(self, color_hex):
+        # Override ON color if needed, but defaults are usually fine
+        self._bg_color_on = QColor(color_hex)
+        self.update()
+
+    def setup_animation(self, state):
+        self.animation.stop()
+        if state: self.animation.setEndValue(float(self.width() - 19))
+        else: self.animation.setEndValue(3.0)
+        self.animation.start()
+
+    def hitButton(self, pos: QPoint): return self.rect().contains(pos)
+
+    def paintEvent(self, e: QPaintEvent):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = self.rect()
+        track_color = self._bg_color_on if self.isChecked() else self._bg_color_off
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(track_color)
+        p.drawRoundedRect(0, 0, rect.width(), rect.height(), 11, 11)
+        p.setBrush(self._handle_color)
+        p.drawEllipse(int(self._handle_position), 3, 16, 16)

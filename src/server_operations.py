@@ -22,31 +22,33 @@ class ServerManager:
         self.http_handler = None
         
         self.transfer_stats = {
-            'total_files': 0,
-            'completed_files': 0,
-            'skipped_files': 0,
-            'start_time': None
+            'total_files': 0, 'completed_files': 0, 'skipped_files': 0, 'start_time': None
         }
         self.completed_files_set = set()
         self.current_processing_file = None
-
         self.reconnect_timer = QTimer()
 
     def toggle_server(self):
-        mode = self.main_window.mode_combo.currentText()
-        is_usb = "USB" in mode
+        # FIX: Replaced mode_combo with mode_switch
+        # Unchecked = USB (False), Checked = HTTP (True)
+        is_http = self.main_window.mode_switch.isChecked()
+        is_usb = not is_http
         
         is_running = (self.usb_handler and self.usb_handler.is_running) or \
                      (self.http_handler and self.http_handler.is_running)
 
         if not is_running:
-            if is_usb: self.start_usb_server()
-            else: self.start_http_server()
+            if is_usb:
+                self.start_usb_server()
+            else:
+                self.start_http_server()
         else:
             if QMessageBox.question(self.main_window, 'Stop Server', 
-                'Stop the current server? Any ongoing transfers will be interrupted.') == QMessageBox.StandardButton.Yes:
-                if is_usb: self.stop_usb_server()
-                else: self.stop_http_server()
+                'Stop the current server?') == QMessageBox.StandardButton.Yes:
+                if self.usb_handler:
+                    self.stop_usb_server()
+                elif self.http_handler:
+                    self.stop_http_server()
 
     def get_checked_files(self) -> Dict[str, Path]:
         checked_files = {}
@@ -66,13 +68,10 @@ class ServerManager:
         self.transfer_stats['skipped_files'] = 0
         self.completed_files_set.clear()
         self.current_processing_file = None
-        
         self.main_window.progress_delegate.clear_all()
-        
         for i in range(self.main_window.file_tree.topLevelItemCount()):
             item = self.main_window.file_tree.topLevelItem(i)
             self.main_window.file_manager.update_file_status(item.text(1), '')
-            
         self.main_window.current_progress.setValue(0)
         self.main_window.overall_progress.setValue(0)
         self.main_window.speed_label.setText('Speed: 0 MB/s')
@@ -91,7 +90,6 @@ class ServerManager:
         
         tree = self.main_window.file_tree
         tree.sortItems(3, tree.header().sortIndicatorOrder())
-
         self.main_window.log('info', f'Starting USB server with {len(checked_files)} files')
         
         if self.main_window.taskbar_manager:
@@ -107,7 +105,6 @@ class ServerManager:
         self.usb_handler.file_skipped.connect(self.on_file_skipped)
         self.usb_handler.transfer_reset.connect(self.on_transfer_reset)
         self.usb_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
-
         self.usb_handler.start()
         self._set_server_ui_state(True)
         self.transfer_stats['start_time'] = datetime.now()
@@ -118,11 +115,10 @@ class ServerManager:
             self.usb_handler.stop()
             self.usb_handler = None
         self._set_server_ui_state(False)
-        self.main_window.file_manager.reset_items_visuals()
-        
-        if self.main_window.taskbar_manager:
-            self.main_window.taskbar_manager.hide_progress()
-            
+        self.main_window.file_manager.handle_server_stop()
+        self.main_window.current_progress.setValue(0)
+        self.main_window.overall_progress.setValue(0)
+        if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
         self.main_window.log('info', 'USB Server stopped')
         self.main_window.current_file_label.setText('Server stopped')
 
@@ -182,18 +178,22 @@ class ServerManager:
             self.http_handler.stop()
             self.http_handler = None
         self._set_server_ui_state(False)
-        self.main_window.file_manager.reset_items_visuals()
-
-        if self.main_window.taskbar_manager:
-            self.main_window.taskbar_manager.hide_progress()
+        self.main_window.file_manager.handle_server_stop()
+        self.main_window.current_progress.setValue(0)
+        self.main_window.overall_progress.setValue(0)
+        if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
 
     def on_progress_updated(self, filename, transferred, speed, total_req_size, num_files, cur_bytes, cur_size, _unused):
         self.main_window.current_file_label.setText(filename)
+        
+        if self.current_processing_file and self.current_processing_file != filename:
+            status = self.main_window.file_manager.get_file_status_code(self.current_processing_file)
+            if status != 2: self.main_window.file_manager.update_file_status(self.current_processing_file, 'skipped')
+        
         if self.current_processing_file != filename:
             self.current_processing_file = filename
             self.main_window.file_manager.update_file_status(filename, 'process')
 
-        # Current File Progress
         if cur_size > 0:
             pct = int((cur_bytes / cur_size) * 100)
             self.main_window.current_progress.setFormat(f'{pct}% ({format_size(cur_bytes)} / {format_size(cur_size)})')
@@ -206,16 +206,12 @@ class ServerManager:
         
         self.main_window.speed_label.setText(f'Speed: {speed:.1f} MB/s')
         
-        # Overall Progress Logic
         completed = self.transfer_stats['completed_files'] + self.transfer_stats['skipped_files']
         total_files = self.transfer_stats['total_files']
         
         if total_req_size > 0:
             raw_pct = (transferred / total_req_size) * 100
             overall_pct = int(raw_pct)
-            
-            # --- FIX: Aggressive 100% forcing ---
-            # If we are basically done (>99.9%) or all files are accounted for
             is_finished = (completed >= total_files and total_files > 0)
             
             if is_finished or raw_pct >= 99.9:
@@ -236,7 +232,6 @@ class ServerManager:
             elapsed = (datetime.now() - self.transfer_stats['start_time']).seconds
             self.main_window.session_time_label.setText(f"Time: {format_time(elapsed)}")
 
-        # ETA
         if completed < total_files:
             if speed > 0 and total_req_size > transferred:
                 remaining_bytes = total_req_size - transferred
@@ -251,10 +246,8 @@ class ServerManager:
         if filename not in self.completed_files_set:
             self.completed_files_set.add(filename)
             self.transfer_stats['completed_files'] += 1
-            
             self.main_window.file_manager.update_file_status(filename, 'done')
             self.main_window.progress_delegate.set_progress(filename, 100)
-            
             for i in range(self.main_window.file_tree.topLevelItemCount()):
                 item = self.main_window.file_tree.topLevelItem(i)
                 if item.text(1) == filename:
@@ -265,21 +258,16 @@ class ServerManager:
                     break
             self.main_window.on_item_checked()
             
-            # --- FIX: Check if THIS was the last file and force UI update immediately ---
             total = self.transfer_stats['total_files']
             done = self.transfer_stats['completed_files'] + self.transfer_stats['skipped_files']
-            
             if total > 0 and done >= total:
                 self.main_window.overall_progress.setValue(100)
-                # Parse current format to keep size info but say 100%
                 current_text = self.main_window.overall_progress.text() 
                 if "(" in current_text:
-                    # Keep the sizes part: "99% (102GB / 102GB)" -> "100% (102GB / 102GB)"
                     sizes_part = current_text.split("(", 1)[1]
                     self.main_window.overall_progress.setFormat(f"100% ({sizes_part}")
                 else:
                     self.main_window.overall_progress.setFormat("100%")
-                    
                 self.main_window.eta_label.setText('ETA: Done')
                 if self.main_window.taskbar_manager:
                     self.main_window.taskbar_manager.set_progress_value(100)
@@ -288,7 +276,7 @@ class ServerManager:
         self.transfer_stats['skipped_files'] += 1
         self.main_window.file_manager.update_file_status(filename, 'failed')
         self.main_window.progress_delegate.mark_skipped(filename)
-        self.main_window.log('warning', f'Skipped by Switch: {filename}')
+        self.main_window.log('warning', f'Skipped: {filename}')
 
     def on_transfer_reset(self):
         self.main_window.log('info', 'Switch reset sequence.')
@@ -297,15 +285,12 @@ class ServerManager:
 
     def on_all_transfers_complete(self):
         self.main_window.log('success', 'All transfers complete!')
-        
-        # Double ensure 100% visually
         self.main_window.current_progress.setValue(100)
         self.main_window.overall_progress.setValue(100)
         self.main_window.eta_label.setText('ETA: Done')
         self.main_window.current_file_label.setText('Done')
         
-        if self.main_window.taskbar_manager:
-            self.main_window.taskbar_manager.hide_progress()
+        if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
         
         success = self.transfer_stats['completed_files']
         skipped = self.transfer_stats['skipped_files']
@@ -314,21 +299,14 @@ class ServerManager:
             elapsed = (datetime.now() - self.transfer_stats['start_time']).seconds
             time_taken = format_time(elapsed)
 
-        msg = (
-            f"Transfer Session Complete!\n\n"
-            f"Installed: {success}\n"
-            f"Skipped/Failed: {skipped}\n"
-            f"Time Taken: {time_taken}"
-        )
-        
+        msg = (f"Session Complete!\n\nInstalled: {success}\nSkipped: {skipped}\nTime: {time_taken}")
         QMessageBox.information(self.main_window, "Complete", msg)
         
         if self.usb_handler: self.usb_handler = None
         if self.http_handler: self.http_handler = None
         
         self._set_server_ui_state(False)
-        
-        self.main_window.file_manager.reset_items_visuals()
+        self.main_window.file_manager.handle_server_stop()
         self.main_window.current_progress.setValue(0)
         self.main_window.overall_progress.setValue(0)
         self.main_window.current_file_label.setText("No transfer in progress")
@@ -337,27 +315,40 @@ class ServerManager:
     # (Unchanged stubs)
     def on_http_server_started(self, ip, port): pass
     def on_http_server_stopped(self): pass
+
     def _set_server_ui_state(self, running: bool):
         btn = self.main_window.start_server_btn
         if running:
             btn.setText('⏹')
             btn.setStyleSheet('QPushButton { background-color: #f44336; color: white; font-size: 32px; } QPushButton:hover { background-color: #da190b; }')
             self.main_window.server_label.setText('Stop Server')
-            self.main_window.mode_combo.setEnabled(False)
+            self.main_window.mode_switch.setEnabled(False) 
             self.main_window.add_files_btn.setEnabled(False)
             self.main_window.clear_list_btn.setEnabled(False)
         else:
             btn.setText('▶')
-            btn.setStyleSheet('QPushButton { background-color: #4CAF50; color: white; font-size: 32px; } QPushButton:hover:enabled { background-color: #45a049; } QPushButton:disabled { background-color: #BDBDBD; }')
-            mode = self.main_window.mode_combo.currentText()
-            self.main_window.server_label.setText(f'Start {"HTTP" if "HTTP" in mode else "USB"}')
-            self.main_window.mode_combo.setEnabled(True)
+            
+            # --- FIX: Check toggle state instead of combo text ---
+            is_http = self.main_window.mode_switch.isChecked()
+            
+            if is_http:
+                btn.setStyleSheet(self.main_window._get_btn_style("#2196F3", "#1976D2"))
+                self.main_window.server_label.setText('Start HTTP')
+            else:
+                btn.setStyleSheet(self.main_window._get_btn_style("#4CAF50", "#45a049"))
+                self.main_window.server_label.setText('Start USB')
+                
+            self.main_window.mode_switch.setEnabled(True)
             self.main_window.add_files_btn.setEnabled(True)
             self.main_window.clear_list_btn.setEnabled(True)
+
     def check_connection(self):
-        if "USB" in self.main_window.mode_combo.currentText():
+        # FIX: Check toggle state instead of combo text
+        is_usb = not self.main_window.mode_switch.isChecked()
+        if is_usb:
             if self.usb_handler is None and self.main_window.file_tree.topLevelItemCount() > 0:
                  self.main_window.start_server_btn.setEnabled(True)
+    
     def on_connection_changed(self, status):
         if status == ConnectionStatus.CONNECTED: self.main_window.connection_status.setText('🟢 Connected')
         elif status == ConnectionStatus.CONNECTING: self.main_window.connection_status.setText('🟡 Connecting...')
