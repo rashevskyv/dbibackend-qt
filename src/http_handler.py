@@ -13,6 +13,7 @@ from typing import Dict, List, Tuple
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from .http_request_handler import DBIRequestHandler
+from .progress_tracker import ProgressTracker
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
@@ -28,6 +29,8 @@ class HTTPHandler(QThread):
     progress_updated = pyqtSignal(str, object, float, object, int, object, object, object)
     file_progress = pyqtSignal(str, int)
     transfer_complete = pyqtSignal(str)
+    file_skipped = pyqtSignal(str, object)
+    all_transfers_complete = pyqtSignal()
     
     def __init__(self, file_list: Dict[str, Path], port: int = 8080):
         super().__init__()
@@ -47,11 +50,8 @@ class HTTPHandler(QThread):
         
         self.lock = threading.Lock()
         
-        # --- RESTORED LOGIC: Interval Tracking for accurate progress ---
-        self.file_intervals: Dict[str, List[Tuple[int, int]]] = {name: [] for name in file_list.keys()}
-        self.requested_files = set()
-        self.total_requested_size = 0
-        self.unique_bytes_transferred = 0
+        # Centralized Progress Tracker
+        self.progress_tracker = ProgressTracker(file_list)
         
         # Helpers for current file tracking
         self.current_file_downloading = None
@@ -69,44 +69,30 @@ class HTTPHandler(QThread):
     def register_file_request(self, filename: str, file_size: int):
         """Called when a download starts for a file"""
         with self.lock:
-            if filename not in self.requested_files:
-                self.requested_files.add(filename)
-                self.total_requested_size += file_size
+            self.progress_tracker.register_file_request(filename)
+
+    def mark_file_skipped(self, filename: str):
+        """Manually mark a file as skipped (e.g., from UI or reset)"""
+        with self.lock:
+            self.progress_tracker.mark_file_skipped(filename)
+            # Emit for UI update
+            path = self.file_list.get(filename)
+            size = path.stat().st_size if path else 0
+            self.file_skipped.emit(filename, size)
 
     def update_progress(self, filename: str, start: int, end: int):
-        """
-        Smart progress update.
-        Merges overlapping intervals (e.g., multi-threaded download)
-        to calculate actual unique bytes sent.
-        """
         with self.lock:
-            if filename not in self.file_intervals:
-                self.file_intervals[filename] = []
-
-            intervals = self.file_intervals[filename]
-            intervals.append((start, end))
-            intervals.sort()
-
-            # Merge overlaps
-            merged = []
-            for s, e in intervals:
-                if merged and s <= merged[-1][1]:
-                    merged[-1] = (merged[-1][0], max(merged[-1][1], e))
-                else:
-                    merged.append((s, e))
-
-            self.file_intervals[filename] = merged
-
-            # Calculate unique bytes for this file
-            file_unique_bytes = sum(e - s for s, e in merged)
-
-            # Calculate total unique bytes for session
-            self.unique_bytes_transferred = sum(
-                sum(e - s for s, e in interval_list)
-                for interval_list in self.file_intervals.values()
-            )
+            file_unique_bytes = self.progress_tracker.add_interval(filename, start, end)
             
-            return file_unique_bytes, self.unique_bytes_transferred, self.total_requested_size, len(self.requested_files)
+            # Update local byte tracking for this specific interval session
+            # (Note: progress_tracker handles the interval merging internally)
+            
+            return (
+                file_unique_bytes, 
+                self.progress_tracker.unique_bytes_transferred, 
+                self.progress_tracker.total_requested_size, 
+                len(self.progress_tracker.requested_files)
+            )
 
     def run(self):
         try:

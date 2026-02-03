@@ -153,8 +153,8 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
         handler_thread.current_file_downloading = original_filename
         handler_thread.register_file_request(original_filename, file_size)
         
-        total_requested_size = handler_thread.total_requested_size
-        num_files = len(handler_thread.requested_files)
+        total_requested_size = handler_thread.progress_tracker.total_requested_size
+        num_files = len(handler_thread.progress_tracker.requested_files)
 
         # Log start
         if start == 0:

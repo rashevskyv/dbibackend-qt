@@ -173,6 +173,8 @@ class ServerManager:
         self.http_handler.progress_updated.connect(self.on_progress_updated)
         self.http_handler.file_progress.connect(self.on_file_progress)
         self.http_handler.transfer_complete.connect(self.on_transfer_complete)
+        self.http_handler.file_skipped.connect(self.on_file_skipped)
+        self.http_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
         
         self.http_handler.start()
         self.main_window.setWindowTitle(f"DBI Backend Qt v2.3.14 | HTTP Server: http://{HTTPHandler.get_local_ip()}:{selected_port}/")
@@ -197,6 +199,8 @@ class ServerManager:
                 self.main_window.file_manager.update_file_status(self.current_processing_file, 'skipped')
                 if self.usb_handler:
                     self.usb_handler.progress_tracker.mark_file_skipped(self.current_processing_file)
+                elif self.http_handler:
+                    self.http_handler.mark_file_skipped(self.current_processing_file)
                 self.main_window.log('debug', f'Implicitly skipped: {self.current_processing_file}')
         
         if self.current_processing_file != filename:
@@ -274,7 +278,8 @@ class ServerManager:
             path = self.main_window.file_manager.file_list.get(filename)
             fsize = path.stat().st_size if path else 0
             prog_fmt = self.main_window.overall_progress.format()
-            new_target = format_size(self.usb_handler.progress_tracker.total_requested_size) if self.usb_handler else "N/A"
+            tracker = self.usb_handler.progress_tracker if self.usb_handler else (self.http_handler.progress_tracker if self.http_handler else None)
+            new_target = format_size(tracker.total_requested_size) if tracker else "N/A"
             print(f"[PROGRESS] Completed: {filename} ({format_size(fsize)}) | Overall: {prog_fmt} / Target: {new_target}")
 
             total = self.transfer_stats['total_files']
@@ -294,6 +299,12 @@ class ServerManager:
     def on_file_skipped(self, filename, size):
         if self.usb_handler:
             self.usb_handler.progress_tracker.mark_file_skipped(filename)
+        elif self.http_handler:
+            # Note: http_handler.mark_file_skipped already calls emitter.file_skipped, 
+            # so we check if it's already in skipped_files to avoid recursion if called from there
+            if filename not in self.http_handler.progress_tracker.skipped_files:
+                self.http_handler.mark_file_skipped(filename)
+                return # Avoid duplicate UI logs below if called recursively
             
         self.transfer_stats['skipped_files'] += 1
         self.main_window.file_manager.update_file_status(filename, 'failed')
