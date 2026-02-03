@@ -152,7 +152,7 @@ class USBHandler(QThread):
         
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_LIST, len(data)))
         if len(data) > 0:
-            self.in_ep.read(16, timeout=1000) # Read Ack
+            self.in_ep.read(16, timeout=0) # Read Ack
             self.out_ep.write(data)
 
     def process_file_range_command(self, data_size):
@@ -167,7 +167,7 @@ class USBHandler(QThread):
         
         # Respond
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_FILE_RANGE, range_size))
-        self.in_ep.read(16, timeout=1000) # Final Ack
+        self.in_ep.read(16, timeout=0) # Final Ack
 
         path = self.file_list.get(name)
         if not path: 
@@ -211,7 +211,7 @@ class USBHandler(QThread):
             while remaining > 0:
                 read_amount = min(remaining, chunk_size)
                 chunk = f.read(read_amount)
-                self.out_ep.write(chunk, timeout=1000)
+                self.out_ep.write(chunk, timeout=0)
                 
                 sent = len(chunk)
                 remaining -= sent

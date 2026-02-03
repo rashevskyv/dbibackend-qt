@@ -235,6 +235,7 @@ class MainWindow(QMainWindow):
 
     def log(self, level, message):
         t = datetime.now().strftime('%H:%M:%S')
+        print(f"[{t}] [{level.upper()}] {message}") # Console logging
         c = {'debug':'#9E9E9E','info':'#2196F3','success':'#4CAF50','warning':'#FF9800','error':'#F44336'}.get(level,'#000')
         i = {'debug':'🔍','info':'ℹ️','success':'✓','warning':'⚠','error':'✗'}.get(level,'')
         self.log_text.append(f'<span style="color:{c};">[{t}] {i} {message}</span>')
