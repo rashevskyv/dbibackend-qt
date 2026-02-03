@@ -119,13 +119,7 @@ class ServerManager:
             self.usb_handler = None
         self._set_server_ui_state(False)
         self.main_window.file_manager.handle_server_stop()
-        self.main_window.current_progress.setValue(0)
-        self.main_window.overall_progress.setValue(0)
-        if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
-        self.main_window.setWindowTitle("DBI Backend Qt v2.3.14")
         self.main_window.log('info', 'USB Server stopped')
-        self.main_window.current_file_label.setText('Server stopped')
-        self.main_window.overall_label.setText("0 / 0 files") # Ensure clean UI reset
 
     def start_http_server(self):
         checked_files = self.get_checked_files()
@@ -187,13 +181,6 @@ class ServerManager:
             self.http_handler = None
         self._set_server_ui_state(False)
         self.main_window.file_manager.handle_server_stop()
-        self.main_window.current_progress.setValue(0)
-        self.main_window.overall_progress.setValue(0)
-        if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
-        self.main_window.setWindowTitle("DBI Backend Qt v2.3.14") # Ensure clean UI reset
-        self.main_window.log('info', 'HTTP Server stopped') # Ensure clean UI reset
-        self.main_window.current_file_label.setText('Server stopped') # Ensure clean UI reset
-        self.main_window.overall_label.setText("0 / 0 files") # Ensure clean UI reset
 
     def on_progress_updated(self, filename, transferred, speed, total_req_size, num_files, cur_bytes, cur_size, _unused):
         self.main_window.current_file_label.setText(filename)
@@ -379,10 +366,6 @@ class ServerManager:
         
         self._set_server_ui_state(False)
         self.main_window.file_manager.handle_server_stop()
-        self.main_window.current_progress.setValue(0)
-        self.main_window.overall_progress.setValue(0)
-        self.main_window.current_file_label.setText("No transfer in progress")
-        self.main_window.overall_label.setText("0 / 0 files")
 
     # (Unchanged stubs)
     def on_http_server_started(self, ip, port): pass

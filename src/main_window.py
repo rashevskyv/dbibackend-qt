@@ -174,6 +174,9 @@ class MainWindow(QMainWindow):
             self.usb_label.setStyleSheet("font-weight: bold; color: #4CAF50;")
             self.http_label.setStyleSheet("color: gray;")
             self.start_server_btn.setStyleSheet(self._get_btn_style("#4CAF50", "#45a049"))
+        
+        # Reset progress bars and visuals on mode switch
+        self.file_manager.handle_server_stop()
 
     def toggle_server(self): self.server_manager.toggle_server()
 
