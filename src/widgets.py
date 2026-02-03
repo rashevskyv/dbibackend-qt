@@ -23,14 +23,27 @@ class FileTreeWidgetItem(QTreeWidgetItem):
         if widget:
             cb = widget.findChild(QCheckBox)
             if cb: is_checked = cb.isChecked()
+
+        # Priority mapping: lower is higher on the list
+        if status_data == 1:   # Process
+            primary_priority = 0
+        elif status_data == 0: # Queued
+            primary_priority = 1
+        elif status_data == 2: # Done
+            primary_priority = 2
+        elif status_data in (3, 4): # Failed or Skipped
+            primary_priority = 3
+        else:
+            primary_priority = 5
         
-        primary_priority = 2
-        if status_data == 1: primary_priority = 0
-        elif status_data == 2: primary_priority = 1
-        elif not is_checked and hasattr(tree, 'file_manager') and tree.file_manager.preset_loaded: primary_priority = 3
+        # Unchecked files in a loaded preset appear at the very bottom
+        if not is_checked and hasattr(tree, 'file_manager') and tree.file_manager.preset_loaded:
+            primary_priority = 10 
         
         secondary_sort = 0
-        if primary_priority == 1: secondary_sort = -size_data
+        # For Done files, sort by size descending internally
+        if primary_priority == 2: 
+            secondary_sort = -size_data
         
         return (primary_priority, secondary_sort, self.text(1))
 
