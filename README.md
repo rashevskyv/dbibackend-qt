@@ -18,6 +18,8 @@
 *   **Supported Formats:** Full support for `.nsp`, `.nsz`, `.xci`, and `.xcz` files.
 *   **Drag & Drop:** Easily add files or entire folders by dragging them into the window.
 *   **Dynamic Statistics:** Real-time calculation of file count and total size for both the entire list and currently checked items (e.g., `Selected: 5 / 10 files`).
+*   **Metadata-Aware:** Automatically dims unselected files when the server starts. Marks checked files as "Skipped" if they weren't requested by the Switch during the selection phase.
+*   **Progress Correction:** Dynamic recalculation of total transfer size if a file is skipped or interrupted, ensuring the progress bar accurately reaches 100%.
 *   **Instant Search:** Filter your long lists instantly using the built-in search bar.
 
 ### 💾 Preset System (.dbi)
