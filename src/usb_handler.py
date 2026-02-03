@@ -68,11 +68,15 @@ class USBHandler(QThread):
         self.is_running = False
         if self.dev:
             try:
+                # Reset the device to break any pending blocking I/O
+                self.dev.reset()
                 usb.util.dispose_resources(self.dev)
             except:
                 pass
         self.quit()
-        self.wait()
+        if not self.wait(2000): # Wait max 2 seconds for thread to finish
+            self.terminate()
+            self.wait()
 
     def connect_to_switch(self) -> bool:
         self.connection_changed.emit(ConnectionStatus.CONNECTING)
@@ -161,22 +165,22 @@ class USBHandler(QThread):
         
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_LIST, len(data)))
         if len(data) > 0:
-            self.in_ep.read(16, timeout=0) # Read Ack
-            self.out_ep.write(data)
+            self.in_ep.read(16, timeout=10000) # Use 10s instead of 0
+            self.out_ep.write(data, timeout=10000)
 
     def process_file_range_command(self, data_size):
         # Ack command
-        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_ACK, dbi_protocol.CMD_ID_FILE_RANGE, data_size), timeout=0)
+        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_ACK, dbi_protocol.CMD_ID_FILE_RANGE, data_size), timeout=10000)
         
         # Read request details
-        header = self.in_ep.read(data_size, timeout=0)
+        header = self.in_ep.read(data_size, timeout=10000)
         range_size = struct.unpack('<I', header[:4])[0]
         range_offset = struct.unpack('<Q', header[4:12])[0]
         name = bytes(header[16:]).decode('utf-8').rstrip('\x00')
         
         # Respond
-        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_FILE_RANGE, range_size))
-        self.in_ep.read(16, timeout=0) # Final Ack
+        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_FILE_RANGE, range_size), timeout=10000)
+        self.in_ep.read(16, timeout=10000) # Final Ack
 
         path = self.file_list.get(name)
         if not path: 
@@ -218,9 +222,10 @@ class USBHandler(QThread):
             chunk_size = dbi_protocol.BUFFER_SEGMENT_DATA_SIZE
             
             while remaining > 0:
+                if not self.is_running: break # Check for stop during transfer
                 read_amount = min(remaining, chunk_size)
                 chunk = f.read(read_amount)
-                self.out_ep.write(chunk, timeout=0)
+                self.out_ep.write(chunk, timeout=10000)
                 
                 sent = len(chunk)
                 remaining -= sent
