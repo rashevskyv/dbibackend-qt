@@ -91,6 +91,7 @@ class ServerManager:
         tree = self.main_window.file_tree
         tree.sortItems(3, tree.header().sortIndicatorOrder())
         self.main_window.log('info', f'Starting USB server with {len(checked_files)} files')
+        self.main_window.file_manager.handle_server_start()
         
         if self.main_window.taskbar_manager:
             self.main_window.taskbar_manager.show_progress()
@@ -105,7 +106,9 @@ class ServerManager:
         self.usb_handler.file_skipped.connect(self.on_file_skipped)
         self.usb_handler.transfer_reset.connect(self.on_transfer_reset)
         self.usb_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
+        self.usb_handler.installation_begun.connect(self.on_installation_begun)
         self.usb_handler.start()
+        self.main_window.setWindowTitle(f"DBI Backend Qt v2.3.14 | USB Mode Active")
         self._set_server_ui_state(True)
         self.transfer_stats['start_time'] = datetime.now()
         self.main_window.overall_label.setText(f'0 / {len(checked_files)} files')
@@ -119,6 +122,7 @@ class ServerManager:
         self.main_window.current_progress.setValue(0)
         self.main_window.overall_progress.setValue(0)
         if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
+        self.main_window.setWindowTitle("DBI Backend Qt v2.3.14")
         self.main_window.log('info', 'USB Server stopped')
         self.main_window.current_file_label.setText('Server stopped')
 
@@ -171,6 +175,7 @@ class ServerManager:
         self.http_handler.transfer_complete.connect(self.on_transfer_complete)
         
         self.http_handler.start()
+        self.main_window.setWindowTitle(f"DBI Backend Qt v2.3.14 | HTTP Server: http://{HTTPHandler.get_local_ip()}:{selected_port}/")
         self._set_server_ui_state(True)
 
     def stop_http_server(self):
@@ -280,8 +285,12 @@ class ServerManager:
 
     def on_transfer_reset(self):
         self.main_window.log('info', 'Switch reset sequence.')
-        self._reset_ui_for_start()
-        self.main_window.file_manager.dim_unchecked_items()
+        self.main_window.file_manager.handle_server_stop() # Reset visual styles
+        self.main_window.file_manager.handle_server_start() # Re-dim unchecked
+        self.main_window.on_item_checked()
+
+    def on_installation_begun(self, requested_filenames):
+        self.main_window.file_manager.handle_installation_start(requested_filenames)
 
     def on_all_transfers_complete(self):
         self.main_window.log('success', 'All transfers complete!')

@@ -34,6 +34,7 @@ class USBHandler(QThread):
     file_skipped = pyqtSignal(str, object)
     transfer_reset = pyqtSignal()
     all_transfers_complete = pyqtSignal()
+    installation_begun = pyqtSignal(list) # Sends list of filenames requested via metadata
 
     def __init__(self, file_list: Dict[str, Path]):
         super().__init__()
@@ -49,6 +50,7 @@ class USBHandler(QThread):
         self.current_transfer_file = None
         self.current_file_bytes_sent = 0
         self.current_file_size = 0
+        self.installation_started = False
 
     def run(self):
         try:
@@ -64,6 +66,11 @@ class USBHandler(QThread):
 
     def stop(self):
         self.is_running = False
+        if self.dev:
+            try:
+                usb.util.dispose_resources(self.dev)
+            except:
+                pass
         self.quit()
         self.wait()
 
@@ -107,7 +114,7 @@ class USBHandler(QThread):
         while self.is_running:
             try:
                 # Read header
-                cmd_header = bytes(self.in_ep.read(16, timeout=0))
+                cmd_header = bytes(self.in_ep.read(16, timeout=1000))
                 if cmd_header[:4] != b'DBI0': continue
 
                 cmd_id = struct.unpack('<I', cmd_header[8:12])[0]
@@ -145,7 +152,7 @@ class USBHandler(QThread):
         
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_LIST, len(data)))
         if len(data) > 0:
-            self.in_ep.read(16, timeout=0) # Read Ack
+            self.in_ep.read(16, timeout=1000) # Read Ack
             self.out_ep.write(data)
 
     def process_file_range_command(self, data_size):
@@ -160,7 +167,7 @@ class USBHandler(QThread):
         
         # Respond
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_FILE_RANGE, range_size))
-        self.in_ep.read(16, timeout=0) # Final Ack
+        self.in_ep.read(16, timeout=1000) # Final Ack
 
         path = self.file_list.get(name)
         if not path: 
@@ -179,6 +186,12 @@ class USBHandler(QThread):
         if is_metadata:
             self.progress_tracker.register_file_request(name)
         elif not is_metadata:
+            if not self.installation_started:
+                self.installation_started = True
+                requested = list(self.progress_tracker.requested_files)
+                self.installation_begun.emit(requested)
+                self.log_message.emit('info', 'Installation phase started.')
+
             if self.transfer_start_time is None: 
                 self.transfer_start_time = time.time()
             
@@ -198,7 +211,7 @@ class USBHandler(QThread):
             while remaining > 0:
                 read_amount = min(remaining, chunk_size)
                 chunk = f.read(read_amount)
-                self.out_ep.write(chunk, timeout=0)
+                self.out_ep.write(chunk, timeout=1000)
                 
                 sent = len(chunk)
                 remaining -= sent

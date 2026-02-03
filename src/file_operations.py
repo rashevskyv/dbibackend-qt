@@ -175,12 +175,24 @@ class FileManager:
                     item.setText(3, '❌ Failed')
                     item.setForeground(3, QColor('#F44336'))
                     item.setData(3, Qt.ItemDataRole.UserRole, 3)
+                elif status == 'skipped':
+                    item.setText(3, '⏭ Skipped')
+                    item.setForeground(3, QColor('#808080'))
+                    item.setData(3, Qt.ItemDataRole.UserRole, 4)
+                    for c in range(self.main_window.file_tree.columnCount()):
+                        item.setForeground(c, QBrush(QColor('#808080')))
                 else:
                     item.setText(3, 'Queued')
                     item.setForeground(3, QColor(self.main_window.palette().text().color()))
                     item.setData(3, Qt.ItemDataRole.UserRole, 0)
                 self.main_window.file_tree.sortItems(3, self.main_window.file_tree.header().sortIndicatorOrder())
                 break
+
+    def get_file_status_code(self, filename: str) -> int:
+        for i in range(self.main_window.file_tree.topLevelItemCount()):
+            item = self.main_window.file_tree.topLevelItem(i)
+            if item.text(1) == filename: return item.data(3, Qt.ItemDataRole.UserRole) or 0
+        return 0
 
     def get_file_status(self, filename: str) -> str:
         for i in range(self.main_window.file_tree.topLevelItemCount()):
@@ -241,6 +253,31 @@ class FileManager:
                 item.setForeground(c, brush)
             item.setText(3, "Queued")
             item.setData(3, Qt.ItemDataRole.UserRole, 0)
+
+    def handle_server_start(self):
+        """Called when any server starts. Dims unchecked files."""
+        self.dim_unchecked_items()
+
+    def handle_server_stop(self):
+        """Called when server stops. Resets visuals."""
+        self.reset_items_visuals()
+
+    def handle_installation_start(self, requested_filenames: list):
+        """Called when the first real data request arrives. 
+        Marks checked but unrequested files as Skipped."""
+        for i in range(self.main_window.file_tree.topLevelItemCount()):
+            item = self.main_window.file_tree.topLevelItem(i)
+            filename = item.text(1)
+            
+            # Check if item is checked
+            w = self.main_window.file_tree.itemWidget(item, 0)
+            is_checked = False
+            if w:
+                cb = w.findChild(QCheckBox)
+                if cb: is_checked = cb.isChecked()
+            
+            if is_checked and filename not in requested_filenames:
+                self.update_file_status(filename, 'skipped')
 
     # --- Presets & Batches ---
 

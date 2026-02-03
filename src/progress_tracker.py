@@ -67,9 +67,13 @@ class ProgressTracker:
             self.total_requested_size += self.get_file_size(filename)
 
     def mark_file_skipped(self, filename: str):
-        if filename in self.requested_files:
+        if filename in self.requested_files and filename not in self.skipped_files:
             self.skipped_files.add(filename)
-            self.total_requested_size -= self.get_file_size(filename)
+            # Subtract only the remaining part of the file from total size
+            # If 30% was transferred, we subtract the 70% that won't be sent.
+            bytes_sent = self.file_bytes_sent.get(filename, 0)
+            file_size = self.get_file_size(filename)
+            self.total_requested_size -= (file_size - bytes_sent)
     
     def reset(self):
         """Reset all transfer-related state."""
