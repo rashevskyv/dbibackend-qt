@@ -263,6 +263,13 @@ class ServerManager:
                     break
             self.main_window.on_item_checked()
             
+            # Console logging
+            from .utility_functions import format_size
+            path = self.main_window.file_manager.file_list.get(filename)
+            fsize = path.stat().st_size if path else 0
+            prog_fmt = self.main_window.overall_progress.format()
+            print(f"[PROGRESS] Completed: {filename} ({format_size(fsize)}) | Total: {prog_fmt}")
+
             total = self.transfer_stats['total_files']
             done = self.transfer_stats['completed_files'] + self.transfer_stats['skipped_files']
             if total > 0 and done >= total:
@@ -278,10 +285,18 @@ class ServerManager:
                     self.main_window.taskbar_manager.set_progress_value(100)
 
     def on_file_skipped(self, filename, size):
+        if self.usb_handler:
+            self.usb_handler.progress_tracker.mark_file_skipped(filename)
+            
         self.transfer_stats['skipped_files'] += 1
         self.main_window.file_manager.update_file_status(filename, 'failed')
         self.main_window.progress_delegate.mark_skipped(filename)
         self.main_window.log('warning', f'Skipped: {filename}')
+        
+        # Console logging
+        from .utility_functions import format_size
+        prog_fmt = self.main_window.overall_progress.format()
+        print(f"[PROGRESS] Skipped: {filename} ({format_size(size)}) | Total: {prog_fmt}")
 
     def on_transfer_reset(self):
         self.main_window.log('info', 'Switch reset sequence.')
@@ -291,6 +306,12 @@ class ServerManager:
 
     def on_installation_begun(self, requested_filenames):
         self.main_window.file_manager.handle_installation_start(requested_filenames)
+        if self.usb_handler:
+            checked = self.get_checked_files()
+            for filename in checked:
+                if filename not in requested_filenames:
+                    self.usb_handler.progress_tracker.mark_file_skipped(filename)
+        self.main_window.log('info', 'Progress recalculated for installation phase.')
 
     def on_all_transfers_complete(self):
         self.main_window.log('success', 'All transfers complete!')
