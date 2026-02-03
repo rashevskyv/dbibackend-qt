@@ -30,8 +30,18 @@ ENV/
 *.swp
 *.swo
 
+# AI and Agents
+.claude/
+CLAUDE.md
+GEMINI.md
+.agent/
+.antigravity/
+
+# Diffs and patches
+*.patch
+*.diff
+diff.txt
+
 # OS
 .DS_Store
 Thumbs.db
-/CLAUDE.md
-/src/__pycache__
