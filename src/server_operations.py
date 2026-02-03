@@ -307,11 +307,20 @@ class ServerManager:
         self.main_window.on_item_checked()
 
     def on_installation_begun(self, requested_filenames):
+        from .utility_functions import format_size
         # Clean null terminators from incoming requested names
         requested_set = {n.rstrip('\x00') for n in requested_filenames}
-        print(f"[DEBUG] Installation Begun. Requested files by DBI: {requested_set}")
         
         self.main_window.log('info', 'Switch initiated installation phase...')
+        
+        # Calculate size of requested files for logging
+        req_total_size = 0
+        for name in requested_set:
+            path = self.main_window.file_manager.file_list.get(name)
+            if path: req_total_size += path.stat().st_size
+            
+        print(f"[DEBUG] Installation Begun. Requested files by DBI: {len(requested_set)} files, Total: {format_size(req_total_size)}")
+        
         self.main_window.file_manager.handle_installation_start(list(requested_set))
         
         if self.usb_handler:
@@ -320,10 +329,10 @@ class ServerManager:
                 if filename not in requested_set:
                     path = self.main_window.file_manager.file_list.get(filename)
                     size = path.stat().st_size if path else 0
-                    print(f"[DEBUG] Mark as skip (not in metadata): {filename}")
+                    print(f"[DEBUG] File NOT requested by DBI (skipping from progress): {filename} ({format_size(size)})")
                     self.on_file_skipped(filename, size)
                     
-        self.main_window.log('info', 'Progress recalculated for installation phase.')
+        self.main_window.log('info', f'Progress recalculated. New target: {format_size(self.usb_handler.progress_tracker.total_requested_size) if self.usb_handler else "N/A"}')
 
     def on_all_transfers_complete(self):
         self.main_window.log('success', 'All transfers complete!')

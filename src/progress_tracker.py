@@ -20,6 +20,11 @@ class ProgressTracker:
         self.total_files = len(file_list)
         self.file_bytes_sent: Dict[str, int] = {name: 0 for name in file_list.keys()}
         self.skipped_files: Set[str] = set()
+        
+        # Pre-initialize with all files in the batch for 'Overall' progress consistency
+        for name in file_list.keys():
+            self.requested_files.add(name)
+            self.total_requested_size += self.get_file_size(name)
 
     def get_file_size(self, filename: str) -> int:
         """Get file size lazily (calculate only when needed)"""
@@ -75,10 +80,13 @@ class ProgressTracker:
             file_size = self.get_file_size(filename)
             old_size = self.total_requested_size
             self.total_requested_size -= (file_size - bytes_sent)
-            print(f"[DEBUG] Tracker: Skipped {filename}. Total size: {old_size} -> {self.total_requested_size}")
+            from .utility_functions import format_size
+            print(f"[DEBUG] Progress Recalculation: Skipped {filename} ({format_size(file_size)}). Total: {format_size(old_size)} -> {format_size(self.total_requested_size)}")
         else:
-            if filename not in self.requested_files:
-                print(f"[DEBUG] Tracker: Cannot skip {filename} - not in requested_files")
+            if filename in self.skipped_files:
+                pass # Already handled
+            else:
+                print(f"[DEBUG] Tracker: Skipped {filename} was not in requested_files list.")
     
     def reset(self):
         """Reset all transfer-related state."""
