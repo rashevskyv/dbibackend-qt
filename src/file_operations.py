@@ -170,21 +170,21 @@ class FileManager:
                 elif status == 'done':
                     item.setText(3, '✅ Done')
                     item.setForeground(3, QColor('#4CAF50'))
-                    item.setData(3, Qt.ItemDataRole.UserRole, 2)
+                    item.setData(3, Qt.ItemDataRole.UserRole, 3)
                 elif status == 'failed':
                     item.setText(3, '❌ Failed')
                     item.setForeground(3, QColor('#F44336'))
-                    item.setData(3, Qt.ItemDataRole.UserRole, 3)
+                    item.setData(3, Qt.ItemDataRole.UserRole, 4)
                 elif status == 'skipped':
                     item.setText(3, '⏭ Skipped')
                     item.setForeground(3, QColor('#808080'))
-                    item.setData(3, Qt.ItemDataRole.UserRole, 4)
+                    item.setData(3, Qt.ItemDataRole.UserRole, 5)
                     for c in range(self.main_window.file_tree.columnCount()):
                         item.setForeground(c, QBrush(QColor('#808080')))
                 else:
                     item.setText(3, 'Queued')
                     item.setForeground(3, QColor(self.main_window.palette().text().color()))
-                    item.setData(3, Qt.ItemDataRole.UserRole, 0)
+                    item.setData(3, Qt.ItemDataRole.UserRole, 2)
                 # DEFER SORTING: break
                 break
 
@@ -252,7 +252,7 @@ class FileManager:
             for c in range(self.main_window.file_tree.columnCount()):
                 item.setForeground(c, brush)
             item.setText(3, "Queued")
-            item.setData(3, Qt.ItemDataRole.UserRole, 0)
+            item.setData(3, Qt.ItemDataRole.UserRole, 2)
 
     def handle_server_start(self):
         """Called when any server starts. Dims unchecked files."""
