@@ -2,7 +2,7 @@
 
 **DBI Backend Qt** is a modern, feature-rich graphical user interface (GUI) for the **DBI** installer (Nintendo Switch). Built with Python 3 and PyQt6, this tool provides a superior alternative to traditional CLI backends, offering an advanced file queue, visual feedback, and deep OS integration.
 
-![Version](https://img.shields.io/badge/version-2.3.15-blue)
+![Version](https://img.shields.io/badge/version-2.3.16-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 

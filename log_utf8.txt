@@ -1,0 +1,19 @@
+﻿Clean up project: add AI files and diffs to gitignore and remove them from repository
+Bump version to 2.3.15 and update README with new features and sorting logic
+Organize status sorting: Process > Queued > Done > (Failed/Skipped alphabetically)
+Restore UI reset on mode switch and ensure clean overall progress state
+Revert sorting changes and unify skipped file styling. Reset HTTP chunk size to 128KB.
+Optimize HTTP transfer speed and fix UI state reset on server stop
+Change status sorting order: Process -> Queued -> Done -> Failed -> Skipped
+Synchronize HTTP server progress logic with USB mode using centralized ProgressTracker
+Fix application hangs by replacing infinite USB timeouts with 10s and improving stop method robustness
+Fix progress recalculation on implicit file skip and enhance size logging
+Initialize progress tracker with full batch size and add detailed size logging for debugging
+Fix progress bar recalculation by stripping null terminators from filenames and updating stats on skip
+Optimize UI performance by deferring sorting and using sets for lookup during install start
+Fix progress bar recalculation on skip and add detailed console logging per file
+Improve USB timeout handling and add detailed CLI logging with tracebacks
+Fix USB reconnection loop by reverting data timeouts and add console logging
+Update README with new features and version 2.3.14
+Implement metadata logic, visual queue updates, progress math correction, and dynamic title
+Replace server mode dropdown with toggle switch and improve UI/logic

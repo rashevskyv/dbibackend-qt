@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import QFileDialog, QTreeWidgetItem, QMessageBox, QMenu, QC
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QColor, QDesktopServices, QBrush
 
-from .widgets import FileTreeWidgetItem
+from .widgets import FileTreeWidgetItem, MissingFileDialog
 from .utility_functions import format_size
 
 class FileManager:
@@ -130,6 +130,17 @@ class FileManager:
                 item.setText(3, "Queued")
                 item.setData(3, Qt.ItemDataRole.UserRole, 0)
                 item.setText(4, str(path))
+
+                if not path.exists():
+                    checkbox.setChecked(False)
+                    checkbox.setEnabled(False)
+                    item.setText(2, "0 B")
+                    item.setData(2, Qt.ItemDataRole.UserRole, 0)
+                    item.setText(3, "⚠️ Missing")
+                    item.setForeground(3, QColor('#F44336'))
+                    item.setData(3, Qt.ItemDataRole.UserRole, 5) # New status for missing
+                    for c in range(self.main_window.file_tree.columnCount()):
+                        item.setForeground(c, QBrush(QColor('#808080')))
             except: continue
         self.main_window.header_checkbox.blockSignals(False)
         self.update_count_label()
@@ -270,7 +281,7 @@ class FileManager:
         self.main_window.overall_label.setText("0 / 0 files")
         self.main_window.speed_label.setText("Speed: 0 MB/s")
         self.main_window.eta_label.setText("ETA: --:--:--")
-        self.main_window.setWindowTitle("DBI Backend Qt v2.3.14")
+        self.main_window.setWindowTitle("DBI Backend Qt v2.3.16")
         if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
 
     def handle_installation_start(self, requested_filenames: list):
@@ -359,19 +370,48 @@ class FileManager:
                 with open(path, 'r', encoding='utf-8') as f: d = json.load(f)
                 self.file_list.clear()
                 to_check = set()
+                
+                raw_files = []
                 if isinstance(d, dict) and "files" in d and isinstance(d["files"], list):
-                    for e in d["files"]:
-                        p = Path(e.get("path",""))
-                        if p.exists():
-                            self.file_list[p.name] = p
-                            if e.get("checked", True): to_check.add(p.name)
+                    raw_files = d["files"]
                 else:
                     items = d.items() if isinstance(d, dict) else []
                     for n, p_str in items:
-                        p = Path(p_str)
-                        if p.exists():
-                            self.file_list[n] = p
-                            to_check.add(n)
+                        raw_files.append({"name": n, "path": p_str, "checked": True})
+
+                bulk_action = None
+                for e in raw_files:
+                    name = e.get("name", "")
+                    p_str = e.get("path", "")
+                    p = Path(p_str)
+                    is_checked = e.get("checked", True)
+
+                    if not p.exists():
+                        if bulk_action in (MissingFileDialog.IGNORE, MissingFileDialog.REMOVE):
+                            if bulk_action == MissingFileDialog.REMOVE: continue
+                            # If IGNORE, we add it but it will be handled by update_file_list
+                        else:
+                            dlg = MissingFileDialog(name, p_str, self.main_window)
+                            if dlg.exec():
+                                if dlg.apply_all: bulk_action = dlg.result_code
+                                
+                                if dlg.result_code == MissingFileDialog.REMOVE:
+                                    continue
+                                elif dlg.result_code == MissingFileDialog.UPDATE:
+                                    new_path, _ = QFileDialog.getOpenFileName(
+                                        self.main_window, f"Locate {name}", 
+                                        str(p.parent), f"Switch Files (*{p.suffix})"
+                                    )
+                                    if new_path:
+                                        p = Path(new_path)
+                                        # When updating one, check if others are there too
+                                        # (This will be handled naturally in next iterations of this loop
+                                        # if they are in the same folder and we update p_str in the preset data,
+                                        # but here we just update THIS one's path)
+
+                    self.file_list[p.name] = p
+                    if is_checked and p.exists(): to_check.add(p.name)
+
                 self.update_file_list(to_check)
                 self.main_window.log('info', f'Loaded preset: {path.name}')
             except Exception as e: self.main_window.log('error', f'Error loading: {e}')

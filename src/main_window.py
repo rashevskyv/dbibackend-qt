@@ -86,7 +86,7 @@ class MainWindow(QMainWindow):
             self.taskbar_manager = TaskbarManager(self.windowHandle())
 
     def init_ui(self):
-        self.setWindowTitle('DBI Backend Qt v2.3.15')
+        self.setWindowTitle('DBI Backend Qt v2.3.16')
         self.setMinimumSize(900, 700)
 
         icon_path = Path('icons/icon.png')
@@ -267,7 +267,7 @@ class MainWindow(QMainWindow):
         if self.config.get('theme') == 'auto': self.apply_theme('auto')
 
     def show_about(self):
-        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.15</p>')
+        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.16</p>')
 
     def handle_external_files(self, message: str):
         paths = message.strip().split('\n')

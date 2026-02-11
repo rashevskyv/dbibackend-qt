@@ -3,10 +3,11 @@ Custom Widgets for DBI Backend
 """
 from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QSplitterHandle, QSplitter,
-    QStyledItemDelegate, QCheckBox, QProgressBar, QWidget
+    QStyledItemDelegate, QCheckBox, QProgressBar, QWidget,
+    QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect, QPropertyAnimation, QPoint, pyqtProperty
-from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QPen, QLinearGradient, QPaintEvent
+from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QPen, QLinearGradient, QPaintEvent, QFont
 
 class FileTreeWidgetItem(QTreeWidgetItem):
     """Custom tree widget item with advanced sorting logic"""
@@ -287,3 +288,65 @@ class ToggleSwitch(QCheckBox):
         p.drawRoundedRect(0, 0, rect.width(), rect.height(), 11, 11)
         p.setBrush(self._handle_color)
         p.drawEllipse(int(self._handle_position), 3, 16, 16)
+
+
+class MissingFileDialog(QDialog):
+    """Dialog shown when a file from a preset is missing"""
+    IGNORE = 0
+    REMOVE = 1
+    UPDATE = 2
+
+    def __init__(self, filename, filepath, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("File Not Found")
+        self.setMinimumWidth(450)
+        self.result_code = self.IGNORE
+        self.apply_all = False
+
+        layout = QVBoxLayout(self)
+
+        msg = QLabel(f"<b>File not found:</b><br>{filename}<br><br><b>Path:</b><br>{filepath}")
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        layout.addSpacing(10)
+
+        self.cb_apply_all = QCheckBox("Apply to all remaining missing files")
+        layout.addWidget(self.cb_apply_all)
+
+        layout.addSpacing(15)
+
+        btn_layout = QHBoxLayout()
+        
+        btn_ignore = QPushButton("Ignore")
+        btn_ignore.setToolTip("Keep in list but disable")
+        btn_ignore.clicked.connect(self.on_ignore)
+        
+        btn_remove = QPushButton("Remove")
+        btn_remove.setToolTip("Remove from list")
+        btn_remove.clicked.connect(self.on_remove)
+        
+        btn_update = QPushButton("Update Path")
+        btn_update.setToolTip("Locate the file manually")
+        btn_update.clicked.connect(self.on_update)
+        
+        btn_layout.addWidget(btn_ignore)
+        btn_layout.addWidget(btn_remove)
+        btn_layout.addWidget(btn_update)
+        
+        layout.addLayout(btn_layout)
+
+    def on_ignore(self):
+        self.result_code = self.IGNORE
+        self.apply_all = self.cb_apply_all.isChecked()
+        self.accept()
+
+    def on_remove(self):
+        self.result_code = self.REMOVE
+        self.apply_all = self.cb_apply_all.isChecked()
+        self.accept()
+
+    def on_update(self):
+        self.result_code = self.UPDATE
+        self.apply_all = self.cb_apply_all.isChecked()
+        self.accept()
