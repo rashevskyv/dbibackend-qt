@@ -23,6 +23,7 @@ class FileManager:
     def __init__(self, main_window):
         self.main_window = main_window
         self.file_list: Dict[str, Path] = {}
+        self.item_map: Dict[str, QTreeWidgetItem] = {} # Map filename -> QTreeWidgetItem for fast lookup
         self.presets_dir = self._get_presets_directory()
         self.preset_loaded = False
 
@@ -107,6 +108,7 @@ class FileManager:
 
     def update_file_list(self, previously_checked: Set[str] = None):
         self.main_window.file_tree.clear()
+        self.item_map.clear()
         self.main_window.header_checkbox.blockSignals(True)
         for name, path in self.file_list.items():
             try:
@@ -130,6 +132,7 @@ class FileManager:
                 item.setText(3, "Queued")
                 item.setData(3, Qt.ItemDataRole.UserRole, 0)
                 item.setText(4, str(path))
+                self.item_map[name] = item
 
                 if not path.exists():
                     checkbox.setChecked(False)
@@ -171,33 +174,30 @@ class FileManager:
         self.main_window.file_count_label.setText(text)
 
     def update_file_status(self, filename: str, status: str):
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
-            if item.text(1) == filename:
-                if status == 'process':
-                    item.setText(3, '🔄 Process')
-                    item.setForeground(3, QColor('#2196F3'))
-                    item.setData(3, Qt.ItemDataRole.UserRole, 1)
-                elif status == 'done':
-                    item.setText(3, '✅ Done')
-                    item.setForeground(3, QColor('#4CAF50'))
-                    item.setData(3, Qt.ItemDataRole.UserRole, 2)
-                elif status == 'failed':
-                    item.setText(3, '❌ Failed')
-                    item.setForeground(3, QColor('#F44336'))
-                    item.setData(3, Qt.ItemDataRole.UserRole, 3)
-                elif status == 'skipped':
-                    item.setText(3, '⏭ Skipped')
-                    item.setForeground(3, QColor('#808080'))
-                    item.setData(3, Qt.ItemDataRole.UserRole, 4)
-                    for c in range(self.main_window.file_tree.columnCount()):
-                        item.setForeground(c, QBrush(QColor('#808080')))
-                else:
-                    item.setText(3, 'Queued')
-                    item.setForeground(3, QColor(self.main_window.palette().text().color()))
-                    item.setData(3, Qt.ItemDataRole.UserRole, 0)
-                # DEFER SORTING: break
-                break
+        item = self.item_map.get(filename)
+        if item:
+            if status == 'process':
+                item.setText(3, '🔄 Process')
+                item.setForeground(3, QColor('#2196F3'))
+                item.setData(3, Qt.ItemDataRole.UserRole, 1)
+            elif status == 'done':
+                item.setText(3, '✅ Done')
+                item.setForeground(3, QColor('#4CAF50'))
+                item.setData(3, Qt.ItemDataRole.UserRole, 2)
+            elif status == 'failed':
+                item.setText(3, '❌ Failed')
+                item.setForeground(3, QColor('#F44336'))
+                item.setData(3, Qt.ItemDataRole.UserRole, 3)
+            elif status == 'skipped':
+                item.setText(3, '⏭ Skipped')
+                item.setForeground(3, QColor('#808080'))
+                item.setData(3, Qt.ItemDataRole.UserRole, 4)
+                for c in range(self.main_window.file_tree.columnCount()):
+                    item.setForeground(c, QBrush(QColor('#808080')))
+            else:
+                item.setText(3, 'Queued')
+                item.setForeground(3, QColor(self.main_window.palette().text().color()))
+                item.setData(3, Qt.ItemDataRole.UserRole, 0)
 
     def get_file_status_code(self, filename: str) -> int:
         for i in range(self.main_window.file_tree.topLevelItemCount()):
@@ -206,10 +206,8 @@ class FileManager:
         return 0
 
     def get_file_status(self, filename: str) -> str:
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
-            if item.text(1) == filename: return item.text(3)
-        return ""
+        item = self.item_map.get(filename)
+        return item.text(3) if item else ""
 
     def invert_selected_files(self):
         selected = self.main_window.file_tree.selectedItems()
@@ -288,10 +286,7 @@ class FileManager:
         """Called when the first real data request arrives. 
         Marks checked but unrequested files as Skipped."""
         requested_set = set(requested_filenames)
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
-            filename = item.text(1)
-            
+        for filename, item in self.item_map.items():
             # Check if item is checked
             w = self.main_window.file_tree.itemWidget(item, 0)
             is_checked = False
@@ -300,7 +295,6 @@ class FileManager:
                 if cb: is_checked = cb.isChecked()
             
             if is_checked and filename not in requested_set:
-                # Use a flag to avoid internal sort
                 self.update_file_status(filename, 'skipped')
         
         # Sort once at the end
@@ -398,9 +392,10 @@ class FileManager:
                                 if dlg.result_code == MissingFileDialog.REMOVE:
                                     continue
                                 elif dlg.result_code == MissingFileDialog.UPDATE:
+                                    ext_filter = "Switch Files (" + " ".join(f"*{ext}" for ext in FileManager.SUPPORTED_EXTENSIONS) + ");;All Files (*)"
                                     new_path, _ = QFileDialog.getOpenFileName(
                                         self.main_window, f"Locate {name}", 
-                                        str(p.parent), f"Switch Files (*{p.suffix})"
+                                        str(p.parent), ext_filter
                                     )
                                     if new_path:
                                         p = Path(new_path)
