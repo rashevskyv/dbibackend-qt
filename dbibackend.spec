@@ -42,6 +42,8 @@ a = Analysis(
         'src.usb_handler',
         'src.theme_manager',
         'src.single_instance',
+        'comtypes',
+        'comtypes.client',
         # Standard library modules
         'html',
     ],
