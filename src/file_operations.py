@@ -279,7 +279,7 @@ class FileManager:
         self.main_window.overall_label.setText("0 / 0 files")
         self.main_window.speed_label.setText("Speed: 0 MB/s")
         self.main_window.eta_label.setText("ETA: --:--:--")
-        self.main_window.setWindowTitle("DBI Backend Qt v2.3.16")
+        self.main_window.setWindowTitle("DBI Backend Qt v2.3.17")
         if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
 
     def handle_installation_start(self, requested_filenames: list):
