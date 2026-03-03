@@ -374,6 +374,7 @@ class FileManager:
                         raw_files.append({"name": n, "path": p_str, "checked": True})
 
                 bulk_action = None
+                cancelled = False
                 for e in raw_files:
                     name = e.get("name", "")
                     p_str = e.get("path", "")
@@ -381,31 +382,42 @@ class FileManager:
                     is_checked = e.get("checked", True)
 
                     if not p.exists():
-                        if bulk_action in (MissingFileDialog.IGNORE, MissingFileDialog.REMOVE):
+                        if bulk_action == MissingFileDialog.CANCEL:
+                            # Already cancelled — skip everything
+                            cancelled = True
+                            break
+                        elif bulk_action in (MissingFileDialog.IGNORE, MissingFileDialog.REMOVE):
                             if bulk_action == MissingFileDialog.REMOVE: continue
                             # If IGNORE, we add it but it will be handled by update_file_list
                         else:
                             dlg = MissingFileDialog(name, p_str, self.main_window)
-                            if dlg.exec():
-                                if dlg.apply_all: bulk_action = dlg.result_code
-                                
-                                if dlg.result_code == MissingFileDialog.REMOVE:
-                                    continue
-                                elif dlg.result_code == MissingFileDialog.UPDATE:
-                                    ext_filter = "Switch Files (" + " ".join(f"*{ext}" for ext in FileManager.SUPPORTED_EXTENSIONS) + ");;All Files (*)"
-                                    new_path, _ = QFileDialog.getOpenFileName(
-                                        self.main_window, f"Locate {name}", 
-                                        str(p.parent), ext_filter
-                                    )
-                                    if new_path:
-                                        p = Path(new_path)
-                                        # When updating one, check if others are there too
-                                        # (This will be handled naturally in next iterations of this loop
-                                        # if they are in the same folder and we update p_str in the preset data,
-                                        # but here we just update THIS one's path)
+                            dlg.exec()
+
+                            if dlg.result_code == MissingFileDialog.CANCEL:
+                                cancelled = True
+                                break
+
+                            if dlg.apply_all: bulk_action = dlg.result_code
+
+                            if dlg.result_code == MissingFileDialog.REMOVE:
+                                continue
+                            elif dlg.result_code == MissingFileDialog.UPDATE:
+                                ext_filter = "Switch Files (*.nsp *.nsz *.xci *.xcz);;All Files (*)"
+                                new_path, _ = QFileDialog.getOpenFileName(
+                                    self.main_window, f"Locate {name}",
+                                    str(p.parent), ext_filter
+                                )
+                                if new_path:
+                                    p = Path(new_path)
 
                     self.file_list[p.name] = p
                     if is_checked and p.exists(): to_check.add(p.name)
+
+                if cancelled:
+                    self.file_list.clear()
+                    self.preset_loaded = False
+                    self.main_window.log('info', 'Preset loading cancelled')
+                    return
 
                 self.update_file_list(to_check)
                 self.main_window.log('info', f'Loaded preset: {path.name}')

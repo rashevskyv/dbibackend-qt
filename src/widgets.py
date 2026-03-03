@@ -295,6 +295,7 @@ class MissingFileDialog(QDialog):
     IGNORE = 0
     REMOVE = 1
     UPDATE = 2
+    CANCEL = 3
 
     def __init__(self, filename, filepath, parent=None):
         super().__init__(parent)
@@ -317,24 +318,35 @@ class MissingFileDialog(QDialog):
         layout.addSpacing(15)
 
         btn_layout = QHBoxLayout()
-        
+
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.setToolTip("Cancel preset loading entirely")
+        btn_cancel.clicked.connect(self.on_cancel)
+
         btn_ignore = QPushButton("Ignore")
         btn_ignore.setToolTip("Keep in list but disable")
         btn_ignore.clicked.connect(self.on_ignore)
-        
+
         btn_remove = QPushButton("Remove")
         btn_remove.setToolTip("Remove from list")
         btn_remove.clicked.connect(self.on_remove)
-        
+
         btn_update = QPushButton("Update Path")
         btn_update.setToolTip("Locate the file manually")
         btn_update.clicked.connect(self.on_update)
-        
+
+        btn_layout.addWidget(btn_cancel)
+        btn_layout.addStretch()
         btn_layout.addWidget(btn_ignore)
         btn_layout.addWidget(btn_remove)
         btn_layout.addWidget(btn_update)
-        
+
         layout.addLayout(btn_layout)
+
+    def on_cancel(self):
+        self.result_code = self.CANCEL
+        self.apply_all = False
+        self.accept()
 
     def on_ignore(self):
         self.result_code = self.IGNORE
