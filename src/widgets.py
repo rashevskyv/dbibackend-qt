@@ -26,27 +26,26 @@ class FileTreeWidgetItem(QTreeWidgetItem):
             if cb: is_checked = cb.isChecked()
 
         # Priority mapping: lower is higher on the list
-        if status_data == 1:     # 🔄 Process — top
+        if status_data == 1:     # 🔄 Process — Always at the very top
             primary_priority = 0
-        elif status_data == 2:   # ✅ Done — alphabetical below
+        elif status_data == 3:   # ❌ Failed — Needs attention
             primary_priority = 1
-        elif status_data == 3:   # ❌ Failed
+        elif status_data == 0 and is_checked: # Queued (Checked) — The main queue
             primary_priority = 2
-        elif status_data == 4:   # ⏭ Skipped
+        elif status_data == 4:   # ⏭ Skipped — Intentionally set aside
             primary_priority = 3
-        elif status_data == 5:   # ⚠️ Missing
+        elif status_data == 2:   # ✅ Done — Completed tasks
             primary_priority = 4
-        elif status_data == 0:   # Queued / not in install queue
+        elif status_data == 5:   # ⚠️ Missing — Known issues
             primary_priority = 5
-        else:
-            primary_priority = 6
-
-        # Unchecked files in a loaded preset appear at the very bottom
-        if not is_checked and hasattr(tree, 'file_manager') and tree.file_manager.preset_loaded:
+        else:                    # Unchecked or other
             primary_priority = 10
 
-        # Always use alphabetical as secondary sort (text(1) is the third tuple element)
-        secondary_sort = 0
+        # Secondary sort: Queued items by size (descending), others alphabetical
+        if status_data == 0 and is_checked:
+            secondary_sort = -size_data
+        else:
+            secondary_sort = 0
 
         return (primary_priority, secondary_sort, self.text(1))
 

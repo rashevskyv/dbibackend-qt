@@ -1,6 +1,6 @@
 {
   "name": "64",
-  "created_at": "2025-12-09T11:29:09.232768",
+  "created_at": "2026-03-09T17:31:39.207971",
   "files": [
     {
       "name": "AM2R_0100414d32524e00.nsp",
@@ -15,6 +15,11 @@
     {
       "name": "Castle Crashers Remastered [B+U].nsp",
       "path": "G:\\games\\Castle Crashers Remastered [B+U].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
+      "path": "G:\\games\\Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
       "checked": true
     },
     {
@@ -63,23 +68,8 @@
       "checked": true
     },
     {
-      "name": "Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
-      "path": "G:\\games\\Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
-      "path": "G:\\games\\Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
-      "checked": false
-    },
-    {
       "name": "Burnout Paradise Remastered [0100DBF01000A000][v0] (3.98 GB).nsz",
       "path": "G:\\games\\Burnout Paradise Remastered [0100DBF01000A000][v0] (3.98 GB).nsz",
-      "checked": false
-    },
-    {
-      "name": "Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
-      "path": "G:\\games\\Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
       "checked": false
     },
     {
@@ -88,13 +78,13 @@
       "checked": false
     },
     {
-      "name": "Hollow Knight Silksong [010013C00E930000][v0] (2.32 GB).nsz",
-      "path": "G:\\games\\Hollow Knight Silksong [010013C00E930000][v0] (2.32 GB).nsz",
+      "name": "Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
+      "path": "G:\\games\\Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
       "checked": false
     },
     {
-      "name": "Hollow Knight Silksong [010013C00E930800][v131072] (0.29 GB).nsz",
-      "path": "G:\\games\\Hollow Knight Silksong [010013C00E930800][v131072] (0.29 GB).nsz",
+      "name": "Hollow Knight Silksong [010013C00E930000][v589824][UKR+REPACK+BACKPORT].nsp",
+      "path": "G:\\games\\Hollow Knight Silksong [010013C00E930000][v589824][UKR+REPACK+BACKPORT].nsp",
       "checked": false
     },
     {
@@ -173,8 +163,8 @@
       "checked": false
     },
     {
-      "name": "Super Mario Galaxy [B+U131072].nsp",
-      "path": "G:\\games\\Super Mario Galaxy [B+U131072].nsp",
+      "name": "Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
+      "path": "G:\\games\\Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
       "checked": false
     },
     {
