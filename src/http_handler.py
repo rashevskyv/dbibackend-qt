@@ -56,6 +56,11 @@ class HTTPHandler(QThread):
         # Helpers for current file tracking
         self.current_file_downloading = None
 
+        # File handle caching (shared across request handler threads)
+        self.cached_file_path = None
+        self.cached_file_handle = None
+        self.cache_lock = threading.Lock()
+
     @staticmethod
     def get_local_ip():
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -114,6 +119,17 @@ class HTTPHandler(QThread):
             self.httpd.shutdown()
             self.httpd.server_close()
             self.httpd = None
+        
+        # Close cached file
+        with self.cache_lock:
+            if self.cached_file_handle:
+                try: 
+                    self.cached_file_handle.close()
+                except Exception: 
+                    pass
+                self.cached_file_handle = None
+                self.cached_file_path = None
+
         self.is_running = False
         self.server_stopped.emit()
         self.wait()

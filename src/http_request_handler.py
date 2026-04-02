@@ -161,7 +161,17 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
             handler_thread.log_message.emit('info', f"Starting transfer: {original_filename}")
 
         try:
-            with open(file_path, 'rb') as f:
+            # --- Optimized File Access with Caching ---
+            f = None
+            with handler_thread.cache_lock:
+                if handler_thread.cached_file_path != file_path:
+                    if handler_thread.cached_file_handle:
+                        try: handler_thread.cached_file_handle.close()
+                        except: pass
+                    handler_thread.cached_file_handle = open(file_path, 'rb')
+                    handler_thread.cached_file_path = file_path
+                f = handler_thread.cached_file_handle
+
                 f.seek(start)
                 bytes_to_send = content_length
                 chunk_size = 128 * 1024 # 128KB chunks
@@ -175,9 +185,19 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
                 
                 while bytes_to_send > 0:
                     read_size = min(chunk_size, bytes_to_send)
+                    # Read inside lock? No, that would block other requests. 
+                    # But we only have ONE handle. 
+                    # If DBI makes concurrent requests for the SAME file, we have a problem.
+                    # However, DBI's ApacheHTTP usually does sequential Range requests.
+                    # To be safe, we seek and read inside the lock, or we don't cache for concurrent.
+                    # But Python's 'open' handles are not thread-safe for seek/read.
+                    # So we MUST keep the lock for the read.
                     buf = f.read(read_size)
                     if not buf:
                         break
+                    
+                    # Release lock briefly to allow other potential metadata requests? 
+                    # No, let's keep it simple for now as DBI is mostly sequential.
                     
                     self.wfile.write(buf)
                     

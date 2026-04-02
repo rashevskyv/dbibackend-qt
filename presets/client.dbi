@@ -1,326 +1,212 @@
 {
-  "name": "client",
-  "created_at": "2026-02-09T14:58:55.363961",
-  "files": [
-    {
-      "name": "EA SPORTS FC 25 [B+U589824+1DLC].nsp",
-      "path": "G:\\games\\EA SPORTS FC 25 [B+U589824+1DLC].nsp",
-      "checked": false
-    },
-    {
-      "name": "Wolfenstein\u00ae II The New Colossus\u2122 [B+U131072].nsp",
-      "path": "G:\\games\\Wolfenstein\u00ae II The New Colossus\u2122 [B+U131072].nsp",
-      "checked": false
-    },
-    {
-      "name": "Dying Light Platinum Edition [01008C8012920000][v327680][UKR+REPACK].nsp",
-      "path": "G:\\games\\Dying Light Platinum Edition [01008C8012920000][v327680][UKR+REPACK].nsp",
-      "checked": false
-    },
-    {
-      "name": "Assassins Creed  Remastered [01007F600B134000][v196608][UKR+REPACK].nsp",
-      "path": "G:\\games\\Assassins Creed  Remastered [01007F600B134000][v196608][UKR+REPACK].nsp",
-      "checked": false
-    },
-    {
-      "name": "\u0425\u043e\u0433\u0432\u0430\u0440\u0442\u0441 [0100F7E00C70E000][v327680][UKR+REPACK].nsp",
-      "path": "G:\\games\\\u0425\u043e\u0433\u0432\u0430\u0440\u0442\u0441 [0100F7E00C70E000][v327680][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Kingdom Come Deliverance Royal Edition [0100650018FE0000][v0] (14.10 GB).nsz",
-      "path": "G:\\games\\Kingdom Come Deliverance Royal Edition [0100650018FE0000][v0] (14.10 GB).nsz",
-      "checked": false
-    },
-    {
-      "name": "Assassins Creed The Ezio Collection [DLC Revelations] [0100670014483002][v0] (9.92 GB).nsz",
-      "path": "G:\\games\\Assassins Creed The Ezio Collection [DLC Revelations] [0100670014483002][v0] (9.92 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Assassins Creed The Rebel Collection [010044700DEB0000][v0] (11.86 GB).nsz",
-      "path": "G:\\games\\Assassins Creed The Rebel Collection [010044700DEB0000][v0] (11.86 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Little Nightmares III [010066101A55A000][v196608][REPACK].nsp",
-      "path": "G:\\games\\Little Nightmares III [010066101A55A000][v196608][REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Assassins Creed The Ezio Collection [0100670014482000][v0] (6.81 GB).nsz",
-      "path": "G:\\games\\Assassins Creed The Ezio Collection [0100670014482000][v0] (6.81 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Hollow Knight Silksong [010013C00E930000][v589824][UKR+REPACK+BACKPORT].nsp",
-      "path": "G:\\games\\Hollow Knight Silksong [010013C00E930000][v589824][UKR+REPACK+BACKPORT].nsp",
-      "checked": true
-    },
-    {
-      "name": "Assassins Creed The Ezio Collection [DLC Brotherhood] [0100670014483001][v0] (9.72 GB).nsz",
-      "path": "G:\\games\\Assassins Creed The Ezio Collection [DLC Brotherhood] [0100670014483001][v0] (9.72 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Little Nightmares II [010097100EDD6000][v262144][UKR+REPACK].nsp",
-      "path": "G:\\games\\Little Nightmares II [010097100EDD6000][v262144][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Plants vs Zombies Battle for Neighborville Complete Edition [0100C56010FD8000][v0] (6.32 GB).nsz",
-      "path": "D:\\Downloads\\switch\\Plants vs Zombies Battle for Neighborville [NSZ]\\Plants vs Zombies Battle for Neighborville Complete Edition [0100C56010FD8000][v0] (6.32 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
-      "path": "G:\\games\\Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Assassins Creed The Rebel Collection [DLC Rogue] [010044700DEB1001][v0] (7.14 GB).nsz",
-      "path": "G:\\games\\Assassins Creed The Rebel Collection [DLC Rogue] [010044700DEB1001][v0] (7.14 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "No Mans Sky [0100853015E86000][v4259840][UKR+REPACK].nsp",
-      "path": "G:\\games\\No Mans Sky [0100853015E86000][v4259840][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [0100C3601518C000][v0] (4.68 GB).nsz",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\Sid Meiers Civilization 7 [0100C3601518C000][v0] (4.68 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Ori and the Blind Forest Definitive Edition [010061D00DB74000][v131072][UKR+REPACK].nsp",
-      "path": "G:\\games\\Ori and the Blind Forest Definitive Edition [010061D00DB74000][v131072][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Assassins Creed The Ezio Collection [DLC Lineage] [0100670014483004][v0] (3.33 GB).nsz",
-      "path": "G:\\games\\Assassins Creed The Ezio Collection [DLC Lineage] [0100670014483004][v0] (3.33 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Assassins Creed The Ezio Collection [DLC Voice Audio Package] [0100670014483003][v0] (3.64 GB).nsz",
-      "path": "G:\\games\\Assassins Creed The Ezio Collection [DLC Voice Audio Package] [0100670014483003][v0] (3.64 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Little Nightmares [01002FC00412C000][v131072][UKR+REPACK].nsp",
-      "path": "G:\\games\\Little Nightmares [01002FC00412C000][v131072][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Kingdom Come Deliverance Royal Edition [DLC Czech Voiceover] [0100650018FE1005][v0] (3.04 GB).nsz",
-      "path": "G:\\games\\Kingdom Come Deliverance Royal Edition [DLC Czech Voiceover] [0100650018FE1005][v0] (3.04 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [0100C3601518C800][v983040] (2.25 GB).nsz",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\Sid Meiers Civilization 7 [0100C3601518C800][v983040] (2.25 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Assassins Creed The Ezio Collection [DLC Embers] [0100670014483005][v0] (1.32 GB).nsz",
-      "path": "G:\\games\\Assassins Creed The Ezio Collection [DLC Embers] [0100670014483005][v0] (1.32 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Assassins Creed The Rebel Collection [DLC Extra Content Pack] [010044700DEB1009][v0].nsp",
-      "path": "G:\\games\\Assassins Creed The Rebel Collection [DLC Extra Content Pack] [010044700DEB1009][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Plants vs Zombies Replanted [01008C50239BE000][v0] (1.57 GB).nsz",
-      "path": "G:\\games\\Plants vs Zombies Replanted [01008C50239BE000][v0] (1.57 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Plants vs Zombies Replanted [01008C50239BE800][v262145] (1.21 GB).nsz",
-      "path": "D:\\Downloads\\switch\\Plants vs. Zombies Replanted for Nintendo Switch [NSZ]\\Plants vs Zombies Replanted [01008C50239BE800][v262145] (1.21 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Assassins Creed The Ezio Collection [0100670014482800][v196608] (0.58 GB).nsz",
-      "path": "G:\\games\\Assassins Creed The Ezio Collection [0100670014482800][v196608] (0.58 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Assassins Creed The Rebel Collection [DLC Russian Audio Pack] [010044700DEB1006][v0].nsp",
-      "path": "G:\\games\\Assassins Creed The Rebel Collection [DLC Russian Audio Pack] [010044700DEB1006][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Kingdom Come Deliverance Royal Edition [0100650018FE0800][v131072] (0.34 GB).nsz",
-      "path": "G:\\games\\Kingdom Come Deliverance Royal Edition [0100650018FE0800][v131072] (0.34 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Plants vs Zombies Battle for Neighborville Complete Edition [0100C56010FD8800][v262144] (0.09 GB).nsz",
-      "path": "D:\\Downloads\\switch\\Plants vs Zombies Battle for Neighborville [NSZ]\\Plants vs Zombies Battle for Neighborville Complete Edition [0100C56010FD8800][v262144] (0.09 GB).nsz",
-      "checked": true
-    },
-    {
-      "name": "Plants vs Zombies Battle for Neighborville Complete Edition [DLC Preorder Content] [0100C56010FD9001][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Plants vs Zombies Battle for Neighborville [NSZ]\\Plants vs Zombies Battle for Neighborville Complete Edition [DLC Preorder Content] [0100C56010FD9001][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Xerxes the Achaemenid Persona] [0100C3601518D003][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Xerxes the Achaemenid Persona] [0100C3601518D003][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Tonga Pack] [0100C3601518D01B][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Tonga Pack] [0100C3601518D01B][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Tides of Power Collection Wonder Pack] [0100C3601518D01C][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Tides of Power Collection Wonder Pack] [0100C3601518D01C][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Tecumseh and Shawnee Pack] [0100C3601518D001][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Tecumseh and Shawnee Pack] [0100C3601518D001][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Simon Bolivar Pack] [0100C3601518D00D][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Simon Bolivar Pack] [0100C3601518D00D][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Silla Pack] [0100C3601518D014][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Silla Pack] [0100C3601518D014][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Sayyida al Hurra Pack] [0100C3601518D01D][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Sayyida al Hurra Pack] [0100C3601518D01D][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Right to Rule Collection Wonder Pack] [0100C3601518D017][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Right to Rule Collection Wonder Pack] [0100C3601518D017][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Right to Rule Collection Cosmetic Bonus] [0100C3601518D009][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Right to Rule Collection Cosmetic Bonus] [0100C3601518D009][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Republic of Pirates Pack] [0100C3601518D01A][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Republic of Pirates Pack] [0100C3601518D01A][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Qajar Pack] [0100C3601518D016][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Qajar Pack] [0100C3601518D016][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Ottomans Pack] [0100C3601518D01E][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Ottomans Pack] [0100C3601518D01E][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Nepal Pack] [0100C3601518D00F][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Nepal Pack] [0100C3601518D00F][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Lakshmibai Pack] [0100C3601518D013][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Lakshmibai Pack] [0100C3601518D013][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Iceland Pack] [0100C3601518D01F][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Iceland Pack] [0100C3601518D01F][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Himiko High Shaman Persona] [0100C3601518D007][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Himiko High Shaman Persona] [0100C3601518D007][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Great Britain Pack] [0100C3601518D00C][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Great Britain Pack] [0100C3601518D00C][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Genghis Khan Pack] [0100C3601518D011][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Genghis Khan Pack] [0100C3601518D011][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Friedrich Baroque Persona] [0100C3601518D004][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Friedrich Baroque Persona] [0100C3601518D004][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Founders Cosmetics Pack] [0100C3601518D005][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Founders Cosmetics Pack] [0100C3601518D005][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Edward Teach Pack] [0100C3601518D019][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Edward Teach Pack] [0100C3601518D019][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Deluxe Cosmetics Pack] [0100C3601518D002][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Deluxe Cosmetics Pack] [0100C3601518D002][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Dai Viet Pack] [0100C3601518D012][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Dai Viet Pack] [0100C3601518D012][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Crossroads of the World Collection Natural Wonder Pack] [0100C3601518D010][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Crossroads of the World Collection Natural Wonder Pack] [0100C3601518D010][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Crossroads of the World Collection Cosmetic Bonus] [0100C3601518D008][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Crossroads of the World Collection Cosmetic Bonus] [0100C3601518D008][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Carthage Pack] [0100C3601518D00A][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Carthage Pack] [0100C3601518D00A][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Bulgaria Pack] [0100C3601518D00E][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Bulgaria Pack] [0100C3601518D00E][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Assyria Pack] [0100C3601518D015][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Assyria Pack] [0100C3601518D015][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Ashoka World Conqueror Persona] [0100C3601518D006][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Ashoka World Conqueror Persona] [0100C3601518D006][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Sid Meiers Civilization 7 [DLC Ada Lovelace Pack] [0100C3601518D00B][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Sid Meiers Civilization VII [NSZ]\\30 DLC\\Sid Meiers Civilization 7 [DLC Ada Lovelace Pack] [0100C3601518D00B][v0].nsp",
-      "checked": true
-    },
-    {
-      "name": "Plants vs Zombies Replanted [DLC Retro Peashooter Skin] [01008C50239BF001][v0].nsp",
-      "path": "D:\\Downloads\\switch\\Plants vs. Zombies Replanted for Nintendo Switch [NSZ]\\Plants vs Zombies Replanted [DLC Retro Peashooter Skin] [01008C50239BF001][v0].nsp",
-      "checked": true
-    }
-  ]
+    "name":  "64",
+    "created_at":  "2026-03-09T17:31:39.207971",
+    "files":  [
+                  {
+                      "name":  "Balatro [0100CD801CE5E000][v0] (0.08 GB).nsz",
+                      "path":  "G:\\games\\Balatro [0100CD801CE5E000][v0] (0.08 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Balatro [0100CD801CE5E800][v327680] (0.06 GB).nsz",
+                      "path":  "G:\\games\\Balatro [0100CD801CE5E800][v327680] (0.06 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Bayonetta 2 [01007960049A0000][v0] (12.41 GB).nsz",
+                      "path":  "G:\\games\\Bayonetta 2 [01007960049A0000][v0] (12.41 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Bayonetta 2 [01007960049A0800][v65536] (0.12 GB).nsz",
+                      "path":  "G:\\games\\Bayonetta 2 [01007960049A0800][v65536] (0.12 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Crysis Remastered [0100E66010ADE000][v524288][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\Crysis Remastered [0100E66010ADE000][v524288][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "DOOM 3 [010029D00E740000][v327680][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\DOOM 3 [010029D00E740000][v327680][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "DOOM Eternal [0100B1A00D8CE000][v0] (17.50 GB).nsz",
+                      "path":  "G:\\games\\DOOM Eternal [0100B1A00D8CE000][v0] (17.50 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "DOOM Eternal [0100B1A00D8CE800][v983040] (15.51 GB).nsz",
+                      "path":  "G:\\games\\DOOM Eternal [0100B1A00D8CE800][v983040] (15.51 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "DOOM Eternal [DLC Campaign] [0100B1A00D8CF003][v0].nsp",
+                      "path":  "G:\\games\\DOOM Eternal [DLC Campaign] [0100B1A00D8CF003][v0].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "DOOM Eternal [DLC Deluxe Edition Content] [0100B1A00D8CF002][v0].nsp",
+                      "path":  "G:\\games\\DOOM Eternal [DLC Deluxe Edition Content] [0100B1A00D8CF002][v0].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "DOOM Eternal [DLC Rip and Tear Pack] [0100B1A00D8CF001][v0].nsp",
+                      "path":  "G:\\games\\DOOM Eternal [DLC Rip and Tear Pack] [0100B1A00D8CF001][v0].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "DOOM Eternal [DLC The Ancient Gods Part 2] [0100B1A00D8CF005][v0].nsp",
+                      "path":  "G:\\games\\DOOM Eternal [DLC The Ancient Gods Part 2] [0100B1A00D8CF005][v0].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "DOOM Eternal [DLC The Ancient Gods] [0100B1A00D8CF004][v0].nsp",
+                      "path":  "G:\\games\\DOOM Eternal [DLC The Ancient Gods] [0100B1A00D8CF004][v0].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "DOOM [0100416004C00000][v0] (13.67 GB).nsz",
+                      "path":  "G:\\games\\DOOM [0100416004C00000][v0] (13.67 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "DOOM [0100416004C00800][v262144] (8.29 GB).nsz",
+                      "path":  "G:\\games\\DOOM [0100416004C00800][v262144] (8.29 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Hades [0100535012974000][v589824][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\Hades [0100535012974000][v589824][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "It Takes Two [010092A0172E4000][v131072][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\It Takes Two [010092A0172E4000][v131072][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Kirby and the Forgotten Land [01004D300C5AE000][v65536][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\Kirby and the Forgotten Land [01004D300C5AE000][v65536][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Luigis Mansion 3 [0100DCA0064A6000][v327680][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\Luigis Mansion 3 [0100DCA0064A6000][v327680][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Metroid Dread [B+U].nsp",
+                      "path":  "G:\\games\\Metroid Dread [B+U].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Metroid Prime Remastered [010012101468C000][v0] (6.76 GB).nsz",
+                      "path":  "G:\\games\\Metroid Prime Remastered [010012101468C000][v0] (6.76 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Northgard [0100A9E00D97A000][v0] (0.65 GB).nsz",
+                      "path":  "G:\\games\\Northgard [0100A9E00D97A000][v0] (0.65 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Northgard [0100A9E00D97A800][v524288] (0.11 GB).nsz",
+                      "path":  "G:\\games\\Northgard [0100A9E00D97A800][v524288] (0.11 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Northgard [DLC Nidhogg Clan of the Dragon] [0100A9E00D97B003][v0].nsp",
+                      "path":  "G:\\games\\Northgard [DLC Nidhogg Clan of the Dragon] [0100A9E00D97B003][v0].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Northgard [DLC Svadilfari Clan of the Horse] [0100A9E00D97B004][v65536].nsp",
+                      "path":  "G:\\games\\Northgard [DLC Svadilfari Clan of the Horse] [0100A9E00D97B004][v65536].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Northgard [DLC Svafnir Clan of the Snake] [0100A9E00D97B001][v0].nsp",
+                      "path":  "G:\\games\\Northgard [DLC Svafnir Clan of the Snake] [0100A9E00D97B001][v0].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Prince of Persia The Lost Crown [0100210019428000][v851968][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\Prince of Persia The Lost Crown [0100210019428000][v851968][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
+                      "path":  "G:\\games\\SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "The Legend of Zelda Breath of the Wild [B+U786432+2DLC].nsp",
+                      "path":  "G:\\games\\The Legend of Zelda Breath of the Wild [B+U786432+2DLC].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "The Legend of Zelda Links Awakening [01006BB00C6F0000][v0] (5.84 GB).nsz",
+                      "path":  "G:\\games\\The Legend of Zelda Links Awakening [01006BB00C6F0000][v0] (5.84 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "The Legend of Zelda Links Awakening [01006BB00C6F0800][v65536].nsp",
+                      "path":  "G:\\games\\The Legend of Zelda Links Awakening [01006BB00C6F0800][v65536].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "The Legend of Zelda Tears of the Kingdom [B+U393216].nsp",
+                      "path":  "G:\\games\\The Legend of Zelda Tears of the Kingdom [B+U393216].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Wolfenstein® II The New Colossus™ [B+U131072].nsp",
+                      "path":  "G:\\games\\Wolfenstein® II The New Colossus™ [B+U131072].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "XCOM 2 Collection [0100D0B00FB74000][v0] (6.48 GB).nsz",
+                      "path":  "G:\\games\\XCOM 2 Collection [0100D0B00FB74000][v0] (6.48 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "XCOM 2 Collection [0100D0B00FB74800][v131072] (17.90 GB).nsz",
+                      "path":  "G:\\games\\XCOM 2 Collection [0100D0B00FB74800][v131072] (17.90 GB).nsz",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Yoshi\u0027s Crafted World [01006000040c2000][v0].nsp",
+                      "path":  "G:\\games\\Yoshi\u0027s Crafted World [01006000040c2000][v0].nsp",
+                      "checked":  true
+                  },
+                  {
+                      "name":  "Yoshi\u0027s Crafted World [01006000040C2800][v65536].nsp",
+                      "path":  "G:\\games\\Yoshi\u0027s Crafted World [01006000040C2800][v65536].nsp",
+                      "checked":  true
+                  }
+              ]
 }
+

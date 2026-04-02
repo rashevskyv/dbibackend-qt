@@ -51,6 +51,10 @@ class USBHandler(QThread):
         self.current_file_bytes_sent = 0
         self.current_file_size = 0
         self.installation_started = False
+        
+        # File handle caching
+        self.cached_file_path = None
+        self.cached_file_handle = None
 
     def run(self):
         try:
@@ -73,6 +77,16 @@ class USBHandler(QThread):
                 usb.util.dispose_resources(self.dev)
             except:
                 pass
+        
+        # Close cached file
+        if self.cached_file_handle:
+            try:
+                self.cached_file_handle.close()
+            except:
+                pass
+            self.cached_file_handle = None
+            self.cached_file_path = None
+
         self.quit()
         if not self.wait(2000): # Wait max 2 seconds for thread to finish
             self.terminate()
@@ -139,17 +153,25 @@ class USBHandler(QThread):
             except usb.core.USBError as e:
                 # On some Windows backends, timeout is a generic USBError with a specific string or errno
                 error_str = str(e).lower()
-                if "timeout" in error_str or e.errno == 10060 or (hasattr(e, 'backend_error_code') and e.backend_error_code == -7):
+                is_timeout = "timeout" in error_str or e.errno == 10060 or (hasattr(e, 'backend_error_code') and e.backend_error_code == -7)
+                is_disconnect = "reaping request failed" in error_str or "aborted" in error_str or e.errno == 22 or e.errno == 10054
+                
+                if is_timeout:
                     continue
                 
                 if self.is_running:
-                    self.log_message.emit('warning', f'USB connection lost: {e}')
-                    print(f"USB Error details: {traceback.format_exc()}") # Print to console
+                    if is_disconnect:
+                        self.log_message.emit('info', 'USB Connection closed by Switch.')
+                    else:
+                        self.log_message.emit('warning', f'USB connection lost: {e}')
+                        print(f"USB Error details: {traceback.format_exc()}") # Print to console
+                    
                     self.connection_changed.emit(ConnectionStatus.DISCONNECTED)
                     if not self.connect_to_switch(): break
             except Exception as e:
                 self.log_message.emit('error', f'Command loop error: {e}')
-                print(f"Critical error: {traceback.format_exc()}")
+                if self.is_running:
+                    print(f"Critical error: {traceback.format_exc()}")
                 break
         self.is_running = False
 
@@ -215,8 +237,16 @@ class USBHandler(QThread):
                 self.current_file_bytes_sent = 0
                 self.log_message.emit('info', f'Sending: {name}')
 
-        # --- Data Transfer Loop ---
-        with open(path, 'rb') as f:
+        # --- Data Transfer (Optimized with caching) ---
+        try:
+            # Check if we can reuse the cached handle
+            if self.cached_file_path != path:
+                if self.cached_file_handle:
+                    self.cached_file_handle.close()
+                self.cached_file_handle = open(path, 'rb')
+                self.cached_file_path = path
+
+            f = self.cached_file_handle
             f.seek(range_offset)
             remaining = range_size
             chunk_size = dbi_protocol.BUFFER_SEGMENT_DATA_SIZE
@@ -249,6 +279,14 @@ class USBHandler(QThread):
                         self.current_file_size,        # Current file total
                         self.progress_tracker.unique_bytes_transferred
                     )
+        except Exception as e:
+            self.log_message.emit('error', f'File error: {e}')
+            # Clear cache on error
+            if self.cached_file_handle:
+                try: self.cached_file_handle.close()
+                except: pass
+            self.cached_file_handle = None
+            self.cached_file_path = None
 
         # --- Completion Logic ---
         if not is_metadata:

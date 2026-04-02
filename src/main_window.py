@@ -86,7 +86,7 @@ class MainWindow(QMainWindow):
             self.taskbar_manager = TaskbarManager(self.windowHandle())
 
     def init_ui(self):
-        self.setWindowTitle('DBI Backend Qt v2.3.17')
+        self.setWindowTitle('DBI Backend Qt v2.3.18')
         self.setMinimumSize(900, 700)
 
         icon_path = Path('icons/icon.png')

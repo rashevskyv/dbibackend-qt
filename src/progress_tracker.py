@@ -45,26 +45,34 @@ class ProgressTracker:
             self.file_intervals[filename] = []
 
         intervals = self.file_intervals[filename]
+        
+        # Calculate unique bytes for THIS file before adding new interval
+        # We need merged intervals to know how many unique bytes we have
+        def get_merged_size(ivs):
+            if not ivs: return 0
+            # Note: ivs must be sorted
+            m = []
+            for s, e in ivs:
+                if m and s <= m[-1][1]:
+                    m[-1] = (m[-1][0], max(m[-1][1], e))
+                else:
+                    m.append((s, e))
+            return sum(e - s for s, e in m), m
+
+        old_file_unique, _ = get_merged_size(intervals)
+        
         intervals.append((start, end))
         intervals.sort()
 
-        merged = []
-        for s, e in intervals:
-            if merged and s <= merged[-1][1]:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], e))
-            else:
-                merged.append((s, e))
-
+        new_file_unique, merged = get_merged_size(intervals)
         self.file_intervals[filename] = merged
         
-        total_bytes = sum(end - start for start, end in merged)
+        # Update global total incrementally
+        delta = new_file_unique - old_file_unique
+        if delta > 0:
+            self.unique_bytes_transferred += delta
 
-        self.unique_bytes_transferred = sum(
-            sum(end - start for start, end in intervals)
-            for intervals in self.file_intervals.values()
-        )
-
-        return total_bytes
+        return new_file_unique
 
     def register_file_request(self, filename: str):
         if filename not in self.requested_files:
