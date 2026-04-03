@@ -49,7 +49,7 @@ class ProgressTracker:
         # Calculate unique bytes for THIS file before adding new interval
         # We need merged intervals to know how many unique bytes we have
         def get_merged_size(ivs):
-            if not ivs: return 0
+            if not ivs: return 0, []
             # Note: ivs must be sorted
             m = []
             for s, e in ivs:

@@ -108,7 +108,7 @@ class ServerManager:
         self.usb_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
         self.usb_handler.installation_begun.connect(self.on_installation_begun)
         self.usb_handler.start()
-        self.main_window.setWindowTitle(f"DBI Backend Qt v2.3.18 | USB Mode Active")
+        self.main_window.setWindowTitle(f"DBI Backend Qt v2.3.19 | USB Mode Active")
         self._set_server_ui_state(True)
         self.transfer_stats['start_time'] = datetime.now()
         self.main_window.overall_label.setText(f'0 / {len(checked_files)} files')
@@ -172,7 +172,7 @@ class ServerManager:
         self.http_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
         
         self.http_handler.start()
-        self.main_window.setWindowTitle(f"DBI Backend Qt v2.3.18 | HTTP Server: http://{HTTPHandler.get_local_ip()}:{selected_port}/")
+        self.main_window.setWindowTitle(f"DBI Backend Qt v2.3.19 | HTTP Server: http://{HTTPHandler.get_local_ip()}:{selected_port}/")
         self._set_server_ui_state(True)
 
     def stop_http_server(self):
