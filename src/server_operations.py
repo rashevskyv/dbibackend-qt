@@ -246,7 +246,18 @@ class ServerManager:
 
     def on_file_progress(self, filename, progress):
         self.main_window.progress_delegate.set_progress(filename, progress)
-        self.main_window.file_tree.viewport().update()
+        # Repaint only the affected row instead of the entire viewport. With
+        # high-throughput transfers progress signals fire up to 20x/sec; a
+        # full viewport repaint forces the delegate to walk every visible row.
+        item = self.main_window.file_manager.item_map.get(filename)
+        if item is not None:
+            rect = self.main_window.file_tree.visualItemRect(item)
+            if rect.isValid() and not rect.isNull():
+                self.main_window.file_tree.viewport().update(rect)
+            else:
+                self.main_window.file_tree.viewport().update()
+        else:
+            self.main_window.file_tree.viewport().update()
 
     def on_transfer_complete(self, filename):
         if filename not in self.completed_files_set:

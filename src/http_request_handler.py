@@ -175,7 +175,10 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
             # Read/write loop is OUTSIDE the lock to allow parallel requests
             f.seek(start)
             bytes_to_send = content_length
-            chunk_size = 128 * 1024 # 128KB chunks
+            # 1 MB chunks mirror the USB BUFFER_SEGMENT_DATA_SIZE and roughly
+            # halve the per-chunk syscall / write overhead vs 128KB on fast
+            # disks, with negligible impact on small reads.
+            chunk_size = 1024 * 1024
             
             bytes_sent_this_session = 0
             bytes_since_last_log = 0

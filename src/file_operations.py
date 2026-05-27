@@ -98,15 +98,15 @@ class FileManager:
 
     def _get_current_checked_state(self) -> Set[str]:
         checked = set()
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
-            w = self.main_window.file_tree.itemWidget(item, 0)
-            if w:
-                cb = w.findChild(QCheckBox)
-                if cb and cb.isChecked(): checked.add(item.text(1))
+        tree = self.main_window.file_tree
+        for i in range(tree.topLevelItemCount()):
+            item = tree.topLevelItem(i)
+            if self.is_item_checked(item):
+                checked.add(item.text(1))
         return checked
 
     def update_file_list(self, previously_checked: Set[str] = None):
+        from .widgets import CHECKED_ROLE
         self.main_window.file_tree.clear()
         self.item_map.clear()
         self.main_window.header_checkbox.blockSignals(True)
@@ -118,6 +118,12 @@ class FileManager:
                 should = True
                 if previously_checked is not None: should = name in previously_checked
                 checkbox.setChecked(should)
+                # Cache the checked state on the item so FileTreeWidgetItem.__lt__
+                # and update_count_label don't need to walk the widget tree.
+                item.setData(0, CHECKED_ROLE, should)
+                checkbox.stateChanged.connect(
+                    lambda state, it=item: it.setData(0, CHECKED_ROLE, state == Qt.CheckState.Checked.value)
+                )
                 checkbox.stateChanged.connect(self.main_window.on_item_checked)
                 w = QWidget()
                 l = QHBoxLayout(w)
@@ -151,6 +157,24 @@ class FileManager:
         if self.main_window.search_box.text():
             self.filter_files(self.main_window.search_box.text())
 
+    def is_item_checked(self, item) -> bool:
+        """Read the cached checked state for a tree item.
+
+        Falls back to the widget tree only if the cache isn't populated yet
+        (e.g. when called before :meth:`update_file_list` had a chance to seed
+        it). All hot paths should hit the cached branch.
+        """
+        from .widgets import CHECKED_ROLE
+        cached = item.data(0, CHECKED_ROLE)
+        if cached is not None:
+            return bool(cached)
+        w = self.main_window.file_tree.itemWidget(item, 0)
+        if w:
+            cb = w.findChild(QCheckBox)
+            if cb:
+                return cb.isChecked()
+        return False
+
     def update_count_label(self):
         total_size = 0
         total_count = 0
@@ -161,12 +185,7 @@ class FileManager:
             size = item.data(2, Qt.ItemDataRole.UserRole) or 0
             total_count += 1
             total_size += size
-            w = self.main_window.file_tree.itemWidget(item, 0)
-            is_checked = False
-            if w:
-                cb = w.findChild(QCheckBox)
-                if cb: is_checked = cb.isChecked()
-            if is_checked:
+            if self.is_item_checked(item):
                 selected_count += 1
                 selected_size += size
         text = (f"Selected: {selected_count} / {total_count} files, "
