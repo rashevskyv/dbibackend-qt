@@ -12,6 +12,8 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Dict, Any
 
+from .utility_functions import format_size
+
 class DBIRequestHandler(BaseHTTPRequestHandler):
     """
     Custom Request Handler for DBI.
@@ -84,7 +86,7 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
                 link = urllib.parse.quote(safe_name)
                 display_name = html.escape(safe_name)
                 # Pad name for alignment
-                r.append(f'<a href="{link}">{display_name}</a>{" " * max(1, 50 - len(display_name))} {self.format_size(size)}')
+                r.append(f'<a href="{link}">{display_name}</a>{" " * max(1, 50 - len(display_name))} {format_size(size)}')
             except Exception:
                 pass 
                 
@@ -150,7 +152,6 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
 
         # Update handler state for UI (Dynamic Calculation)
         # Use ORIGINAL NAME for logic so UI matches
-        handler_thread.current_file_downloading = original_filename
         handler_thread.register_file_request(original_filename, file_size)
         
         total_requested_size = handler_thread.progress_tracker.total_requested_size
@@ -175,7 +176,10 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
             # Read/write loop is OUTSIDE the lock to allow parallel requests
             f.seek(start)
             bytes_to_send = content_length
-            chunk_size = 128 * 1024 # 128KB chunks
+            # 1 MB chunks mirror the USB BUFFER_SEGMENT_DATA_SIZE and roughly
+            # halve the per-chunk syscall / write overhead vs 128KB on fast
+            # disks, with negligible impact on small reads.
+            chunk_size = 1024 * 1024
             
             bytes_sent_this_session = 0
             bytes_since_last_log = 0
@@ -249,10 +253,3 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             handler_thread.log_message.emit('error', f"Error serving {original_filename}: {e}")
 
-    @staticmethod
-    def format_size(size: int) -> str:
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if size < 1024.0:
-                return f"{size:.1f} {unit}"
-            size /= 1024.0
-        return f"{size:.1f} TB"
