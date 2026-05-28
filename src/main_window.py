@@ -10,11 +10,12 @@ from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QMessageBox, QCheckBox, QMenu, QApplication
+    QMessageBox, QMenu, QApplication
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QAction, QIcon
 
+from . import __version__
 from .taskbar_manager import TaskbarManager
 from .config_manager import ConfigManager
 from .theme_manager import ThemeManager
@@ -86,7 +87,7 @@ class MainWindow(QMainWindow):
             self.taskbar_manager = TaskbarManager(self.windowHandle())
 
     def init_ui(self):
-        self.setWindowTitle('DBI Backend Qt v2.4.0')
+        self.setWindowTitle(f'DBI Backend Qt v{__version__}')
         self.setMinimumSize(900, 700)
 
         icon_path = Path('icons/icon.png')
@@ -183,25 +184,15 @@ class MainWindow(QMainWindow):
     def on_header_checkbox_changed(self, state):
         if self._updating_header_checkbox: return
         is_checked = (state == 2)
-        for i in range(self.file_tree.topLevelItemCount()):
-            item = self.file_tree.topLevelItem(i)
-            w = self.file_tree.itemWidget(item, 0)
-            if w:
-                cb = w.findChild(QCheckBox)
-                if cb: cb.setChecked(is_checked)
+        for item in self.file_manager.iter_items():
+            self.file_manager.set_item_checked(item, is_checked)
         self.file_manager.update_count_label()
 
     def on_item_checked(self):
         self._updating_header_checkbox = True
-        checked = 0
         total = self.file_tree.topLevelItemCount()
-        for i in range(total):
-            item = self.file_tree.topLevelItem(i)
-            w = self.file_tree.itemWidget(item, 0)
-            if w:
-                cb = w.findChild(QCheckBox)
-                if cb and cb.isChecked(): checked += 1
-        
+        checked = sum(1 for _ in self.file_manager.iter_checked_items())
+
         if checked == 0: self.header_checkbox.setCheckState(Qt.CheckState.Unchecked)
         elif checked == total: self.header_checkbox.setCheckState(Qt.CheckState.Checked)
         else: self.header_checkbox.setCheckState(Qt.CheckState.PartiallyChecked)
@@ -267,7 +258,7 @@ class MainWindow(QMainWindow):
         if self.config.get('theme') == 'auto': self.apply_theme('auto')
 
     def show_about(self):
-        QMessageBox.about(self, 'About', '<h2>DBI Backend Qt</h2><p>Version 2.3.16</p>')
+        QMessageBox.about(self, 'About', f'<h2>DBI Backend Qt</h2><p>Version {__version__}</p>')
 
     def handle_external_files(self, message: str):
         paths = message.strip().split('\n')

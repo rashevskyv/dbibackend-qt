@@ -53,9 +53,6 @@ class HTTPHandler(QThread):
         # Centralized Progress Tracker
         self.progress_tracker = ProgressTracker(file_list)
         
-        # Helpers for current file tracking
-        self.current_file_downloading = None
-
         # File handle caching (shared across request handler threads)
         self.cached_file_path = None
         self.cached_file_handle = None
