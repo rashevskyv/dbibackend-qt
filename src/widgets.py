@@ -9,6 +9,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect, QPropertyAnimation, QPoint, pyqtProperty
 from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QPen, QLinearGradient, QPaintEvent, QFont
 
+# Custom data roles used to cache state on items so the sort comparator and
+# count-label updates don't have to walk the widget tree on every read.
+CHECKED_ROLE = Qt.ItemDataRole.UserRole + 1
+
+
 class FileTreeWidgetItem(QTreeWidgetItem):
     """Custom tree widget item with advanced sorting logic"""
 
@@ -18,12 +23,19 @@ class FileTreeWidgetItem(QTreeWidgetItem):
 
         status_data = self.data(3, Qt.ItemDataRole.UserRole) or 0
         size_data = self.data(2, Qt.ItemDataRole.UserRole) or 0
-        
-        is_checked = True
-        widget = tree.itemWidget(self, 0)
-        if widget:
-            cb = widget.findChild(QCheckBox)
-            if cb: is_checked = cb.isChecked()
+
+        # Read the cached checked state populated by FileManager when the
+        # checkbox is created / toggled. Fall back to walking the widget
+        # tree only if the cache isn't populated yet.
+        cached = self.data(0, CHECKED_ROLE)
+        if cached is None:
+            is_checked = True
+            widget = tree.itemWidget(self, 0)
+            if widget:
+                cb = widget.findChild(QCheckBox)
+                if cb: is_checked = cb.isChecked()
+        else:
+            is_checked = bool(cached)
 
         # Priority mapping: lower is higher on the list
         if status_data == 1:     # 🔄 Process — Always at the very top
@@ -161,8 +173,29 @@ class ProgressDelegate(QStyledItemDelegate):
         self.tree_widget = tree_widget
         self.progress_data = {}
         self.skipped_files = set()
-        self.progress_color = QColor(33, 150, 243, 50) 
+        self.progress_color = QColor(33, 150, 243, 50)
         self.skipped_color = QColor(128, 128, 128, 40) # Neutral gray background for skipped
+
+        # Cached row width — paint() runs once per visible row per repaint, so
+        # the per-column sum below was being recomputed N times for every
+        # progress update. Cache it and invalidate on header changes.
+        self._cached_total_width = None
+        header = tree_widget.header()
+        header.sectionResized.connect(self._invalidate_width_cache)
+        header.sectionCountChanged.connect(lambda *_: self._invalidate_width_cache())
+
+    def _invalidate_width_cache(self, *_):
+        self._cached_total_width = None
+
+    def _total_visible_width(self) -> int:
+        if self._cached_total_width is None:
+            tw = self.tree_widget
+            self._cached_total_width = sum(
+                tw.columnWidth(i)
+                for i in range(tw.columnCount())
+                if not tw.isColumnHidden(i)
+            )
+        return self._cached_total_width
 
     def set_progress(self, filename: str, progress: int): self.progress_data[filename] = max(0, min(100, progress))
     def mark_skipped(self, filename: str): self.skipped_files.add(filename)
@@ -180,7 +213,7 @@ class ProgressDelegate(QStyledItemDelegate):
 
             if is_skipped or (progress > 0) or is_done:
                 painter.save()
-                total_width = sum(self.tree_widget.columnWidth(i) for i in range(self.tree_widget.columnCount()) if not self.tree_widget.isColumnHidden(i))
+                total_width = self._total_visible_width()
                 
                 if is_skipped:
                     fill_width = total_width

@@ -6,8 +6,9 @@ from pathlib import Path
 from typing import Dict
 
 from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QFormLayout, QLabel, QSpinBox, QDialogButtonBox, QApplication, QCheckBox
+from PyQt6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QFormLayout, QLabel, QSpinBox, QDialogButtonBox, QApplication
 
+from . import __version__
 from .usb_handler import USBHandler, ConnectionStatus
 from .http_handler import HTTPHandler
 from .utility_functions import format_size, format_time
@@ -51,16 +52,13 @@ class ServerManager:
                     self.stop_http_server()
 
     def get_checked_files(self) -> Dict[str, Path]:
-        checked_files = {}
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
-            widget = self.main_window.file_tree.itemWidget(item, 0)
-            if widget:
-                cb = widget.findChild(QCheckBox)
-                if cb and cb.isChecked():
-                    filename = item.text(1)
-                    if filename in self.main_window.file_manager.file_list:
-                        checked_files[filename] = self.main_window.file_manager.file_list[filename]
+        file_manager = self.main_window.file_manager
+        checked_files: Dict[str, Path] = {}
+        for item in file_manager.iter_checked_items():
+            filename = item.text(1)
+            path = file_manager.file_list.get(filename)
+            if path is not None:
+                checked_files[filename] = path
         return checked_files
 
     def _reset_ui_for_start(self):
@@ -69,8 +67,7 @@ class ServerManager:
         self.completed_files_set.clear()
         self.current_processing_file = None
         self.main_window.progress_delegate.clear_all()
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
+        for item in self.main_window.file_manager.iter_items():
             self.main_window.file_manager.update_file_status(item.text(1), '')
         self.main_window.current_progress.setValue(0)
         self.main_window.overall_progress.setValue(0)
@@ -108,7 +105,7 @@ class ServerManager:
         self.usb_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
         self.usb_handler.installation_begun.connect(self.on_installation_begun)
         self.usb_handler.start()
-        self.main_window.setWindowTitle(f"DBI Backend Qt v2.4.0 | USB Mode Active")
+        self.main_window.setWindowTitle(f"DBI Backend Qt v{__version__} | USB Mode Active")
         self._set_server_ui_state(True)
         self.transfer_stats['start_time'] = datetime.now()
         self.main_window.overall_label.setText(f'0 / {len(checked_files)} files')
@@ -172,7 +169,9 @@ class ServerManager:
         self.http_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
         
         self.http_handler.start()
-        self.main_window.setWindowTitle(f"DBI Backend Qt v2.4.0 | HTTP Server: http://{HTTPHandler.get_local_ip()}:{selected_port}/")
+        self.main_window.setWindowTitle(
+            f"DBI Backend Qt v{__version__} | HTTP Server: http://{HTTPHandler.get_local_ip()}:{selected_port}/"
+        )
         self._set_server_ui_state(True)
 
     def stop_http_server(self):
@@ -246,7 +245,18 @@ class ServerManager:
 
     def on_file_progress(self, filename, progress):
         self.main_window.progress_delegate.set_progress(filename, progress)
-        self.main_window.file_tree.viewport().update()
+        # Repaint only the affected row instead of the entire viewport. With
+        # high-throughput transfers progress signals fire up to 20x/sec; a
+        # full viewport repaint forces the delegate to walk every visible row.
+        item = self.main_window.file_manager.item_map.get(filename)
+        if item is not None:
+            rect = self.main_window.file_tree.visualItemRect(item)
+            if rect.isValid() and not rect.isNull():
+                self.main_window.file_tree.viewport().update(rect)
+            else:
+                self.main_window.file_tree.viewport().update()
+        else:
+            self.main_window.file_tree.viewport().update()
 
     def on_transfer_complete(self, filename):
         if filename not in self.completed_files_set:
@@ -255,14 +265,9 @@ class ServerManager:
             self.main_window.file_manager.update_file_status(filename, 'done')
             self.main_window.file_tree.sortItems(3, self.main_window.file_tree.header().sortIndicatorOrder())
             self.main_window.progress_delegate.set_progress(filename, 100)
-            for i in range(self.main_window.file_tree.topLevelItemCount()):
-                item = self.main_window.file_tree.topLevelItem(i)
-                if item.text(1) == filename:
-                    w = self.main_window.file_tree.itemWidget(item, 0)
-                    if w:
-                        cb = w.findChild(QCheckBox)
-                        if cb: cb.setChecked(False)
-                    break
+            item = self.main_window.file_manager.item_map.get(filename)
+            if item is not None:
+                self.main_window.file_manager.set_item_checked(item, False)
             self.main_window.on_item_checked()
             
             # Console logging

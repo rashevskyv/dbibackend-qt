@@ -98,15 +98,15 @@ class FileManager:
 
     def _get_current_checked_state(self) -> Set[str]:
         checked = set()
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
-            w = self.main_window.file_tree.itemWidget(item, 0)
-            if w:
-                cb = w.findChild(QCheckBox)
-                if cb and cb.isChecked(): checked.add(item.text(1))
+        tree = self.main_window.file_tree
+        for i in range(tree.topLevelItemCount()):
+            item = tree.topLevelItem(i)
+            if self.is_item_checked(item):
+                checked.add(item.text(1))
         return checked
 
     def update_file_list(self, previously_checked: Set[str] = None):
+        from .widgets import CHECKED_ROLE
         self.main_window.file_tree.clear()
         self.item_map.clear()
         self.main_window.header_checkbox.blockSignals(True)
@@ -118,6 +118,12 @@ class FileManager:
                 should = True
                 if previously_checked is not None: should = name in previously_checked
                 checkbox.setChecked(should)
+                # Cache the checked state on the item so FileTreeWidgetItem.__lt__
+                # and update_count_label don't need to walk the widget tree.
+                item.setData(0, CHECKED_ROLE, should)
+                checkbox.stateChanged.connect(
+                    lambda state, it=item: it.setData(0, CHECKED_ROLE, state == Qt.CheckState.Checked.value)
+                )
                 checkbox.stateChanged.connect(self.main_window.on_item_checked)
                 w = QWidget()
                 l = QHBoxLayout(w)
@@ -151,22 +157,62 @@ class FileManager:
         if self.main_window.search_box.text():
             self.filter_files(self.main_window.search_box.text())
 
+    # ---- Tree helpers -------------------------------------------------
+    # Iteration / checkbox access used to be inlined in 12+ places; the
+    # helpers below centralize the patterns so callers don't have to
+    # walk the widget tree themselves.
+
+    def iter_items(self):
+        """Yield every top-level item in the file tree."""
+        tree = self.main_window.file_tree
+        for i in range(tree.topLevelItemCount()):
+            yield tree.topLevelItem(i)
+
+    def iter_checked_items(self):
+        """Yield only items whose checkbox is currently checked."""
+        for item in self.iter_items():
+            if self.is_item_checked(item):
+                yield item
+
+    def _checkbox_for(self, item):
+        """Return the QCheckBox embedded in column 0's widget, or None."""
+        w = self.main_window.file_tree.itemWidget(item, 0)
+        if w is None:
+            return None
+        return w.findChild(QCheckBox)
+
+    def is_item_checked(self, item) -> bool:
+        """Read the cached checked state for a tree item.
+
+        Falls back to the widget tree only if the cache isn't populated yet
+        (e.g. when called before :meth:`update_file_list` had a chance to seed
+        it). All hot paths should hit the cached branch.
+        """
+        from .widgets import CHECKED_ROLE
+        cached = item.data(0, CHECKED_ROLE)
+        if cached is not None:
+            return bool(cached)
+        cb = self._checkbox_for(item)
+        return cb.isChecked() if cb is not None else False
+
+    def set_item_checked(self, item, value: bool):
+        """Set the checkbox for ``item`` to ``value`` (no-op if absent)."""
+        cb = self._checkbox_for(item)
+        if cb is not None:
+            cb.setChecked(value)
+
+    # ------------------------------------------------------------------
+
     def update_count_label(self):
         total_size = 0
         total_count = 0
         selected_size = 0
         selected_count = 0
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
+        for item in self.iter_items():
             size = item.data(2, Qt.ItemDataRole.UserRole) or 0
             total_count += 1
             total_size += size
-            w = self.main_window.file_tree.itemWidget(item, 0)
-            is_checked = False
-            if w:
-                cb = w.findChild(QCheckBox)
-                if cb: is_checked = cb.isChecked()
-            if is_checked:
+            if self.is_item_checked(item):
                 selected_count += 1
                 selected_size += size
         text = (f"Selected: {selected_count} / {total_count} files, "
@@ -200,10 +246,10 @@ class FileManager:
                 item.setData(3, Qt.ItemDataRole.UserRole, 0)
 
     def get_file_status_code(self, filename: str) -> int:
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
-            if item.text(1) == filename: return item.data(3, Qt.ItemDataRole.UserRole) or 0
-        return 0
+        item = self.item_map.get(filename)
+        if item is None:
+            return 0
+        return item.data(3, Qt.ItemDataRole.UserRole) or 0
 
     def get_file_status(self, filename: str) -> str:
         item = self.item_map.get(filename)
@@ -213,10 +259,7 @@ class FileManager:
         selected = self.main_window.file_tree.selectedItems()
         if not selected: return
         for item in selected:
-            w = self.main_window.file_tree.itemWidget(item, 0)
-            if w:
-                cb = w.findChild(QCheckBox)
-                if cb: cb.setChecked(not cb.isChecked())
+            self.set_item_checked(item, not self.is_item_checked(item))
         self.main_window.on_item_checked()
         curr = self.main_window.file_tree.currentItem()
         if curr:
@@ -235,30 +278,24 @@ class FileManager:
 
     def filter_files(self, text: str):
         search = text.lower()
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
+        for item in self.iter_items():
             item.setHidden(search not in item.text(1).lower())
 
     def dim_unchecked_items(self):
         gray = QBrush(QColor('#808080'))
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
-            w = self.main_window.file_tree.itemWidget(item, 0)
-            checked = False
-            if w:
-                cb = w.findChild(QCheckBox)
-                if cb: checked = cb.isChecked()
-            if not checked:
-                for c in range(self.main_window.file_tree.columnCount()):
+        column_count = self.main_window.file_tree.columnCount()
+        for item in self.iter_items():
+            if not self.is_item_checked(item):
+                for c in range(column_count):
                     item.setForeground(c, gray)
 
     def reset_items_visuals(self):
         brush = QBrush(self.main_window.palette().text().color())
         self.main_window.progress_delegate.clear_all()
         self.main_window.file_tree.viewport().update()
-        for i in range(self.main_window.file_tree.topLevelItemCount()):
-            item = self.main_window.file_tree.topLevelItem(i)
-            for c in range(self.main_window.file_tree.columnCount()):
+        column_count = self.main_window.file_tree.columnCount()
+        for item in self.iter_items():
+            for c in range(column_count):
                 item.setForeground(c, brush)
             item.setText(3, "Queued")
             item.setData(3, Qt.ItemDataRole.UserRole, 0)
@@ -279,24 +316,18 @@ class FileManager:
         self.main_window.overall_label.setText("0 / 0 files")
         self.main_window.speed_label.setText("Speed: 0 MB/s")
         self.main_window.eta_label.setText("ETA: --:--:--")
-        self.main_window.setWindowTitle("DBI Backend Qt v2.3.17")
+        from . import __version__
+        self.main_window.setWindowTitle(f"DBI Backend Qt v{__version__}")
         if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
 
     def handle_installation_start(self, requested_filenames: list):
-        """Called when the first real data request arrives. 
+        """Called when the first real data request arrives.
         Marks checked but unrequested files as Skipped."""
         requested_set = set(requested_filenames)
         for filename, item in self.item_map.items():
-            # Check if item is checked
-            w = self.main_window.file_tree.itemWidget(item, 0)
-            is_checked = False
-            if w:
-                cb = w.findChild(QCheckBox)
-                if cb: is_checked = cb.isChecked()
-            
-            if is_checked and filename not in requested_set:
+            if self.is_item_checked(item) and filename not in requested_set:
                 self.update_file_status(filename, 'skipped')
-        
+
         # Sort once at the end
         self.main_window.file_tree.sortItems(3, self.main_window.file_tree.header().sortIndicatorOrder())
 
@@ -307,11 +338,10 @@ class FileManager:
         path, _ = QFileDialog.getSaveFileName(self.main_window, "Batch", "", "Batch (*.bat)")
         if path:
             checked = []
-            for i in range(self.main_window.file_tree.topLevelItemCount()):
-                item = self.main_window.file_tree.topLevelItem(i)
-                w = self.main_window.file_tree.itemWidget(item, 0)
-                if w and w.findChild(QCheckBox).isChecked():
-                    if item.text(1) in self.file_list: checked.append(self.file_list[item.text(1)])
+            for item in self.iter_checked_items():
+                name = item.text(1)
+                if name in self.file_list:
+                    checked.append(self.file_list[name])
             if not checked:
                 QMessageBox.warning(self.main_window, "No Selection", "None checked.")
                 return
@@ -333,14 +363,14 @@ class FileManager:
         if path:
             self.main_window.config.set('last_preset_directory', str(Path(path).parent))
             data = []
-            for i in range(self.main_window.file_tree.topLevelItemCount()):
-                item = self.main_window.file_tree.topLevelItem(i)
+            for item in self.iter_items():
                 name = item.text(1)
-                chk = True
-                w = self.main_window.file_tree.itemWidget(item, 0)
-                if w: chk = w.findChild(QCheckBox).isChecked()
                 if name in self.file_list:
-                    data.append({"name": name, "path": str(self.file_list[name]), "checked": chk})
+                    data.append({
+                        "name": name,
+                        "path": str(self.file_list[name]),
+                        "checked": self.is_item_checked(item),
+                    })
             
             blob = {"name": Path(path).stem, "created_at": datetime.now().isoformat(), "files": data}
             try:

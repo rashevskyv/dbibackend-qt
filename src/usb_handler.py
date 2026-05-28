@@ -51,7 +51,13 @@ class USBHandler(QThread):
         self.current_file_bytes_sent = 0
         self.current_file_size = 0
         self.installation_started = False
-        
+
+        # progress_updated throttling — emit at most ~20 Hz so the UI thread
+        # is not flooded by tens of cross-thread signals per second when the
+        # bus is sustaining 30-100 MB/s.
+        self._progress_emit_interval = 0.05  # seconds
+        self._last_progress_emit = 0.0
+
         # File handle caching
         self.cached_file_path = None
         self.cached_file_handle = None
@@ -235,6 +241,9 @@ class USBHandler(QThread):
                 self.current_transfer_file = name
                 self.current_file_size = self.progress_tracker.get_file_size(name)
                 self.current_file_bytes_sent = 0
+                # Force the next progress emit even if the throttle window
+                # hasn't elapsed so the UI flips to the new file immediately.
+                self._last_progress_emit = 0.0
                 self.log_message.emit('info', f'Sending: {name}')
 
         # --- Data Transfer (Optimized with caching) ---
@@ -263,22 +272,26 @@ class USBHandler(QThread):
                 if not is_metadata:
                     self.progress_tracker.transferred_bytes += sent
                     self.current_file_bytes_sent += sent # Track local file progress
-                    
-                    # Update UI every chunk
-                    elapsed = time.time() - self.transfer_start_time
-                    speed = (self.progress_tracker.transferred_bytes / elapsed / 1048576) if elapsed > 0 else 0.0
-                    
-                    # IMPORTANT: Passing real values here restores the UI
-                    self.progress_updated.emit(
-                        name,
-                        self.progress_tracker.transferred_bytes,
-                        speed,
-                        self.progress_tracker.total_requested_size,
-                        len(self.progress_tracker.requested_files),
-                        self.current_file_bytes_sent,  # Current file progress
-                        self.current_file_size,        # Current file total
-                        self.progress_tracker.unique_bytes_transferred
-                    )
+
+                    # Throttle UI updates: at sustained 100 MB/s this loop
+                    # iterates 100x/sec; emitting a cross-thread signal each
+                    # iteration overwhelms the event loop and stalls UI input.
+                    now = time.time()
+                    if now - self._last_progress_emit >= self._progress_emit_interval:
+                        self._last_progress_emit = now
+                        elapsed = now - self.transfer_start_time
+                        speed = (self.progress_tracker.transferred_bytes / elapsed / 1048576) if elapsed > 0 else 0.0
+
+                        self.progress_updated.emit(
+                            name,
+                            self.progress_tracker.transferred_bytes,
+                            speed,
+                            self.progress_tracker.total_requested_size,
+                            len(self.progress_tracker.requested_files),
+                            self.current_file_bytes_sent,  # Current file progress
+                            self.current_file_size,        # Current file total
+                            self.progress_tracker.unique_bytes_transferred
+                        )
         except Exception as e:
             self.log_message.emit('error', f'File error: {e}')
             # Clear cache on error
