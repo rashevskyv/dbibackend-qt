@@ -104,6 +104,7 @@ class ServerManager:
         self.usb_handler.transfer_reset.connect(self.on_transfer_reset)
         self.usb_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
         self.usb_handler.installation_begun.connect(self.on_installation_begun)
+        self.usb_handler.finished.connect(self.on_usb_server_stopped)
         self.usb_handler.start()
         self.main_window.setWindowTitle(f"DBI Backend Qt v{__version__} | USB Mode Active")
         self._set_server_ui_state(True)
@@ -113,10 +114,6 @@ class ServerManager:
     def stop_usb_server(self):
         if self.usb_handler:
             self.usb_handler.stop()
-            self.usb_handler = None
-        self._set_server_ui_state(False)
-        self.main_window.file_manager.handle_server_stop()
-        self.main_window.log('info', 'USB Server stopped')
 
     def start_http_server(self):
         checked_files = self.get_checked_files()
@@ -167,7 +164,7 @@ class ServerManager:
         self.http_handler.transfer_complete.connect(self.on_transfer_complete)
         self.http_handler.file_skipped.connect(self.on_file_skipped)
         self.http_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
-        
+        self.http_handler.finished.connect(self.on_http_server_stopped)
         self.http_handler.start()
         self.main_window.setWindowTitle(
             f"DBI Backend Qt v{__version__} | HTTP Server: http://{HTTPHandler.get_local_ip()}:{selected_port}/"
@@ -177,9 +174,6 @@ class ServerManager:
     def stop_http_server(self):
         if self.http_handler:
             self.http_handler.stop()
-            self.http_handler = None
-        self._set_server_ui_state(False)
-        self.main_window.file_manager.handle_server_stop()
 
     def on_progress_updated(self, filename, transferred, speed, total_req_size, num_files, cur_bytes, cur_size, _unused):
         self.main_window.current_file_label.setText(filename)
@@ -374,7 +368,23 @@ class ServerManager:
 
     # (Unchanged stubs)
     def on_http_server_started(self, ip, port): pass
-    def on_http_server_stopped(self): pass
+    
+    def on_http_server_stopped(self):
+        if self.http_handler is None:
+            return
+        self.http_handler = None
+        self._set_server_ui_state(False)
+        self.main_window.file_manager.handle_server_stop()
+        self.main_window.log('info', 'HTTP Server stopped')
+
+    def on_usb_server_stopped(self):
+        if self.usb_handler is None:
+            return
+        self.usb_handler = None
+        self._set_server_ui_state(False)
+        self.main_window.file_manager.handle_server_stop()
+        self.main_window.log('info', 'USB Server stopped')
+        self.main_window.connection_status.setText('🔴 Not connected')
 
     def _set_server_ui_state(self, running: bool):
         btn = self.main_window.start_server_btn
