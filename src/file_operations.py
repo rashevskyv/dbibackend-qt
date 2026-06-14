@@ -31,7 +31,7 @@ class FileManager:
         if getattr(sys, 'frozen', False):
             base_dir = Path(sys.executable).parent
         else:
-            base_dir = Path(__file__).parent.parent.parent
+            base_dir = Path(__file__).parent.parent
         
         if base_dir.name == 'src': base_dir = base_dir.parent
         presets_dir = base_dir / 'presets'

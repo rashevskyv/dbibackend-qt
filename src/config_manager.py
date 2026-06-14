@@ -31,7 +31,7 @@ class ConfigManager:
             if getattr(sys, 'frozen', False):
                 app_dir = Path(sys.executable).parent
             else:
-                app_dir = Path(__file__).parent.parent.parent
+                app_dir = Path(__file__).parent.parent
             
             if app_dir.name == 'src': 
                 app_dir = app_dir.parent
