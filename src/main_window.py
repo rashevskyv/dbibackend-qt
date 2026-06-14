@@ -90,7 +90,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f'DBI Backend Qt v{__version__}')
         self.setMinimumSize(900, 700)
 
-        icon_path = Path('icons/icon.png')
+        icon_path = Path(__file__).parent.parent / 'icons' / 'icon.png'
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         
