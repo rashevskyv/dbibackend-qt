@@ -107,3 +107,8 @@ class ProgressTracker:
         self.file_bytes_sent = {name: 0 for name in self.file_list.keys()}
         self.skipped_files = set()
         self.file_intervals = {name: [] for name in self.file_list.keys()}
+        
+        # Pre-initialize with all files in the batch for 'Overall' progress consistency
+        for name in self.file_list.keys():
+            self.requested_files.add(name)
+            self.total_requested_size += self.get_file_size(name)

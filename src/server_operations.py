@@ -309,6 +309,12 @@ class ServerManager:
 
     def on_transfer_reset(self):
         self.main_window.log('info', 'Switch reset sequence.')
+        self.transfer_stats['completed_files'] = 0
+        self.transfer_stats['skipped_files'] = 0
+        self.completed_files_set.clear()
+        self.current_processing_file = None
+        if self.usb_handler:
+            self.usb_handler.progress_tracker.reset()
         self.main_window.file_manager.handle_server_stop() # Reset visual styles
         self.main_window.file_manager.handle_server_start() # Re-dim unchecked
         self.main_window.on_item_checked()
