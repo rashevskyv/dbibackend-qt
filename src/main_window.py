@@ -235,6 +235,11 @@ class MainWindow(QMainWindow):
         self.log_text.append(f'<span style="color:{c};">[{t}] {i} {message}</span>')
         if self.log_text.document().lineCount() > 1000:
              self.log_text.setPlainText(self.log_text.toPlainText()[-5000:])
+        try:
+            with open("log.txt", 'a', encoding='utf-8') as f:
+                f.write(f"[{t}] [{level.upper()}] {message}\n")
+        except:
+            pass
 
     def clear_log(self): self.log_text.clear()
 
