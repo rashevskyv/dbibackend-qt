@@ -228,7 +228,7 @@ class ServerManager:
         self.main_window.overall_label.setText(f'{display_idx} / {total_files} files')
 
         if self.transfer_stats['start_time']:
-            elapsed = (datetime.now() - self.transfer_stats['start_time']).seconds
+            elapsed = int((datetime.now() - self.transfer_stats['start_time']).total_seconds())
             self.main_window.session_time_label.setText(f"Time: {format_time(elapsed)}")
 
         if completed < total_files:
@@ -362,7 +362,7 @@ class ServerManager:
         skipped = self.transfer_stats['skipped_files']
         time_taken = "00:00:00"
         if self.transfer_stats['start_time']:
-            elapsed = (datetime.now() - self.transfer_stats['start_time']).seconds
+            elapsed = int((datetime.now() - self.transfer_stats['start_time']).total_seconds())
             time_taken = format_time(elapsed)
 
         msg = (f"Session Complete!\n\nInstalled: {success}\nSkipped: {skipped}\nTime: {time_taken}")
