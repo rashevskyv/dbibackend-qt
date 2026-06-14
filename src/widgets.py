@@ -223,7 +223,8 @@ class ProgressDelegate(QStyledItemDelegate):
                     fill_width = int(total_width * (fill_percent / 100.0))
                     fill_color = self.progress_color
                     
-                progress_rect = QRect(0, option.rect.y(), fill_width, option.rect.height())
+                offset = self.tree_widget.header().offset()
+                progress_rect = QRect(offset, option.rect.y(), fill_width, option.rect.height())
                 painter.setClipRect(option.rect)
                 painter.fillRect(progress_rect, QBrush(fill_color))
                 painter.restore()
