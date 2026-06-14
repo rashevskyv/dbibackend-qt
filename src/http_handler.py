@@ -52,11 +52,6 @@ class HTTPHandler(QThread):
         
         # Centralized Progress Tracker
         self.progress_tracker = ProgressTracker(file_list)
-        
-        # File handle caching (shared across request handler threads)
-        self.cached_file_path = None
-        self.cached_file_handle = None
-        self.cache_lock = threading.Lock()
 
     @staticmethod
     def get_local_ip():
@@ -117,16 +112,6 @@ class HTTPHandler(QThread):
             self.httpd.server_close()
             self.httpd = None
         
-        # Close cached file
-        with self.cache_lock:
-            if self.cached_file_handle:
-                try: 
-                    self.cached_file_handle.close()
-                except Exception: 
-                    pass
-                self.cached_file_handle = None
-                self.cached_file_path = None
-
         self.is_running = False
         self.server_stopped.emit()
         self.wait()

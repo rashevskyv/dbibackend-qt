@@ -162,91 +162,80 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
             handler_thread.log_message.emit('info', f"Starting transfer: {original_filename}")
 
         try:
-            # --- Optimized File Access with Caching ---
-            # The lock only protects swapping the handle, not the read/write loop.
-            with handler_thread.cache_lock:
-                if handler_thread.cached_file_path != file_path:
-                    if handler_thread.cached_file_handle:
-                        try: handler_thread.cached_file_handle.close()
-                        except: pass
-                    handler_thread.cached_file_handle = open(file_path, 'rb')
-                    handler_thread.cached_file_path = file_path
-                f = handler_thread.cached_file_handle
-
-            # Read/write loop is OUTSIDE the lock to allow parallel requests
-            f.seek(start)
-            bytes_to_send = content_length
-            # 1 MB chunks mirror the USB BUFFER_SEGMENT_DATA_SIZE and roughly
-            # halve the per-chunk syscall / write overhead vs 128KB on fast
-            # disks, with negligible impact on small reads.
-            chunk_size = 1024 * 1024
-            
-            bytes_sent_this_session = 0
-            bytes_since_last_log = 0
-            log_threshold = 10 * 1024 * 1024  # Log every 10 MB
-            
-            start_time = time.time()
-            last_emit_time = start_time
-            
-            while bytes_to_send > 0:
-                read_size = min(chunk_size, bytes_to_send)
-                buf = f.read(read_size)
-                if not buf:
-                    break
+            with open(file_path, 'rb') as f:
+                f.seek(start)
+                bytes_to_send = content_length
+                # 1 MB chunks mirror the USB BUFFER_SEGMENT_DATA_SIZE and roughly
+                # halve the per-chunk syscall / write overhead vs 128KB on fast
+                # disks, with negligible impact on small reads.
+                chunk_size = 1024 * 1024
                 
-                self.wfile.write(buf)
+                bytes_sent_this_session = 0
+                bytes_since_last_log = 0
+                log_threshold = 10 * 1024 * 1024  # Log every 10 MB
                 
-                sent = len(buf)
-                bytes_to_send -= sent
-                bytes_sent_this_session += sent
-                bytes_since_last_log += sent
+                start_time = time.time()
+                last_emit_time = start_time
                 
-                # LOGGING CHUNKS (Activity Log)
-                if bytes_since_last_log >= log_threshold:
-                    mb_sent = bytes_sent_this_session / (1024 * 1024)
-                    handler_thread.log_message.emit('debug', f"Sending {original_filename}: {mb_sent:.1f} MB session...")
-                    bytes_since_last_log = 0
+                while bytes_to_send > 0:
+                    read_size = min(chunk_size, bytes_to_send)
+                    buf = f.read(read_size)
+                    if not buf:
+                        break
+                    
+                    self.wfile.write(buf)
+                    
+                    sent = len(buf)
+                    bytes_to_send -= sent
+                    bytes_sent_this_session += sent
+                    bytes_since_last_log += sent
+                    
+                    # LOGGING CHUNKS (Activity Log)
+                    if bytes_since_last_log >= log_threshold:
+                        mb_sent = bytes_sent_this_session / (1024 * 1024)
+                        handler_thread.log_message.emit('debug', f"Sending {original_filename}: {mb_sent:.1f} MB session...")
+                        bytes_since_last_log = 0
 
-                # Calculate speed and emit progress periodically (Throttled to 0.5s for speed)
-                current_time = time.time()
-                if current_time - last_emit_time > 0.5:
-                    elapsed = current_time - start_time
-                    speed_mbps = (bytes_sent_this_session / elapsed) / (1024 * 1024) if elapsed > 0 else 0
-                    
-                    current_pos = start + bytes_sent_this_session
-                    interval_start = start
-                    interval_end = current_pos
-                    
-                    # UPDATE PROGRESS (Using original name for UI)
-                    file_unique, total_unique, total_req_size, n_files = handler_thread.update_progress(original_filename, interval_start, interval_end)
-                    
-                    handler_thread.progress_updated.emit(
-                        original_filename,
-                        total_unique, 
-                        speed_mbps,
-                        total_req_size,
-                        n_files,
-                        file_unique, 
-                        file_size,
-                        total_unique 
-                    )
-                    
-                    percent = int((file_unique / file_size) * 100)
-                    handler_thread.file_progress.emit(original_filename, percent)
-                    
-                    last_emit_time = current_time
+                    # Calculate speed and emit progress periodically (Throttled to 0.5s for speed)
+                    current_time = time.time()
+                    if current_time - last_emit_time > 0.5:
+                        elapsed = current_time - start_time
+                        speed_mbps = (bytes_sent_this_session / elapsed) / (1024 * 1024) if elapsed > 0 else 0
+                        
+                        current_pos = start + bytes_sent_this_session
+                        interval_start = start
+                        interval_end = current_pos
+                        
+                        # UPDATE PROGRESS (Using original name for UI)
+                        file_unique, total_unique, total_req_size, n_files = handler_thread.update_progress(original_filename, interval_start, interval_end)
+                        
+                        handler_thread.progress_updated.emit(
+                            original_filename,
+                            total_unique, 
+                            speed_mbps,
+                            total_req_size,
+                            n_files,
+                            file_unique, 
+                            file_size,
+                            total_unique 
+                        )
+                        
+                        percent = int((file_unique / file_size) * 100)
+                        handler_thread.file_progress.emit(original_filename, percent)
+                        
+                        last_emit_time = current_time
 
-            # === Final Success Check ===
-            final_pos = start + bytes_sent_this_session
-            file_unique, total_unique, total_req_size, n_files = handler_thread.update_progress(original_filename, start, final_pos)
-            
-            percent = int((file_unique / file_size) * 100)
-            handler_thread.file_progress.emit(original_filename, percent)
+                # === Final Success Check ===
+                final_pos = start + bytes_sent_this_session
+                file_unique, total_unique, total_req_size, n_files = handler_thread.update_progress(original_filename, start, final_pos)
+                
+                percent = int((file_unique / file_size) * 100)
+                handler_thread.file_progress.emit(original_filename, percent)
 
-            # IMPORTANT: Only mark as COMPLETE if we have transferred > 99% of the unique file content
-            if file_unique >= (file_size * 0.99):
-                handler_thread.transfer_complete.emit(original_filename)
-                handler_thread.log_message.emit('success', f"Finished sending: {original_filename}")
+                # IMPORTANT: Only mark as COMPLETE if we have transferred > 99% of the unique file content
+                if file_unique >= (file_size * 0.99):
+                    handler_thread.transfer_complete.emit(original_filename)
+                    handler_thread.log_message.emit('success', f"Finished sending: {original_filename}")
 
         except (BrokenPipeError, ConnectionResetError):
             pass
