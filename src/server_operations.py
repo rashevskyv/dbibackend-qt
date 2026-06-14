@@ -320,6 +320,8 @@ class ServerManager:
         self.main_window.on_item_checked()
 
     def on_installation_begun(self, requested_filenames):
+        if not self.usb_handler:
+            return
         from .utility_functions import format_size
         # Clean null terminators from incoming requested names
         requested_set = {n.rstrip('\x00') for n in requested_filenames}
