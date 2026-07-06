@@ -69,7 +69,7 @@
 ### Running from Source
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/dbibackend-qt.git
+git clone https://github.com/rashevskyv/dbibackend-qt.git
 cd dbibackend-qt
 
 # Install dependencies
