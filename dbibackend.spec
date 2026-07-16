@@ -37,8 +37,11 @@ a = Analysis(
         # Application modules
         'src',
         'src.config_manager',
+        'src.ftp_handler',
         'src.http_handler',
+        'src.http_request_handler',
         'src.main_window',
+        'src.network_transfer_handler',
         'src.usb_handler',
         'src.theme_manager',
         'src.single_instance',

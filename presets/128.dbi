@@ -1,95 +1,10 @@
 {
   "name": "128",
-  "created_at": "2026-02-13T18:36:07.342941",
+  "created_at": "2026-05-14T16:36:32.488466",
   "files": [
     {
-      "name": "AM2R_0100414d32524e00.nsp",
-      "path": "G:\\games\\AM2R_0100414d32524e00.nsp",
-      "checked": true
-    },
-    {
-      "name": "Animal Crossing New Horizons [B+U+DLC].nsp",
-      "path": "G:\\games\\Animal Crossing New Horizons [B+U+DLC].nsp",
-      "checked": true
-    },
-    {
-      "name": "Castle Crashers Remastered [B+U].nsp",
-      "path": "G:\\games\\Castle Crashers Remastered [B+U].nsp",
-      "checked": true
-    },
-    {
-      "name": "Celeste [B+U].nsp",
-      "path": "G:\\games\\Celeste [B+U].nsp",
-      "checked": true
-    },
-    {
-      "name": "Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
-      "path": "G:\\games\\Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Hollow Knight Silksong [010013C00E930000][v589824][UKR+REPACK+BACKPORT].nsp",
-      "path": "G:\\games\\Hollow Knight Silksong [010013C00E930000][v589824][UKR+REPACK+BACKPORT].nsp",
-      "checked": true
-    },
-    {
-      "name": "Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
-      "path": "G:\\games\\Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
-      "path": "G:\\games\\Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Metroid Dread [B+U].nsp",
-      "path": "G:\\games\\Metroid Dread [B+U].nsp",
-      "checked": true
-    },
-    {
-      "name": "Record of Lodoss War [B+U].nsp",
-      "path": "G:\\games\\Record of Lodoss War [B+U].nsp",
-      "checked": true
-    },
-    {
-      "name": "Red Dead Redemption [B+U].nsp",
-      "path": "G:\\games\\Red Dead Redemption [B+U].nsp",
-      "checked": true
-    },
-    {
-      "name": "SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
-      "path": "G:\\games\\SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Super Mario 3D World  Bowsers Fury [010028600EBDA000][v131072][UKR+REPACK].nsp",
-      "path": "G:\\games\\Super Mario 3D World  Bowsers Fury [010028600EBDA000][v131072][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
-      "path": "G:\\games\\Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Super Mario Galaxy 2 [B+U131072].nsp",
-      "path": "G:\\games\\Super Mario Galaxy 2 [B+U131072].nsp",
-      "checked": true
-    },
-    {
-      "name": "Super Mario Galaxy [010099C022B96000][v131072][UKR+REPACK].nsp",
-      "path": "G:\\games\\Super Mario Galaxy [010099C022B96000][v131072][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "Teenage Mutant Ninja Turtles Shredders Revenge [0100FE701475A000][v589824][UKR+REPACK].nsp",
-      "path": "G:\\games\\Teenage Mutant Ninja Turtles Shredders Revenge [0100FE701475A000][v589824][UKR+REPACK].nsp",
-      "checked": true
-    },
-    {
-      "name": "The Binding of Isaac Afterbirth [010021C000B6A000][v524288][UKR+REPACK].nsp",
-      "path": "G:\\games\\The Binding of Isaac Afterbirth [010021C000B6A000][v524288][UKR+REPACK].nsp",
+      "name": "The Legend of Zelda Tears of the Kingdom [B+U393216].nsp",
+      "path": "G:\\games\\The Legend of Zelda Tears of the Kingdom [B+U393216].nsp",
       "checked": true
     },
     {
@@ -98,13 +13,78 @@
       "checked": true
     },
     {
-      "name": "The Legend of Zelda Tears of the Kingdom [B+U393216].nsp",
-      "path": "G:\\games\\The Legend of Zelda Tears of the Kingdom [B+U393216].nsp",
+      "name": "Red Dead Redemption [B+U].nsp",
+      "path": "G:\\games\\Red Dead Redemption [B+U].nsp",
       "checked": true
     },
     {
-      "name": "To The Moon [B+U].nsp",
-      "path": "G:\\games\\To The Moon [B+U].nsp",
+      "name": "Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
+      "path": "G:\\games\\Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Animal Crossing New Horizons [B+U+DLC].nsp",
+      "path": "G:\\games\\Animal Crossing New Horizons [B+U+DLC].nsp",
+      "checked": true
+    },
+    {
+      "name": "Hollow Knight Silksong [010013C00E930000][v589824][UKR+REPACK+BACKPORT].nsp",
+      "path": "G:\\games\\Hollow Knight Silksong [010013C00E930000][v589824][UKR+REPACK+BACKPORT].nsp",
+      "checked": true
+    },
+    {
+      "name": "SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
+      "path": "G:\\games\\SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Metroid Dread [B+U].nsp",
+      "path": "G:\\games\\Metroid Dread [B+U].nsp",
+      "checked": true
+    },
+    {
+      "name": "Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
+      "path": "G:\\games\\Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
+      "path": "G:\\games\\Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario Galaxy [010099C022B96000][v327680][REPACK+UKR].nsp",
+      "path": "G:\\games\\Super Mario Galaxy [010099C022B96000][v327680][REPACK+UKR].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario 3D World  Bowsers Fury [010028600EBDA000][v131072][UKR+REPACK].nsp",
+      "path": "G:\\games\\Super Mario 3D World  Bowsers Fury [010028600EBDA000][v131072][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario Galaxy 2 [B+U131072].nsp",
+      "path": "G:\\games\\Super Mario Galaxy 2 [B+U131072].nsp",
+      "checked": true
+    },
+    {
+      "name": "Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
+      "path": "G:\\games\\Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "The Binding of Isaac Afterbirth [010021C000B6A000][v524288][UKR+REPACK].nsp",
+      "path": "G:\\games\\The Binding of Isaac Afterbirth [010021C000B6A000][v524288][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Celeste [B+U].nsp",
+      "path": "G:\\games\\Celeste [B+U].nsp",
+      "checked": true
+    },
+    {
+      "name": "Teenage Mutant Ninja Turtles Shredders Revenge [0100FE701475A000][v589824][UKR+REPACK].nsp",
+      "path": "G:\\games\\Teenage Mutant Ninja Turtles Shredders Revenge [0100FE701475A000][v589824][UKR+REPACK].nsp",
       "checked": true
     },
     {
@@ -113,13 +93,28 @@
       "checked": true
     },
     {
-      "name": "YouTube [B+U196608].nsp",
-      "path": "G:\\games\\YouTube [B+U196608].nsp",
+      "name": "To The Moon [B+U].nsp",
+      "path": "G:\\games\\To The Moon [B+U].nsp",
       "checked": true
     },
     {
-      "name": "hbmenu_[0104444444440000].nsp",
-      "path": "D:\\git\\dev\\_kefir\\kefir\\games\\hbmenu_[0104444444440000].nsp",
+      "name": "Record of Lodoss War [B+U].nsp",
+      "path": "G:\\games\\Record of Lodoss War [B+U].nsp",
+      "checked": true
+    },
+    {
+      "name": "Castle Crashers Remastered [B+U].nsp",
+      "path": "G:\\games\\Castle Crashers Remastered [B+U].nsp",
+      "checked": true
+    },
+    {
+      "name": "AM2R_0100414d32524e00.nsp",
+      "path": "G:\\games\\AM2R_0100414d32524e00.nsp",
+      "checked": true
+    },
+    {
+      "name": "YouTube [B+U196608].nsp",
+      "path": "G:\\games\\YouTube [B+U196608].nsp",
       "checked": true
     },
     {

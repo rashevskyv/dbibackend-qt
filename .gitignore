@@ -23,6 +23,8 @@ nul
 venv/
 env/
 ENV/
+.graphify-venv/
+graphify-out/.venv/
 
 # IDE
 .vscode/
@@ -36,6 +38,8 @@ CLAUDE.md
 GEMINI.md
 .agent/
 .antigravity/
+audit.md
+AUDIT.md
 
 # Diffs and patches
 *.patch
@@ -45,3 +49,7 @@ diff.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# Graphify
+.graphify-wsl/
+graphify-out/

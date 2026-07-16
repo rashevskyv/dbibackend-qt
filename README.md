@@ -10,9 +10,14 @@
 
 ## ✨ Key Features
 
-### 📡 Dual Transfer Modes
-*   **USB Backend:** Direct installation via USB cable using the MTP/DBI protocol. High-speed and reliable.
-*   **HTTP Server:** Turns your PC into a local network repository. Use the "Install from HTTP" menu in DBI to install games over Wi-Fi or LAN.
+### 📡 Transfer Modes
+*   **USB Backend:** Direct installation via USB cable using the MTP/DBI protocol. High-speed and reliable. Supports only Switch game files (`.nsp`, `.nsz`, `.xci`, `.xcz`).
+*   **HTTP Server:** Turns your PC into a local network repository. Use the "Install from HTTP" menu in DBI to install games over Wi-Fi or LAN. Supports adding any folders (as virtual directories) and files of any type.
+*   **FTP Server:** Serves your files over a local FTP server. Use the "Install from FTP" network source in DBI or any standard FTP client (like FileZilla). Supports adding folders and files of any type.
+
+### 📁 Virtual File System (HTTP & FTP)
+*   **DBI Client Filter:** When accessed via the Switch's DBI program (detected by User-Agent for HTTP, or username/password matching for FTP), the servers automatically present a flat listing containing only compatible installation files (`.nsp`, `.nsz`, `.xci`, `.xcz`) for seamless installation.
+*   **Hierarchical Browsing:** When accessed via standard web browsers or standard FTP clients, the servers present the actual nested directory structures, recursive size calculations, and allow downloading all files without extension filtering.
 
 ### 📋 Intelligent File Queue
 *   **Supported Formats:** Full support for `.nsp`, `.nsz`, `.xci`, and `.xcz` files.

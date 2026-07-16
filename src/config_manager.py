@@ -15,6 +15,9 @@ class ConfigManager:
         'theme': 'auto',
         'auto_connect': True,
         'http_port': 8080,
+        'http_ip': '',
+        'ftp_port': 2121,
+        'ftp_ip': '',
         # Separate directories for different actions
         'last_file_directory': '',
         'last_folder_directory': '',

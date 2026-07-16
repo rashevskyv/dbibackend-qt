@@ -1,212 +1,396 @@
 {
-    "name":  "64",
-    "created_at":  "2026-03-09T17:31:39.207971",
-    "files":  [
-                  {
-                      "name":  "Balatro [0100CD801CE5E000][v0] (0.08 GB).nsz",
-                      "path":  "G:\\games\\Balatro [0100CD801CE5E000][v0] (0.08 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Balatro [0100CD801CE5E800][v327680] (0.06 GB).nsz",
-                      "path":  "G:\\games\\Balatro [0100CD801CE5E800][v327680] (0.06 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Bayonetta 2 [01007960049A0000][v0] (12.41 GB).nsz",
-                      "path":  "G:\\games\\Bayonetta 2 [01007960049A0000][v0] (12.41 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Bayonetta 2 [01007960049A0800][v65536] (0.12 GB).nsz",
-                      "path":  "G:\\games\\Bayonetta 2 [01007960049A0800][v65536] (0.12 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Crysis Remastered [0100E66010ADE000][v524288][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\Crysis Remastered [0100E66010ADE000][v524288][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\Dead Cells [0100646009FBE000][v3014656][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "DOOM 3 [010029D00E740000][v327680][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\DOOM 3 [010029D00E740000][v327680][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "DOOM Eternal [0100B1A00D8CE000][v0] (17.50 GB).nsz",
-                      "path":  "G:\\games\\DOOM Eternal [0100B1A00D8CE000][v0] (17.50 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "DOOM Eternal [0100B1A00D8CE800][v983040] (15.51 GB).nsz",
-                      "path":  "G:\\games\\DOOM Eternal [0100B1A00D8CE800][v983040] (15.51 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "DOOM Eternal [DLC Campaign] [0100B1A00D8CF003][v0].nsp",
-                      "path":  "G:\\games\\DOOM Eternal [DLC Campaign] [0100B1A00D8CF003][v0].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "DOOM Eternal [DLC Deluxe Edition Content] [0100B1A00D8CF002][v0].nsp",
-                      "path":  "G:\\games\\DOOM Eternal [DLC Deluxe Edition Content] [0100B1A00D8CF002][v0].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "DOOM Eternal [DLC Rip and Tear Pack] [0100B1A00D8CF001][v0].nsp",
-                      "path":  "G:\\games\\DOOM Eternal [DLC Rip and Tear Pack] [0100B1A00D8CF001][v0].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "DOOM Eternal [DLC The Ancient Gods Part 2] [0100B1A00D8CF005][v0].nsp",
-                      "path":  "G:\\games\\DOOM Eternal [DLC The Ancient Gods Part 2] [0100B1A00D8CF005][v0].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "DOOM Eternal [DLC The Ancient Gods] [0100B1A00D8CF004][v0].nsp",
-                      "path":  "G:\\games\\DOOM Eternal [DLC The Ancient Gods] [0100B1A00D8CF004][v0].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "DOOM [0100416004C00000][v0] (13.67 GB).nsz",
-                      "path":  "G:\\games\\DOOM [0100416004C00000][v0] (13.67 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "DOOM [0100416004C00800][v262144] (8.29 GB).nsz",
-                      "path":  "G:\\games\\DOOM [0100416004C00800][v262144] (8.29 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Hades [0100535012974000][v589824][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\Hades [0100535012974000][v589824][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "It Takes Two [010092A0172E4000][v131072][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\It Takes Two [010092A0172E4000][v131072][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Kirby and the Forgotten Land [01004D300C5AE000][v65536][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\Kirby and the Forgotten Land [01004D300C5AE000][v65536][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Luigis Mansion 3 [0100DCA0064A6000][v327680][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\Luigis Mansion 3 [0100DCA0064A6000][v327680][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Metroid Dread [B+U].nsp",
-                      "path":  "G:\\games\\Metroid Dread [B+U].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Metroid Prime Remastered [010012101468C000][v0] (6.76 GB).nsz",
-                      "path":  "G:\\games\\Metroid Prime Remastered [010012101468C000][v0] (6.76 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Northgard [0100A9E00D97A000][v0] (0.65 GB).nsz",
-                      "path":  "G:\\games\\Northgard [0100A9E00D97A000][v0] (0.65 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Northgard [0100A9E00D97A800][v524288] (0.11 GB).nsz",
-                      "path":  "G:\\games\\Northgard [0100A9E00D97A800][v524288] (0.11 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Northgard [DLC Nidhogg Clan of the Dragon] [0100A9E00D97B003][v0].nsp",
-                      "path":  "G:\\games\\Northgard [DLC Nidhogg Clan of the Dragon] [0100A9E00D97B003][v0].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Northgard [DLC Svadilfari Clan of the Horse] [0100A9E00D97B004][v65536].nsp",
-                      "path":  "G:\\games\\Northgard [DLC Svadilfari Clan of the Horse] [0100A9E00D97B004][v65536].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Northgard [DLC Svafnir Clan of the Snake] [0100A9E00D97B001][v0].nsp",
-                      "path":  "G:\\games\\Northgard [DLC Svafnir Clan of the Snake] [0100A9E00D97B001][v0].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Prince of Persia The Lost Crown [0100210019428000][v851968][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\Prince of Persia The Lost Crown [0100210019428000][v851968][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
-                      "path":  "G:\\games\\SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "The Legend of Zelda Breath of the Wild [B+U786432+2DLC].nsp",
-                      "path":  "G:\\games\\The Legend of Zelda Breath of the Wild [B+U786432+2DLC].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "The Legend of Zelda Links Awakening [01006BB00C6F0000][v0] (5.84 GB).nsz",
-                      "path":  "G:\\games\\The Legend of Zelda Links Awakening [01006BB00C6F0000][v0] (5.84 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "The Legend of Zelda Links Awakening [01006BB00C6F0800][v65536].nsp",
-                      "path":  "G:\\games\\The Legend of Zelda Links Awakening [01006BB00C6F0800][v65536].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "The Legend of Zelda Tears of the Kingdom [B+U393216].nsp",
-                      "path":  "G:\\games\\The Legend of Zelda Tears of the Kingdom [B+U393216].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Wolfenstein® II The New Colossus™ [B+U131072].nsp",
-                      "path":  "G:\\games\\Wolfenstein® II The New Colossus™ [B+U131072].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "XCOM 2 Collection [0100D0B00FB74000][v0] (6.48 GB).nsz",
-                      "path":  "G:\\games\\XCOM 2 Collection [0100D0B00FB74000][v0] (6.48 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "XCOM 2 Collection [0100D0B00FB74800][v131072] (17.90 GB).nsz",
-                      "path":  "G:\\games\\XCOM 2 Collection [0100D0B00FB74800][v131072] (17.90 GB).nsz",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Yoshi\u0027s Crafted World [01006000040c2000][v0].nsp",
-                      "path":  "G:\\games\\Yoshi\u0027s Crafted World [01006000040c2000][v0].nsp",
-                      "checked":  true
-                  },
-                  {
-                      "name":  "Yoshi\u0027s Crafted World [01006000040C2800][v65536].nsp",
-                      "path":  "G:\\games\\Yoshi\u0027s Crafted World [01006000040C2800][v65536].nsp",
-                      "checked":  true
-                  }
-              ]
+  "name": "switch-games-selection-2",
+  "created_at": "2026-04-11T21:42:57.827742",
+  "files": [
+    {
+      "name": "Animal Well [010020D01AD24000][v0].nsp",
+      "path": "G:\\games\\Animal Well [010020D01AD24000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Animal Well [010020D01AD24800][v458752].nsp",
+      "path": "G:\\games\\Animal Well [010020D01AD24800][v458752].nsp",
+      "checked": true
+    },
+    {
+      "name": "Cat Quest 3 [010088501B8F2000][v0] (0.77 GB).nsz",
+      "path": "G:\\games\\Cat Quest 3 [010088501B8F2000][v0] (0.77 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Cat Quest 3 [010088501B8F2800][v589824] (0.65 GB).nsz",
+      "path": "G:\\games\\Cat Quest 3 [010088501B8F2800][v589824] (0.65 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "DAVE THE DIVER [B+U2097152+5DLC].nsp",
+      "path": "G:\\games\\DAVE THE DIVER [B+U2097152+5DLC].nsp",
+      "checked": true
+    },
+    {
+      "name": "Donkey Kong Country Returns HD [01009D901BC56000][v0].nsp",
+      "path": "G:\\games\\Donkey Kong Country Returns HD [01009D901BC56000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Donkey Kong Country Tropical Freeze [0100C1F0051B6000][v0].nsp",
+      "path": "G:\\games\\Donkey Kong Country Tropical Freeze [0100C1F0051B6000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Donkey Kong Country Tropical Freeze [0100C1F0051B6800][v131072].nsp",
+      "path": "G:\\games\\Donkey Kong Country Tropical Freeze [0100C1F0051B6800][v131072].nsp",
+      "checked": true
+    },
+    {
+      "name": "Hades 2 [0100A00019DE0000][v0].nsp",
+      "path": "G:\\games\\Hades 2 [0100A00019DE0000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Hades 2 [0100A00019DE0800][v196608].nsp",
+      "path": "G:\\games\\Hades 2 [0100A00019DE0800][v196608].nsp",
+      "checked": true
+    },
+    {
+      "name": "Hades 2 [0100A00019DE0800][v393216] (2.34 GB).nsz",
+      "path": "G:\\games\\Hades 2 [0100A00019DE0800][v393216] (2.34 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
+      "path": "G:\\games\\Hollow Knight [0100633007D48000][v262144][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Luigis Mansion 2 HD [010048701995E000][v0].nsp",
+      "path": "G:\\games\\Luigis Mansion 2 HD [010048701995E000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Luigis Mansion 3 [0100DCA0064A6000][v327680][UKR+REPACK].nsp",
+      "path": "G:\\games\\Luigis Mansion 3 [0100DCA0064A6000][v327680][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario + Rabbids Битва за королевство [B+U589824+4DLC].nsp",
+      "path": "G:\\games\\Mario + Rabbids Битва за королевство [B+U589824+4DLC].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario + Rabbids® Искры Надежды [B+U393216+7DLC].nsp",
+      "path": "G:\\games\\Mario + Rabbids® Искры Надежды [B+U393216+7DLC].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario Golf Super Rush [0100C9C00E25C000][v0].nsp",
+      "path": "G:\\games\\Mario Golf Super Rush [0100C9C00E25C000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario Golf Super Rush [0100C9C00E25C800][v262144].nsp",
+      "path": "G:\\games\\Mario Golf Super Rush [0100C9C00E25C800][v262144].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
+      "path": "G:\\games\\Mario Kart 8 Deluxe [0100152000022000][v1179648][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario Party Superstars [01006FE013472000][v0].nsp",
+      "path": "G:\\games\\Mario Party Superstars [01006FE013472000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario Party Superstars [01006FE013472800][v131072].nsp",
+      "path": "G:\\games\\Mario Party Superstars [01006FE013472800][v131072].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario Strikers Battle League [010019401051C000][v0].nsp",
+      "path": "G:\\games\\Mario Strikers Battle League [010019401051C000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario Strikers Battle League [010019401051C800][v393216].nsp",
+      "path": "G:\\games\\Mario Strikers Battle League [010019401051C800][v393216].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario Tennis Aces [0100BDE00862A000][v0].nsp",
+      "path": "G:\\games\\Mario Tennis Aces [0100BDE00862A000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario Tennis Aces [0100BDE00862A800][v851968].nsp",
+      "path": "G:\\games\\Mario Tennis Aces [0100BDE00862A800][v851968].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario and Sonic at the Olympic Games Tokyo 2020 [010003000E146000][v0] (6.41 GB).nsz",
+      "path": "G:\\games\\Mario and Sonic at the Olympic Games Tokyo 2020 [010003000E146000][v0] (6.41 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Mario and Sonic at the Olympic Games Tokyo 2020 [010003000E146800][v65536].nsp",
+      "path": "G:\\games\\Mario and Sonic at the Olympic Games Tokyo 2020 [010003000E146800][v65536].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario vs. Donkey Kong [0100B99019412000][v0].nsp",
+      "path": "G:\\games\\Mario vs. Donkey Kong [0100B99019412000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Mario vs. Donkey Kong [0100B99019412800][v65536].nsp",
+      "path": "G:\\games\\Mario vs. Donkey Kong [0100B99019412800][v65536].nsp",
+      "checked": true
+    },
+    {
+      "name": "Metroid Prime Remastered [010012101468C000][v0] (6.76 GB).nsz",
+      "path": "G:\\games\\Metroid Prime Remastered [010012101468C000][v0] (6.76 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "New Super Mario Bros. U Deluxe [0100EA80032EA000][v0][UKR+REPACK].nsp",
+      "path": "G:\\games\\New Super Mario Bros. U Deluxe [0100EA80032EA000][v0][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Paper Mario the Thousand Year Door [0100ECD018EBE000][v0].nsp",
+      "path": "G:\\games\\Paper Mario the Thousand Year Door [0100ECD018EBE000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Paper Mario the Thousand Year Door [0100ECD018EBE800][v65536].nsp",
+      "path": "G:\\games\\Paper Mario the Thousand Year Door [0100ECD018EBE800][v65536].nsp",
+      "checked": true
+    },
+    {
+      "name": "Pentiment [010036F01AE9E000][v0] (4.29 GB).nsz",
+      "path": "G:\\games\\Pentiment [010036F01AE9E000][v0] (4.29 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Pentiment [010036F01AE9E800][v131072] (0.13 GB).nsz",
+      "path": "G:\\games\\Pentiment [010036F01AE9E800][v131072] (0.13 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Prince of Persia The Lost Crown [0100210019428000][v851968][UKR+REPACK].nsp",
+      "path": "G:\\games\\Prince of Persia The Lost Crown [0100210019428000][v851968][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
+      "path": "G:\\games\\SUPER MARIO ODYSSEY [0100000000010000][v262144][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario 3D All-Stars [B+U].nsp",
+      "path": "G:\\games\\Super Mario 3D All-Stars [B+U].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario 3D World  Bowsers Fury [010028600EBDA000][v131072][UKR+REPACK].nsp",
+      "path": "G:\\games\\Super Mario 3D World  Bowsers Fury [010028600EBDA000][v131072][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
+      "path": "G:\\games\\Super Mario Bros. Wonder [010015100B514000][v65536][UKR+REPACK].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario Galaxy 2 [B+U131072].nsp",
+      "path": "G:\\games\\Super Mario Galaxy 2 [B+U131072].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario Galaxy [010099C022B96000][v327680][REPACK+UKR].nsp",
+      "path": "G:\\games\\Super Mario Galaxy [010099C022B96000][v327680][REPACK+UKR].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario Party Jamboree [0100965017338000][v0].nsp",
+      "path": "G:\\games\\Super Mario Party Jamboree [0100965017338000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario Party Jamboree [0100965017338800][v131072].nsp",
+      "path": "G:\\games\\Super Mario Party Jamboree [0100965017338800][v131072].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario Party [010036B0034E4000][v0].nsp",
+      "path": "G:\\games\\Super Mario Party [010036B0034E4000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Super Mario Party [010036B0034E4800][v131072].nsp",
+      "path": "G:\\games\\Super Mario Party [010036B0034E4800][v131072].nsp",
+      "checked": true
+    },
+    {
+      "name": "The Legend of Zelda Breath of the Wild [B+U786432+2DLC].nsp",
+      "path": "G:\\games\\The Legend of Zelda Breath of the Wild [B+U786432+2DLC].nsp",
+      "checked": true
+    },
+    {
+      "name": "The Legend of Zelda Echoes of Wisdom [01008CF01BAAC000][v0] (5.40 GB).nsz",
+      "path": "G:\\games\\The Legend of Zelda Echoes of Wisdom [01008CF01BAAC000][v0] (5.40 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "The Legend of Zelda Echoes of Wisdom [01008CF01BAAC800][v65536] (0.17 GB).nsz",
+      "path": "G:\\games\\The Legend of Zelda Echoes of Wisdom [01008CF01BAAC800][v65536] (0.17 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "The Legend of Zelda Links Awakening [01006BB00C6F0000][v0] (5.84 GB).nsz",
+      "path": "G:\\games\\The Legend of Zelda Links Awakening [01006BB00C6F0000][v0] (5.84 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "The Legend of Zelda Links Awakening [01006BB00C6F0800][v65536].nsp",
+      "path": "G:\\games\\The Legend of Zelda Links Awakening [01006BB00C6F0800][v65536].nsp",
+      "checked": true
+    },
+    {
+      "name": "The Legend of Zelda Skyward Sword HD [01002DA013484000][v0] (7.07 GB).nsz",
+      "path": "G:\\games\\The Legend of Zelda Skyward Sword HD [01002DA013484000][v0] (7.07 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "The Legend of Zelda Skyward Sword HD [01002DA013484800][v65536] (0.04 GB).nsz",
+      "path": "G:\\games\\The Legend of Zelda Skyward Sword HD [01002DA013484800][v65536] (0.04 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "The Legend of Zelda Tears of the Kingdom [B+U393216].nsp",
+      "path": "G:\\games\\The Legend of Zelda Tears of the Kingdom [B+U393216].nsp",
+      "checked": true
+    },
+    {
+      "name": "Unicorn Overlord [010069401ADB8000][v0] (2.98 GB).nsz",
+      "path": "G:\\games\\Unicorn Overlord [010069401ADB8000][v0] (2.98 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Unicorn Overlord [010069401ADB8800][v196608] (0.38 GB).nsz",
+      "path": "G:\\games\\Unicorn Overlord [010069401ADB8800][v196608] (0.38 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Unicorn Overlord [010069401ADB8800][v262144] (0.38 GB).nsz",
+      "path": "G:\\games\\Unicorn Overlord [010069401ADB8800][v262144] (0.38 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Unicorn Overlord [DLC Atlus x Vanillaware Heraldry Pack] [010069401ADB9001][v0].nsp",
+      "path": "G:\\games\\Unicorn Overlord [DLC Atlus x Vanillaware Heraldry Pack] [010069401ADB9001][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Unicorn Overlord [DLC Unlocker Artbook and Soundtrack] [010069401ADB9002][v0].nsp",
+      "path": "G:\\games\\Unicorn Overlord [DLC Unlocker Artbook and Soundtrack] [010069401ADB9002][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Unicorn Overlord [Standalone DLC 16-bit Arranged Music Album and Digital Artbook] [01000C101D278000][v0].nsp",
+      "path": "G:\\games\\Unicorn Overlord [Standalone DLC 16-bit Arranged Music Album and Digital Artbook] [01000C101D278000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Vampire Survivors [B+U+2DLC].nsp",
+      "path": "G:\\games\\Vampire Survivors [B+U+2DLC].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 2 [0100E95004038800][v983040] (0.17 GB).nsz",
+      "path": "G:\\games\\Xenoblade Chronicles 2 [0100E95004038800][v983040] (0.17 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 2 [0100e95004038000][v0] (13.02 GB).nsz",
+      "path": "G:\\games\\Xenoblade Chronicles 2 [0100e95004038000][v0] (13.02 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 2 [DLC Helpful Items Pack] [0100E95004039005][v720896].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles 2 [DLC Helpful Items Pack] [0100E95004039005][v720896].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 2 [DLC Japanese-Voice Pack] [0100E95004039063][v0].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles 2 [DLC Japanese-Voice Pack] [0100E95004039063][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 2 [DLC My Nintendo Bonus Items] [0100E95004039006][v0].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles 2 [DLC My Nintendo Bonus Items] [0100E95004039006][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 2 [DLC New Challenge Mode Pack] [0100E95004039004][v262144] (0.46 GB).nsz",
+      "path": "G:\\games\\Xenoblade Chronicles 2 [DLC New Challenge Mode Pack] [0100E95004039004][v262144] (0.46 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 2 [DLC New Quests Pack] [0100E95004039002][v393216].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles 2 [DLC New Quests Pack] [0100E95004039002][v393216].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 2 [DLC New Rare Blade Pack] [0100E95004039003][v393216] (0.21 GB).nsz",
+      "path": "G:\\games\\Xenoblade Chronicles 2 [DLC New Rare Blade Pack] [0100E95004039003][v393216] (0.21 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 2 [DLC Torna The Golden Country Brand New Story Content Pack] [0100E95004039001][v196608] (3.08 GB).nsz",
+      "path": "G:\\games\\Xenoblade Chronicles 2 [DLC Torna The Golden Country Brand New Story Content Pack] [0100E95004039001][v196608] (3.08 GB).nsz",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 3 [010074F013262000][v0].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles 3 [010074F013262000][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 3 [010074F013262800][v655360].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles 3 [010074F013262800][v655360].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 3 [010074F013262800][v720896].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles 3 [010074F013262800][v720896].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 3 [DLC Wave 1] [010074F013263001][v0].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles 3 [DLC Wave 1] [010074F013263001][v0].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 3 [DLC Wave 2] [010074F013263002][v65536].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles 3 [DLC Wave 2] [010074F013263002][v65536].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 3 [DLC Wave 3] [010074F013263003][v65536].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles 3 [DLC Wave 3] [010074F013263003][v65536].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles 3 [DLC Wave 4] [010074F013263004][v131072].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles 3 [DLC Wave 4] [010074F013263004][v131072].nsp",
+      "checked": true
+    },
+    {
+      "name": "Xenoblade Chronicles X Definitive Edition [B+U131072+1DLC].nsp",
+      "path": "G:\\games\\Xenoblade Chronicles X Definitive Edition [B+U131072+1DLC].nsp",
+      "checked": true
+    }
+  ]
 }
-

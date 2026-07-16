@@ -34,7 +34,7 @@ class ProgressTracker:
                 size = file_path.stat().st_size
                 self.file_sizes[filename] = size
                 return size
-            except Exception as e:
+            except Exception:
                 self.file_sizes[filename] = 0
                 return 0
         return self.file_sizes[filename]
@@ -71,6 +71,7 @@ class ProgressTracker:
         delta = new_file_unique - old_file_unique
         if delta > 0:
             self.unique_bytes_transferred += delta
+            self.file_bytes_sent[filename] = new_file_unique
 
         return new_file_unique
 

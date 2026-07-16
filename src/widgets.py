@@ -6,8 +6,8 @@ from PyQt6.QtWidgets import (
     QStyledItemDelegate, QCheckBox, QProgressBar, QWidget,
     QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect, QPropertyAnimation, QPoint, pyqtProperty
-from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QPen, QLinearGradient, QPaintEvent, QFont
+from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect
+from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QLinearGradient
 
 # Custom data roles used to cache state on items so the sort comparator and
 # count-label updates don't have to walk the widget tree on every read.
@@ -276,54 +276,75 @@ class AnimatedProgressBar(QProgressBar):
             painter.setPen(text_color)
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
 
-# --- Toggle Switch ---
-class ToggleSwitch(QCheckBox):
-    """A custom toggle switch widget."""
+
+class ModeSwitch(QWidget):
+    """Three-position transfer mode switch: USB, HTTP, FTP."""
+
+    modeChanged = pyqtSignal(str)
+
+    MODES = ("usb", "http", "ftp")
+    COLORS = {
+        "usb": QColor("#4CAF50"),
+        "http": QColor("#2196F3"),
+        "ftp": QColor("#FFC107"),
+    }
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedSize(40, 22)
-        
-        # --- FIX: Set specific colors for USB (Off) and HTTP (On) ---
-        self._bg_color_off = QColor("#4CAF50") # Green (USB)
-        self._bg_color_on = QColor("#2196F3")  # Blue (HTTP)
-        self._handle_color = QColor("#FFFFFF")
-        
-        self._handle_position = 3.0
-        self.animation = QPropertyAnimation(self, b"handle_position", self)
-        self.animation.setDuration(200)
-        self.stateChanged.connect(self.setup_animation)
+        self.setFixedSize(78, 24)
+        self._mode_index = 0
 
-    @pyqtProperty(float)
-    def handle_position(self): return self._handle_position
+    def mode(self) -> str:
+        return self.MODES[self._mode_index]
 
-    @handle_position.setter
-    def handle_position(self, pos): self._handle_position = pos; self.update()
+    def setMode(self, mode: str):
+        if mode not in self.MODES:
+            return
+        self.setModeIndex(self.MODES.index(mode))
 
-    def set_theme_color(self, color_hex):
-        # Override ON color if needed, but defaults are usually fine
-        self._bg_color_on = QColor(color_hex)
+    def setModeIndex(self, index: int):
+        index = max(0, min(len(self.MODES) - 1, index))
+        if index == self._mode_index:
+            return
+        self._mode_index = index
         self.update()
+        self.modeChanged.emit(self.mode())
 
-    def setup_animation(self, state):
-        self.animation.stop()
-        if state: self.animation.setEndValue(float(self.width() - 19))
-        else: self.animation.setEndValue(3.0)
-        self.animation.start()
+    def mousePressEvent(self, event):
+        section_width = self.width() / len(self.MODES)
+        self.setModeIndex(int(event.position().x() / section_width))
+        event.accept()
 
-    def hitButton(self, pos: QPoint): return self.rect().contains(pos)
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Left, Qt.Key.Key_A):
+            self.setModeIndex(self._mode_index - 1)
+            event.accept()
+            return
+        if event.key() in (Qt.Key.Key_Right, Qt.Key.Key_D):
+            self.setModeIndex(self._mode_index + 1)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
-    def paintEvent(self, e: QPaintEvent):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
         rect = self.rect()
-        track_color = self._bg_color_on if self.isChecked() else self._bg_color_off
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(track_color)
-        p.drawRoundedRect(0, 0, rect.width(), rect.height(), 11, 11)
-        p.setBrush(self._handle_color)
-        p.drawEllipse(int(self._handle_position), 3, 16, 16)
+        track_color = QColor("#D0D0D0")
+        if self.palette().text().color().lightness() > 128:
+            track_color = QColor("#3A3A3A")
 
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(track_color)
+        painter.drawRoundedRect(rect.adjusted(0, 0, -1, -1), 12, 12)
+
+        section_width = self.width() / len(self.MODES)
+        x = int(self._mode_index * section_width) + 2
+        handle_rect = QRect(x, 2, int(section_width) - 4, self.height() - 4)
+        painter.setBrush(self.COLORS[self.mode()])
+        painter.drawRoundedRect(handle_rect, 9, 9)
 
 class MissingFileDialog(QDialog):
     """Dialog shown when a file from a preset is missing"""

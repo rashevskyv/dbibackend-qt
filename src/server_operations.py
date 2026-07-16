@@ -6,41 +6,45 @@ from pathlib import Path
 from typing import Dict
 
 from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QFormLayout, QLabel, QSpinBox, QDialogButtonBox, QApplication
+from PyQt6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QFormLayout, QSpinBox, QDialogButtonBox, QComboBox
 
 from . import __version__
 from .usb_handler import USBHandler, ConnectionStatus
 from .http_handler import HTTPHandler
+from .ftp_handler import FTPHandler
+from .network_transfer_handler import NetworkTransferHandler
 from .utility_functions import format_size, format_time
 
 
 class ServerManager:
-    """Manages starting, stopping, and handling events for USB and HTTP servers."""
+    """Manages starting, stopping, and handling events for USB, HTTP, and FTP servers."""
 
     def __init__(self, main_window):
         self.main_window = main_window
         self.usb_handler = None
         self.http_handler = None
+        self.ftp_handler = None
         
         self.transfer_stats = {
             'total_files': 0, 'completed_files': 0, 'skipped_files': 0, 'start_time': None
         }
         self.completed_files_set = set()
+        self.skipped_files_set = set()
         self.current_processing_file = None
         self.reconnect_timer = QTimer()
 
     def toggle_server(self):
-        # FIX: Replaced mode_combo with mode_switch
-        # Unchecked = USB (False), Checked = HTTP (True)
-        is_http = self.main_window.mode_switch.isChecked()
-        is_usb = not is_http
+        mode = self.main_window.mode_switch.mode()
         
         is_running = (self.usb_handler and self.usb_handler.is_running) or \
-                     (self.http_handler and self.http_handler.is_running)
+                     (self.http_handler and self.http_handler.is_running) or \
+                     (self.ftp_handler and self.ftp_handler.is_running)
 
         if not is_running:
-            if is_usb:
+            if mode == 'usb':
                 self.start_usb_server()
+            elif mode == 'ftp':
+                self.start_ftp_server()
             else:
                 self.start_http_server()
         else:
@@ -50,6 +54,11 @@ class ServerManager:
                     self.stop_usb_server()
                 elif self.http_handler:
                     self.stop_http_server()
+                elif self.ftp_handler:
+                    self.stop_ftp_server()
+
+    def _active_network_handler(self):
+        return self.http_handler or self.ftp_handler
 
     def get_checked_files(self) -> Dict[str, Path]:
         file_manager = self.main_window.file_manager
@@ -65,6 +74,7 @@ class ServerManager:
         self.transfer_stats['completed_files'] = 0
         self.transfer_stats['skipped_files'] = 0
         self.completed_files_set.clear()
+        self.skipped_files_set.clear()
         self.current_processing_file = None
         self.main_window.progress_delegate.clear_all()
         for item in self.main_window.file_manager.iter_items():
@@ -115,65 +125,130 @@ class ServerManager:
         if self.usb_handler:
             self.usb_handler.stop()
 
-    def start_http_server(self):
-        checked_files = self.get_checked_files()
-        if not checked_files:
-            self.main_window.log('warning', 'No files selected!')
-            return
-
+    def _prompt_network_settings(self, title: str, ip_key: str, port_key: str, default_port: int):
         dialog = QDialog(self.main_window)
-        dialog.setWindowTitle("Start HTTP Server")
+        dialog.setWindowTitle(title)
         layout = QVBoxLayout(dialog)
         form = QFormLayout()
-        ip_label = QLabel(HTTPHandler.get_local_ip())
-        form.addRow("Your IP:", ip_label)
+
+        ip_combo = QComboBox()
+        local_ips = NetworkTransferHandler.get_local_ips()
+        ip_combo.addItems(local_ips)
+        saved_ip = self.main_window.config.get(ip_key, '')
+        if saved_ip in local_ips:
+            ip_combo.setCurrentText(saved_ip)
+        form.addRow("Switch URL IP:", ip_combo)
+
         port_spin = QSpinBox()
         port_spin.setRange(1024, 65535)
-        port_spin.setValue(self.main_window.config.get('http_port', 8080))
+        port_spin.setValue(self.main_window.config.get(port_key, default_port))
         form.addRow("Port:", port_spin)
+
         layout.addLayout(form)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
-        if dialog.exec() != QDialog.DialogCode.Accepted: return
-            
-        selected_port = port_spin.value()
-        self.main_window.config.set('http_port', selected_port)
-        self.main_window.config.save()
 
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+
+        selected_ip = ip_combo.currentText()
+        selected_port = port_spin.value()
+        self.main_window.config.set(ip_key, selected_ip)
+        self.main_window.config.set(port_key, selected_port)
+        self.main_window.config.save()
+        return selected_ip, selected_port
+
+    def _prepare_network_server_start(self, checked_files: Dict[str, Path]):
         self._reset_ui_for_start()
         self.transfer_stats['total_files'] = len(checked_files)
         self.main_window.file_manager.dim_unchecked_items()
-        
+
         tree = self.main_window.file_tree
         tree.sortItems(3, tree.header().sortIndicatorOrder())
 
         if self.main_window.taskbar_manager:
             self.main_window.taskbar_manager.show_progress()
             self.main_window.taskbar_manager.set_progress_value(0)
-            
-        self.transfer_stats['start_time'] = datetime.now()
 
-        self.http_handler = HTTPHandler(checked_files, port=selected_port)
-        self.http_handler.log_message.connect(self.main_window.log)
-        self.http_handler.server_started.connect(self.on_http_server_started)
-        self.http_handler.server_stopped.connect(self.on_http_server_stopped)
-        self.http_handler.progress_updated.connect(self.on_progress_updated)
-        self.http_handler.file_progress.connect(self.on_file_progress)
-        self.http_handler.transfer_complete.connect(self.on_transfer_complete)
-        self.http_handler.file_skipped.connect(self.on_file_skipped)
-        self.http_handler.all_transfers_complete.connect(self.on_all_transfers_complete)
-        self.http_handler.finished.connect(self.on_http_server_stopped)
-        self.http_handler.start()
+        self.transfer_stats['start_time'] = datetime.now()
+        self.main_window.overall_label.setText(f'0 / {len(checked_files)} files')
+
+    def _connect_network_handler(self, handler, started_slot, stopped_slot):
+        handler.log_message.connect(self.main_window.log)
+        handler.server_started.connect(started_slot)
+        handler.server_stopped.connect(stopped_slot)
+        handler.progress_updated.connect(self.on_progress_updated)
+        handler.file_progress.connect(self.on_file_progress)
+        handler.transfer_complete.connect(self.on_transfer_complete)
+        handler.file_skipped.connect(self.on_file_skipped)
+        handler.all_transfers_complete.connect(self.on_all_transfers_complete)
+        handler.finished.connect(stopped_slot)
+
+    def _start_network_server(
+        self,
+        protocol: str,
+        handler_cls,
+        handler_attr: str,
+        ip_key: str,
+        port_key: str,
+        default_port: int,
+        started_slot,
+        stopped_slot,
+    ):
+        checked_files = self.get_checked_files()
+        if not checked_files:
+            self.main_window.log('warning', 'No files selected!')
+            return
+
+        settings = self._prompt_network_settings(f"Start {protocol} Server", ip_key, port_key, default_port)
+        if settings is None:
+            return
+        selected_ip, selected_port = settings
+
+        self._prepare_network_server_start(checked_files)
+        handler = handler_cls(checked_files, port=selected_port, display_ip=selected_ip)
+        setattr(self, handler_attr, handler)
+        self._connect_network_handler(handler, started_slot, stopped_slot)
+        handler.start()
+        protocol_lower = protocol.lower()
         self.main_window.setWindowTitle(
-            f"DBI Backend Qt v{__version__} | HTTP Server: http://{HTTPHandler.get_local_ip()}:{selected_port}/"
+            f"DBI Backend Qt v{__version__} | {protocol} Server: {protocol_lower}://{selected_ip}:{selected_port}/"
         )
         self._set_server_ui_state(True)
+
+    def start_http_server(self):
+        self._start_network_server(
+            "HTTP",
+            HTTPHandler,
+            "http_handler",
+            "http_ip",
+            "http_port",
+            8080,
+            self.on_http_server_started,
+            self.on_http_server_stopped,
+        )
 
     def stop_http_server(self):
         if self.http_handler:
             self.http_handler.stop()
+
+    def start_ftp_server(self):
+        self._start_network_server(
+            "FTP",
+            FTPHandler,
+            "ftp_handler",
+            "ftp_ip",
+            "ftp_port",
+            2121,
+            self.on_ftp_server_started,
+            self.on_ftp_server_stopped,
+        )
+
+    def stop_ftp_server(self):
+        if self.ftp_handler:
+            self.ftp_handler.stop()
 
     def on_progress_updated(self, filename, transferred, speed, total_req_size, num_files, cur_bytes, cur_size, _unused):
         self.main_window.current_file_label.setText(filename)
@@ -184,8 +259,10 @@ class ServerManager:
                 self.main_window.file_manager.update_file_status(self.current_processing_file, 'skipped')
                 if self.usb_handler:
                     self.usb_handler.progress_tracker.mark_file_skipped(self.current_processing_file)
-                elif self.http_handler:
-                    self.http_handler.mark_file_skipped(self.current_processing_file)
+                else:
+                    network_handler = self._active_network_handler()
+                    if network_handler:
+                        network_handler.mark_file_skipped(self.current_processing_file)
                 self.main_window.log('debug', f'Implicitly skipped: {self.current_processing_file}')
         
         if self.current_processing_file != filename:
@@ -269,7 +346,8 @@ class ServerManager:
             path = self.main_window.file_manager.file_list.get(filename)
             fsize = path.stat().st_size if path else 0
             prog_fmt = self.main_window.overall_progress.format()
-            tracker = self.usb_handler.progress_tracker if self.usb_handler else (self.http_handler.progress_tracker if self.http_handler else None)
+            network_handler = self._active_network_handler()
+            tracker = self.usb_handler.progress_tracker if self.usb_handler else (network_handler.progress_tracker if network_handler else None)
             new_target = format_size(tracker.total_requested_size) if tracker else "N/A"
             print(f"[PROGRESS] Completed: {filename} ({format_size(fsize)}) | Overall: {prog_fmt} / Target: {new_target}")
 
@@ -288,15 +366,20 @@ class ServerManager:
                     self.main_window.taskbar_manager.set_progress_value(100)
 
     def on_file_skipped(self, filename, size):
+        if filename in self.skipped_files_set:
+            return
+
         if self.usb_handler:
             self.usb_handler.progress_tracker.mark_file_skipped(filename)
-        elif self.http_handler:
-            # Note: http_handler.mark_file_skipped already calls emitter.file_skipped, 
+        else:
+            network_handler = self._active_network_handler()
+            # Network mark_file_skipped already emits file_skipped,
             # so we check if it's already in skipped_files to avoid recursion if called from there
-            if filename not in self.http_handler.progress_tracker.skipped_files:
-                self.http_handler.mark_file_skipped(filename)
-                return 
-            
+            if network_handler and filename not in network_handler.progress_tracker.skipped_files:
+                network_handler.mark_file_skipped(filename)
+                return
+
+        self.skipped_files_set.add(filename)
         self.transfer_stats['skipped_files'] += 1
         self.main_window.file_manager.update_file_status(filename, 'skipped') # Fixed from 'failed'
         self.main_window.progress_delegate.mark_skipped(filename)
@@ -312,6 +395,7 @@ class ServerManager:
         self.transfer_stats['completed_files'] = 0
         self.transfer_stats['skipped_files'] = 0
         self.completed_files_set.clear()
+        self.skipped_files_set.clear()
         self.current_processing_file = None
         if self.usb_handler:
             self.usb_handler.progress_tracker.reset()
@@ -370,12 +454,17 @@ class ServerManager:
         
         if self.usb_handler: self.usb_handler = None
         if self.http_handler: self.http_handler = None
+        if self.ftp_handler: self.ftp_handler = None
         
         self._set_server_ui_state(False)
         self.main_window.file_manager.handle_server_stop()
 
     # (Unchanged stubs)
-    def on_http_server_started(self, ip, port): pass
+    def on_http_server_started(self, ip, port):
+        self.main_window.log('info', f'HTTP Server started: http://{ip}:{port}/')
+
+    def on_ftp_server_started(self, ip, port):
+        self.main_window.log('info', f'FTP Server started: ftp://{ip}:{port}/')
     
     def on_http_server_stopped(self):
         if self.http_handler is None:
@@ -384,6 +473,14 @@ class ServerManager:
         self._set_server_ui_state(False)
         self.main_window.file_manager.handle_server_stop()
         self.main_window.log('info', 'HTTP Server stopped')
+
+    def on_ftp_server_stopped(self):
+        if self.ftp_handler is None:
+            return
+        self.ftp_handler = None
+        self._set_server_ui_state(False)
+        self.main_window.file_manager.handle_server_stop()
+        self.main_window.log('info', 'FTP Server stopped')
 
     def on_usb_server_stopped(self):
         if self.usb_handler is None:
@@ -406,12 +503,14 @@ class ServerManager:
         else:
             btn.setText('▶')
             
-            # --- FIX: Check toggle state instead of combo text ---
-            is_http = self.main_window.mode_switch.isChecked()
-            
-            if is_http:
+            mode = self.main_window.mode_switch.mode()
+
+            if mode == 'http':
                 btn.setStyleSheet(self.main_window._get_btn_style("#2196F3", "#1976D2"))
                 self.main_window.server_label.setText('Start HTTP')
+            elif mode == 'ftp':
+                btn.setStyleSheet(self.main_window._get_btn_style("#FFC107", "#FFB300"))
+                self.main_window.server_label.setText('Start FTP')
             else:
                 btn.setStyleSheet(self.main_window._get_btn_style("#4CAF50", "#45a049"))
                 self.main_window.server_label.setText('Start USB')
@@ -421,9 +520,7 @@ class ServerManager:
             self.main_window.clear_list_btn.setEnabled(True)
 
     def check_connection(self):
-        # FIX: Check toggle state instead of combo text
-        is_usb = not self.main_window.mode_switch.isChecked()
-        if is_usb:
+        if self.main_window.mode_switch.mode() == 'usb':
             if self.usb_handler is None and self.main_window.file_tree.topLevelItemCount() > 0:
                  self.main_window.start_server_btn.setEnabled(True)
     

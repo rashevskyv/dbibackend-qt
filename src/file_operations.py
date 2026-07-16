@@ -39,6 +39,8 @@ class FileManager:
         return presets_dir
 
     def is_supported_file(self, path: Path) -> bool:
+        if self.main_window.mode_switch.mode() in ('http', 'ftp'):
+            return True
         return path.suffix.lower() in self.SUPPORTED_EXTENSIONS
 
     def add_files(self):
@@ -65,6 +67,28 @@ class FileManager:
                 self.update_file_list(current_checked)
                 self.main_window.log('info', f'Added {added_count} files')
 
+    def prompt_folder_addition_mode(self, folder_name: str) -> Optional[str]:
+        """
+        Shows a dialog asking the user whether to add the folder 'as is' or 'scan'.
+        Returns 'as_is' or 'scan' or None (if cancelled).
+        """
+        msg_box = QMessageBox(self.main_window)
+        msg_box.setWindowTitle("Add Folder")
+        msg_box.setText(f"How do you want to add the folder:\n\"{folder_name}\"?")
+        
+        as_is_btn = msg_box.addButton("Add as is (Hierarchical)", QMessageBox.ButtonRole.YesRole)
+        scan_btn = msg_box.addButton("Scan for Switch files (Flat)", QMessageBox.ButtonRole.NoRole)
+        cancel_btn = msg_box.addButton(QMessageBox.StandardButton.Cancel)
+        
+        msg_box.exec()
+        
+        clicked = msg_box.clickedButton()
+        if clicked == as_is_btn:
+            return 'as_is'
+        elif clicked == scan_btn:
+            return 'scan'
+        return None
+
     def add_folder(self):
         """Add folder using the last known folder directory"""
         self.preset_loaded = False
@@ -75,17 +99,29 @@ class FileManager:
         if folder:
             current_checked = self._get_current_checked_state()
             self.main_window.config.set('last_folder_directory', folder)
-            added_count = 0
-            for p in Path(folder).rglob('*'):
-                if p.is_file() and self.is_supported_file(p):
-                    self.file_list[p.name] = p.resolve()
-                    current_checked.add(p.name)
-                    added_count += 1
-            if added_count > 0:
+            p = Path(folder)
+            
+            mode = self.prompt_folder_addition_mode(p.name)
+            if mode is None:
+                return
+                
+            if mode == 'as_is':
+                self.file_list[p.name] = p.resolve()
+                current_checked.add(p.name)
                 self.update_file_list(current_checked)
-                self.main_window.log('info', f'Added {added_count} files from folder')
-            else:
-                self.main_window.log('warning', 'No supported files found')
+                self.main_window.log('info', f'Added folder: {p.name}')
+            elif mode == 'scan':
+                added_count = 0
+                for f in p.rglob('*'):
+                    if f.is_file() and f.suffix.lower() in self.SUPPORTED_EXTENSIONS:
+                        self.file_list[f.name] = f.resolve()
+                        current_checked.add(f.name)
+                        added_count += 1
+                if added_count > 0:
+                    self.update_file_list(current_checked)
+                    self.main_window.log('info', f'Scanned and added {added_count} files from folder')
+                else:
+                    self.main_window.log('warning', 'No supported files found')
 
     def clear_file_list(self):
         self.preset_loaded = False
@@ -112,7 +148,13 @@ class FileManager:
         self.main_window.header_checkbox.blockSignals(True)
         for name, path in self.file_list.items():
             try:
-                size = path.stat().st_size
+                if path.is_dir():
+                    try:
+                        size = sum(f.stat().st_size for f in path.rglob('*') if f.is_file())
+                    except Exception:
+                        size = 0
+                else:
+                    size = path.stat().st_size
                 item = FileTreeWidgetItem(self.main_window.file_tree)
                 checkbox = QCheckBox()
                 should = True

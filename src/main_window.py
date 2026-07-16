@@ -286,14 +286,20 @@ class MainWindow(QMainWindow):
                 current.add(path.name)
                 added += 1
             elif path.is_dir():
-                for f in path.rglob('*'):
-                    if f.is_file() and self.file_manager.is_supported_file(f):
-                         self.file_manager.file_list[f.name] = f.resolve()
-                         current.add(f.name)
-                         added += 1
+                mode = self.file_manager.prompt_folder_addition_mode(path.name)
+                if mode == 'as_is':
+                    self.file_manager.file_list[path.name] = path.resolve()
+                    current.add(path.name)
+                    added += 1
+                elif mode == 'scan':
+                    for f in path.rglob('*'):
+                        if f.is_file() and f.suffix.lower() in self.file_manager.SUPPORTED_EXTENSIONS:
+                             self.file_manager.file_list[f.name] = f.resolve()
+                             current.add(f.name)
+                             added += 1
         if added:
             self.file_manager.update_file_list(current)
-            self.log("info", f"External: Added {added} files")
+            self.log("info", f"External: Added {added} items")
             self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
             self.activateWindow()
             self.raise_()
@@ -302,26 +308,36 @@ class MainWindow(QMainWindow):
         if e.mimeData().hasUrls(): e.acceptProposedAction()
 
     def dropEvent(self, e: QDropEvent):
-        files = []
         urls = e.mimeData().urls()
         if len(urls) == 1:
             p = Path(urls[0].toLocalFile())
             if p.suffix.lower() == '.dbi':
                 self.file_manager.load_preset(p)
                 return
-        for url in urls:
-            p = Path(url.toLocalFile())
-            if p.is_file() and self.file_manager.is_supported_file(p): files.append(p)
-            elif p.is_dir(): files.extend([f for f in p.rglob('*') if f.is_file() and self.file_manager.is_supported_file(f)])
         
         current = self.file_manager._get_current_checked_state()
-        for p in files: 
-            self.file_manager.file_list[p.name] = p.resolve()
-            current.add(p.name)
-            
-        if files:
+        added = 0
+        for url in urls:
+            p = Path(url.toLocalFile())
+            if p.is_file() and self.file_manager.is_supported_file(p):
+                self.file_manager.file_list[p.name] = p.resolve()
+                current.add(p.name)
+                added += 1
+            elif p.is_dir():
+                mode = self.file_manager.prompt_folder_addition_mode(p.name)
+                if mode == 'as_is':
+                    self.file_manager.file_list[p.name] = p.resolve()
+                    current.add(p.name)
+                    added += 1
+                elif mode == 'scan':
+                    for f in p.rglob('*'):
+                        if f.is_file() and f.suffix.lower() in self.file_manager.SUPPORTED_EXTENSIONS:
+                             self.file_manager.file_list[f.name] = f.resolve()
+                             current.add(f.name)
+                             added += 1
+        if added:
             self.file_manager.update_file_list(current)
-            self.log('info', f'Dropped {len(files)} files')
+            self.log('info', f'Dropped {added} items')
 
     def restore_geometry(self):
         g = self.config.get('window_geometry')

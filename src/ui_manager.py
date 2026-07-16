@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 
 # Import custom widgets
-from .widgets import ZoomableTreeWidget, CustomSplitter, ProgressDelegate, AnimatedProgressBar, ToggleSwitch
+from .widgets import ZoomableTreeWidget, CustomSplitter, ProgressDelegate, AnimatedProgressBar, ModeSwitch
 
 class UIManager:
     """Manages the creation of UI components."""
@@ -248,13 +248,24 @@ class UIManager:
         self.main_window.usb_label.setStyleSheet("font-weight: bold; color: #4CAF50;") # Default USB active
         header_layout.addWidget(self.main_window.usb_label)
 
-        self.main_window.mode_switch = ToggleSwitch()
-        self.main_window.mode_switch.toggled.connect(self.main_window.on_mode_switched)
-        header_layout.addWidget(self.main_window.mode_switch)
-
+        mode_container = QWidget()
+        mode_layout = QVBoxLayout(mode_container)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        mode_layout.setSpacing(0)
         self.main_window.http_label = QLabel("HTTP")
-        self.main_window.http_label.setStyleSheet("color: gray;")
-        header_layout.addWidget(self.main_window.http_label)
+        self.main_window.http_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.main_window.http_label.setFixedHeight(14)
+        self.main_window.http_label.setStyleSheet("color: gray; font-size: 10px;")
+        mode_layout.addWidget(self.main_window.http_label)
+
+        self.main_window.mode_switch = ModeSwitch()
+        self.main_window.mode_switch.modeChanged.connect(self.main_window.on_mode_switched)
+        mode_layout.addWidget(self.main_window.mode_switch)
+        header_layout.addWidget(mode_container)
+
+        self.main_window.ftp_label = QLabel("FTP")
+        self.main_window.ftp_label.setStyleSheet("color: gray;")
+        header_layout.addWidget(self.main_window.ftp_label)
         
         self.main_window.ip_label = QLabel("")
         self.main_window.ip_label.setStyleSheet("color: #2196F3; font-weight: bold; margin-left: 10px;")

@@ -38,13 +38,23 @@ class USBHandler(QThread):
 
     def __init__(self, file_list: Dict[str, Path]):
         super().__init__()
-        self.file_list = file_list
+        # Build flat list of compatible files for USB installation
+        self.file_list = {}
+        supported = {'.nsp', '.nsz', '.xci', '.xcz'}
+        for name, path in file_list.items():
+            if path.is_dir():
+                for f in path.rglob('*'):
+                    if f.is_file() and f.suffix.lower() in supported:
+                        self.file_list[f.name] = f.resolve()
+            else:
+                self.file_list[name] = path
+                
         self.is_running = False
         self.dev = None
         self.in_ep = None
         self.out_ep = None
         self.transfer_start_time = None
-        self.progress_tracker = ProgressTracker(file_list)
+        self.progress_tracker = ProgressTracker(self.file_list)
         
         # State tracking for UI
         self.current_transfer_file = None
@@ -151,7 +161,7 @@ class USBHandler(QThread):
                 elif cmd_id == dbi_protocol.CMD_ID_FILE_RANGE:
                     self.process_file_range_command(data_size)
                 elif cmd_id == dbi_protocol.CMD_ID_LIST:
-                    self.process_list_command()
+                    self.process_list_command(data_size)
 
             except usb.core.USBTimeoutError:
                 # Timeout is normal in poll loop
@@ -186,9 +196,24 @@ class USBHandler(QThread):
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_EXIT, 0))
         self.all_transfers_complete.emit()
 
-    def process_list_command(self):
+    def process_list_command(self, data_size):
         self.log_message.emit('info', f'Sending list of {len(self.file_list)} files...')
-        nsp_path_list = "\n".join(self.file_list.keys()) + "\n"
+        
+        # Check if Switch supports Sphaira's size protocol extension (data_size == 'SPHA')
+        if data_size == 0x53504841:
+            # Format: filename|size_in_bytes\n
+            lines = []
+            for name, path in self.file_list.items():
+                try:
+                    size = path.stat().st_size
+                except Exception:
+                    size = 0
+                lines.append(f"{name}|{size}")
+            nsp_path_list = "\n".join(lines) + "\n"
+        else:
+            # Original DBI format: filename\n
+            nsp_path_list = "\n".join(self.file_list.keys()) + "\n"
+            
         data = nsp_path_list.encode('utf-8')
         
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_LIST, len(data)))
