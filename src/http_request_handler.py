@@ -40,6 +40,8 @@ class DBIRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         """Handle GET requests"""
         handler_thread = self.server.signal_emitter
+        if hasattr(handler_thread, 'record_activity'):
+            handler_thread.record_activity()
         
         # Decode path
         path = urllib.parse.unquote(self.path.split('?')[0])

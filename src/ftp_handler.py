@@ -92,6 +92,8 @@ class FTPControlSession:
         return "/" + "/".join(parts)
 
     def _handle_command(self, line: str) -> bool:
+        if hasattr(self.server, 'record_activity'):
+            self.server.record_activity()
         parts = line.split(" ", 1)
         command = parts[0].upper()
         arg = parts[1].strip() if len(parts) > 1 else ""

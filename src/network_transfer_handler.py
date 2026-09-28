@@ -48,6 +48,21 @@ class NetworkTransferHandler(QThread):
                 "orig_name": name,
             }
 
+        # Inactivity & communication tracking
+        self.last_activity_time = time.time()
+        self.has_communicated = False
+
+    def record_activity(self):
+        """Record timestamp of client communication."""
+        self.has_communicated = True
+        self.last_activity_time = time.time()
+
+    def get_inactivity_seconds(self) -> Optional[float]:
+        """Returns seconds since last client communication, or None if no communication occurred."""
+        if not self.has_communicated or self.last_activity_time is None:
+            return None
+        return max(0.0, time.time() - self.last_activity_time)
+
     @staticmethod
     def get_local_ip():
         return NetworkTransferHandler.get_local_ips()[0]
@@ -110,18 +125,24 @@ class NetworkTransferHandler(QThread):
 
         return ips or ["127.0.0.1"]
 
-    def register_file_request(self, filename: str, _file_size: int):
+    def register_file_request(self, filename: str, file_size: int):
         with self.lock:
-            self.progress_tracker.register_file_request(filename)
+            self.progress_tracker.register_file_request(filename, file_size)
 
     def mark_file_skipped(self, filename: str):
         with self.lock:
             self.progress_tracker.mark_file_skipped(filename)
-            path = self.file_list.get(filename)
-            size = path.stat().st_size if path else 0
-            self.file_skipped.emit(filename, size)
+
+    def unmark_file_skipped(self, filename: str):
+        with self.lock:
+            self.progress_tracker.unmark_file_skipped(filename)
+
+    def unmark_file_completed(self, filename: str):
+        with self.lock:
+            self.progress_tracker.unmark_file_completed(filename)
 
     def update_progress(self, filename: str, start: int, end: int):
+        self.record_activity()
         with self.lock:
             file_unique_bytes = self.progress_tracker.add_interval(filename, start, end)
             return (
@@ -132,6 +153,7 @@ class NetworkTransferHandler(QThread):
             )
 
     def begin_file_transfer(self, filename: str, file_size: int, start: int, content_length: int, transport: str):
+        self.record_activity()
         self.register_file_request(filename, file_size)
         is_metadata = content_length < dbi_protocol.METADATA_THRESHOLD
         if is_metadata:

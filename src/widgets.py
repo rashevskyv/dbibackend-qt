@@ -1,17 +1,25 @@
 """
 Custom Widgets for DBI Backend
 """
+from pathlib import Path
 from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QSplitterHandle, QSplitter,
     QStyledItemDelegate, QCheckBox, QProgressBar, QWidget,
-    QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+    QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout,
+    QHeaderView
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect
-from PyQt6.QtGui import QColor, QPainter, QBrush, QWheelEvent, QLinearGradient
+from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect, QMimeData, QPoint
+from PyQt6.QtGui import (
+    QColor, QPainter, QBrush, QWheelEvent, QLinearGradient,
+    QDrag, QPixmap
+)
 
 # Custom data roles used to cache state on items so the sort comparator and
 # count-label updates don't have to walk the widget tree on every read.
 CHECKED_ROLE = Qt.ItemDataRole.UserRole + 1
+IS_FOLDER_ROLE = Qt.ItemDataRole.UserRole + 2
+FILE_PATH_ROLE = Qt.ItemDataRole.UserRole + 3
+IS_CONFLICT_ROLE = Qt.ItemDataRole.UserRole + 4
 
 
 class FileTreeWidgetItem(QTreeWidgetItem):
@@ -21,7 +29,7 @@ class FileTreeWidgetItem(QTreeWidgetItem):
         tree = self.treeWidget()
         if not tree: return (9, 0, self.text(1))
 
-        status_data = self.data(3, Qt.ItemDataRole.UserRole) or 0
+        status_data = self.data(4, Qt.ItemDataRole.UserRole) or 0
         size_data = self.data(2, Qt.ItemDataRole.UserRole) or 0
 
         # Read the cached checked state populated by FileManager when the
@@ -41,6 +49,8 @@ class FileTreeWidgetItem(QTreeWidgetItem):
         if status_data == 1:     # 🔄 Process — Always at the very top
             primary_priority = 0
         elif status_data == 3:   # ❌ Failed — Needs attention
+            primary_priority = 1
+        elif status_data == 6:   # ⚠️ Name Conflict — Immediate attention
             primary_priority = 1
         elif status_data == 0 and is_checked: # Queued (Checked) — The main queue
             primary_priority = 2
@@ -68,8 +78,12 @@ class FileTreeWidgetItem(QTreeWidgetItem):
         if not tree:
             return super().__lt__(other)
         sort_column = tree.sortColumn()
-        if sort_column == 3:
+        if sort_column == 4:
             return self._get_status_sort_tuple() < other._get_status_sort_tuple()
+        elif sort_column == 3:
+            self_target = self.data(3, Qt.ItemDataRole.UserRole) or 0
+            other_target = other.data(3, Qt.ItemDataRole.UserRole) or 0
+            return self_target < other_target
         elif sort_column == 2:
             self_size = self.data(2, Qt.ItemDataRole.UserRole) or 0
             other_size = other.data(2, Qt.ItemDataRole.UserRole) or 0
@@ -127,8 +141,70 @@ class CustomSplitter(QSplitter):
     def setSizes(self, sizes): super().setSizes(sizes); self.sizes_changed.emit()
 
 
+class CheckBoxHeaderView(QHeaderView):
+    """Header view hosting a 3-state 'select all' checkbox aligned inside column 0."""
+
+    def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None):
+        super().__init__(orientation, parent)
+        self.checkbox = QCheckBox(self)
+        self.checkbox.setTristate(True)
+        self.checkbox.setChecked(False)
+        self.checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sectionResized.connect(self.update_checkbox_geometry)
+        self.geometriesChanged.connect(self.update_checkbox_geometry)
+
+    def update_checkbox_geometry(self, *args):
+        if self.count() == 0:
+            return
+        x = self.sectionViewportPosition(0)
+        w = self.sectionSize(0)
+        h = self.height()
+        if self.isSectionHidden(0) or x + w <= 0 or x >= self.width():
+            self.checkbox.setVisible(False)
+            return
+        self.checkbox.setVisible(True)
+        cb_size = self.checkbox.sizeHint()
+        cb_x = x + max(0, (w - cb_size.width()) // 2)
+        cb_y = max(0, (h - cb_size.height()) // 2)
+        self.checkbox.setGeometry(cb_x, cb_y, cb_size.width(), cb_size.height())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_checkbox_geometry()
+
+
+class ElidingLabel(QLabel):
+    """QLabel that smoothly elides overflowing text on narrow layouts without clipping."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._full_text = text
+        self.setMinimumWidth(0)
+
+    def setText(self, text: str):
+        self._full_text = text
+        self.setToolTip(text)
+        self.update_elided_text()
+
+    def fullText(self) -> str:
+        return self._full_text
+
+    def update_elided_text(self):
+        if not self._full_text:
+            super().setText("")
+            return
+        metrics = self.fontMetrics()
+        avail_width = max(0, self.width() - 4)
+        elided = metrics.elidedText(self._full_text, Qt.TextElideMode.ElideRight, avail_width)
+        super().setText(elided)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_elided_text()
+
+
 class ZoomableTreeWidget(QTreeWidget):
-    """QTreeWidget with Ctrl+Wheel zoom and context awareness"""
+    """QTreeWidget with Ctrl+Wheel zoom, context awareness, and queue drag-and-drop reordering."""
     space_pressed = pyqtSignal()
 
     def __init__(self, main_window):
@@ -138,8 +214,9 @@ class ZoomableTreeWidget(QTreeWidget):
         self.base_font_size = 9
         self.min_zoom = -5
         self.max_zoom = 10
-        self.sortByColumn(3, Qt.SortOrder.AscendingOrder)
-        self.header().setSortIndicatorShown(True)
+        self.setSortingEnabled(False)
+        self.header().setSortIndicatorShown(False)
+        self.setAcceptDrops(True)
 
     def wheelEvent(self, event: QWheelEvent):
         if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
@@ -164,6 +241,84 @@ class ZoomableTreeWidget(QTreeWidget):
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-dbibackend-drag-path") or event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            return
+        if not event.mimeData().hasFormat("application/x-dbibackend-drag-path"):
+            super().dragMoveEvent(event)
+            return
+
+        is_child = (bytes(event.mimeData().data("application/x-dbibackend-drag-kind")) == b"child")
+        parent_path_str = bytes(event.mimeData().data("application/x-dbibackend-drag-parent")).decode('utf-8', errors='ignore') if is_child else ""
+        target_item = self.itemAt(event.position().toPoint())
+
+        if is_child:
+            if not target_item or not target_item.parent():
+                event.ignore()
+                return
+            tgt_parent_path = target_item.parent().data(5, FILE_PATH_ROLE) or ""
+            if tgt_parent_path != parent_path_str:
+                event.ignore()
+                return
+            status_code = target_item.data(4, Qt.ItemDataRole.UserRole) or 0
+            if status_code in (1, 2):
+                event.ignore()
+                return
+            event.acceptProposedAction()
+        else:
+            if target_item:
+                top_item = target_item if target_item.parent() is None else target_item.parent()
+                status_code = top_item.data(4, Qt.ItemDataRole.UserRole) or 0
+                if status_code in (1, 2):
+                    event.ignore()
+                    return
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls():
+            win = self.window()
+            if hasattr(win, 'dropEvent'):
+                win.dropEvent(event)
+            return
+
+        if not event.mimeData().hasFormat("application/x-dbibackend-drag-path"):
+            super().dropEvent(event)
+            return
+
+        src_path_str = bytes(event.mimeData().data("application/x-dbibackend-drag-path")).decode('utf-8')
+        is_child = (bytes(event.mimeData().data("application/x-dbibackend-drag-kind")) == b"child")
+
+        target_item = self.itemAt(event.position().toPoint())
+        fm = getattr(self.window(), 'file_manager', None) or self.file_manager
+        if not fm or not hasattr(fm, 'queue'):
+            return
+
+        src_path = Path(src_path_str)
+        tgt_path = None
+        after = False
+
+        if target_item:
+            v_rect = self.visualItemRect(target_item)
+            after = (event.position().toPoint().y() > v_rect.center().y())
+            if is_child:
+                if target_item.parent():
+                    p_str = target_item.data(5, FILE_PATH_ROLE)
+                    if p_str: tgt_path = Path(p_str)
+            else:
+                top_item = target_item if target_item.parent() is None else target_item.parent()
+                p_str = top_item.data(5, FILE_PATH_ROLE)
+                if p_str: tgt_path = Path(p_str)
+
+        if fm.reorder_dragged_path(src_path, tgt_path, before=not after):
+            event.acceptProposedAction()
 
 
 class ProgressDelegate(QStyledItemDelegate):
@@ -208,7 +363,7 @@ class ProgressDelegate(QStyledItemDelegate):
             filename = item.text(1)
             is_skipped = filename in self.skipped_files
             progress = self.progress_data.get(filename, 0)
-            status_data = item.data(3, Qt.ItemDataRole.UserRole) or 0
+            status_data = item.data(4, Qt.ItemDataRole.UserRole) or 0
             is_done = (status_data == 2)
 
             if is_skipped or (progress > 0) or is_done:

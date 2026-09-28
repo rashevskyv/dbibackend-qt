@@ -11,7 +11,10 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 
 # Import custom widgets
-from .widgets import ZoomableTreeWidget, CustomSplitter, ProgressDelegate, AnimatedProgressBar, ModeSwitch
+from .widgets import (
+    ZoomableTreeWidget, CustomSplitter, ProgressDelegate, AnimatedProgressBar,
+    ModeSwitch, CheckBoxHeaderView, ElidingLabel
+)
 
 class UIManager:
     """Manages the creation of UI components."""
@@ -211,17 +214,23 @@ class UIManager:
 
         # Pass main_window to tree for file_manager access
         self.main_window.file_tree = ZoomableTreeWidget(self.main_window)
-        self.main_window.file_tree.setHeaderLabels(['', 'Filename', 'Size', 'Status', 'Path'])
+        header = CheckBoxHeaderView(Qt.Orientation.Horizontal, self.main_window.file_tree)
+        self.main_window.file_tree.setHeader(header)
+        self.main_window.header_checkbox = header.checkbox
+        self.main_window.header_checkbox.stateChanged.connect(self.main_window.on_header_checkbox_changed)
+        self.main_window.file_tree.horizontalScrollBar().valueChanged.connect(header.update_checkbox_geometry)
+
+        self.main_window.file_tree.setHeaderLabels(['', 'Filename', 'Size', 'Target', 'Status', 'Path'])
         self.main_window.file_tree.setColumnWidth(0, 50)
         self.main_window.file_tree.setColumnWidth(1, 250)
-        self.main_window.file_tree.setColumnWidth(2, 100)
-        self.main_window.file_tree.setColumnWidth(3, 80)
-        self.main_window.file_tree.setColumnWidth(4, 300)
+        self.main_window.file_tree.setColumnWidth(2, 90)
+        self.main_window.file_tree.setColumnWidth(3, 110)
+        self.main_window.file_tree.setColumnWidth(4, 90)
+        self.main_window.file_tree.setColumnWidth(5, 300)
         self.main_window.file_tree.setAlternatingRowColors(True)
-        self.main_window.file_tree.header().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.main_window.file_tree.header().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
 
-        self.main_window.file_tree.setSortingEnabled(True)
-        self.main_window.file_tree.sortByColumn(3, Qt.SortOrder.AscendingOrder) 
+        self.main_window.file_tree.setSortingEnabled(False)
 
         self.main_window.file_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
 
@@ -235,13 +244,16 @@ class UIManager:
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(15, 0, 15, 0)
         
-        self.main_window.header_checkbox = QCheckBox()
-        self.main_window.header_checkbox.setTristate(True)
-        self.main_window.header_checkbox.setChecked(False) 
-        self.main_window.header_checkbox.stateChanged.connect(self.main_window.on_header_checkbox_changed)
-        header_layout.addWidget(self.main_window.header_checkbox)
-        
-        header_layout.addStretch()
+        header_layout.addStretch(1)
+
+        self.header_widget = header_widget
+        self.main_window.switch_storage_label = ElidingLabel("")
+        self.switch_storage_label = self.main_window.switch_storage_label
+        self.main_window.switch_storage_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        self.main_window.switch_storage_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(self.main_window.switch_storage_label, 3)
+
+        header_layout.addStretch(1)
         
         # --- Mode Switch ---
         self.main_window.usb_label = QLabel("USB")
@@ -318,6 +330,13 @@ class UIManager:
         self.main_window.speed_label = QLabel('Speed: 0 MB/s')
         stats_layout.addWidget(self.main_window.speed_label)
         stats_layout.addStretch()
+
+        self.main_window.hibernate_checkbox = QCheckBox('Hibernate PC when idle (5 min)')
+        self.main_window.hibernate_checkbox.setToolTip('Automatically hibernate PC after 5 minutes of inactivity between Switch and PC')
+        self.main_window.hibernate_checkbox.setChecked(self.main_window.config.get('hibernate_when_done', False))
+        self.main_window.hibernate_checkbox.toggled.connect(self.main_window.on_hibernate_toggled)
+        stats_layout.addWidget(self.main_window.hibernate_checkbox)
+
         self.main_window.session_time_label = QLabel('')
         stats_layout.addWidget(self.main_window.session_time_label)
         layout.addLayout(stats_layout)
@@ -343,6 +362,10 @@ class UIManager:
         """Create status bar"""
         self.main_window.statusBar = QStatusBar()
         self.main_window.setStatusBar(self.main_window.statusBar)
+
+        self.main_window.queue_sync_status = QLabel('')
+        self.main_window.queue_sync_status.setStyleSheet('color: #2196F3; margin-right: 15px;')
+        self.main_window.statusBar.addPermanentWidget(self.main_window.queue_sync_status)
 
         self.main_window.connection_status = QLabel('🔴 Not connected')
         self.main_window.statusBar.addPermanentWidget(self.main_window.connection_status)

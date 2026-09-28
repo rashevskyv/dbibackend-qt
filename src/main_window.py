@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QMenu, QApplication
 )
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QAction, QIcon
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QAction, QIcon, QKeySequence, QShortcut
 
 from . import __version__
 from .taskbar_manager import TaskbarManager
@@ -64,6 +64,13 @@ class MainWindow(QMainWindow):
         self.log_text = None
         self.connection_status = None
         self.presets_menu = None
+        self.hibernate_checkbox = None
+        self.switch_storage_label = None
+        self._hibernate_timer = None
+        self._hibernate_seconds_left = 0
+        self._inactivity_check_timer = QTimer(self)
+        self._inactivity_check_timer.timeout.connect(self._check_inactivity)
+        self._inactivity_check_timer.start(1000)
         
         self.taskbar_manager = None
             
@@ -111,6 +118,11 @@ class MainWindow(QMainWindow):
         
         self.file_tree.space_pressed.connect(self.file_manager.invert_selected_files)
 
+        self.shortcut_move_up = QShortcut(QKeySequence("Alt+Up"), self)
+        self.shortcut_move_up.activated.connect(self.move_selected_up)
+        self.shortcut_move_down = QShortcut(QKeySequence("Alt+Down"), self)
+        self.shortcut_move_down.activated.connect(self.move_selected_down)
+
         progress_section = self.ui_manager.create_progress_section()
         self.splitter.addWidget(progress_section)
         log_section = self.ui_manager.create_log_section()
@@ -127,6 +139,8 @@ class MainWindow(QMainWindow):
     def add_files(self): self.file_manager.add_files()
     def add_folder(self): self.file_manager.add_folder()
     def clear_file_list(self): self.file_manager.clear_file_list()
+    def move_selected_up(self): self.file_manager.move_selected_items(-1)
+    def move_selected_down(self): self.file_manager.move_selected_items(1)
     def save_file_list_as_batch(self): self.file_manager.save_file_list_as_batch()
     def save_preset(self): self.file_manager.save_preset()
     def load_preset(self, path=None): self.file_manager.load_preset(path)
@@ -184,23 +198,42 @@ class MainWindow(QMainWindow):
     def on_header_checkbox_changed(self, state):
         if self._updating_header_checkbox: return
         is_checked = (state == 2)
-        for item in self.file_manager.iter_items():
+        for item in self.file_manager.iter_top_level_items():
             self.file_manager.set_item_checked(item, is_checked)
         self.file_manager.update_count_label()
 
     def on_item_checked(self):
         self._updating_header_checkbox = True
-        total = self.file_tree.topLevelItemCount()
+        total = sum(1 for _ in self.file_manager.iter_file_items())
         checked = sum(1 for _ in self.file_manager.iter_checked_items())
 
         if checked == 0: self.header_checkbox.setCheckState(Qt.CheckState.Unchecked)
-        elif checked == total: self.header_checkbox.setCheckState(Qt.CheckState.Checked)
+        elif checked == total and total > 0: self.header_checkbox.setCheckState(Qt.CheckState.Checked)
         else: self.header_checkbox.setCheckState(Qt.CheckState.PartiallyChecked)
         self._updating_header_checkbox = False
         self.file_manager.update_count_label()
 
+        if self.server_manager.usb_handler and self.server_manager.usb_handler.is_running:
+            checked_names = {item.text(1) for item in self.file_manager.iter_checked_items()}
+            self.server_manager.sync_usb_files(self.file_manager.file_list, checked_names, self.file_manager.file_targets)
+
     def show_context_menu(self, position):
         menu = QMenu()
+        target_menu = menu.addMenu("Set Target")
+        act_auto = target_menu.addAction("Auto")
+        act_auto.triggered.connect(lambda: self.file_manager.set_target_for_selected(0))
+        act_sd = target_menu.addAction("microSD")
+        act_sd.triggered.connect(lambda: self.file_manager.set_target_for_selected(1))
+        act_nand = target_menu.addAction("System memory (NAND)")
+        act_nand.triggered.connect(lambda: self.file_manager.set_target_for_selected(2))
+
+        menu.addSeparator()
+        act_up = menu.addAction("Move Up (Alt+Up)")
+        act_up.triggered.connect(self.move_selected_up)
+        act_down = menu.addAction("Move Down (Alt+Down)")
+        act_down.triggered.connect(self.move_selected_down)
+        menu.addSeparator()
+
         remove_action = QAction("Remove Selected", self)
         remove_action.triggered.connect(self.remove_selected_files)
         menu.addAction(remove_action)
@@ -209,12 +242,7 @@ class MainWindow(QMainWindow):
     def remove_selected_files(self):
         selected = self.file_tree.selectedItems()
         if not selected: return
-        for item in selected:
-            if item.text(1) in self.file_manager.file_list:
-                del self.file_manager.file_list[item.text(1)]
-            self.file_tree.takeTopLevelItem(self.file_tree.indexOfTopLevelItem(item))
-        self.file_manager.update_count_label()
-        self.on_item_checked()
+        self.file_manager.remove_selected_items(selected)
 
     def update_presets_menu(self):
         if not self.presets_menu: return
@@ -266,9 +294,11 @@ class MainWindow(QMainWindow):
         QMessageBox.about(self, 'About', f'<h2>DBI Backend Qt</h2><p>Version {__version__}</p>')
 
     def handle_external_files(self, message: str):
-        paths = message.strip().split('\n')
-        if len(paths) == 1:
-            p = Path(paths[0].strip())
+        lines = [line.strip() for line in message.strip().split('\n') if line.strip()]
+        if not lines:
+            return
+        if len(lines) == 1:
+            p = Path(lines[0])
             if p.suffix.lower() == '.dbi' and p.exists():
                 self.file_manager.load_preset(p)
                 self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
@@ -276,68 +306,27 @@ class MainWindow(QMainWindow):
                 self.raise_()
                 return
 
-        current = self.file_manager._get_current_checked_state()
-        added = 0
-        for p_str in paths:
-            path = Path(p_str.strip())
-            if not path.exists(): continue
-            if path.is_file() and self.file_manager.is_supported_file(path):
-                self.file_manager.file_list[path.name] = path.resolve()
-                current.add(path.name)
-                added += 1
-            elif path.is_dir():
-                mode = self.file_manager.prompt_folder_addition_mode(path.name)
-                if mode == 'as_is':
-                    self.file_manager.file_list[path.name] = path.resolve()
-                    current.add(path.name)
-                    added += 1
-                elif mode == 'scan':
-                    for f in path.rglob('*'):
-                        if f.is_file() and f.suffix.lower() in self.file_manager.SUPPORTED_EXTENSIONS:
-                             self.file_manager.file_list[f.name] = f.resolve()
-                             current.add(f.name)
-                             added += 1
-        if added:
-            self.file_manager.update_file_list(current)
-            self.log("info", f"External: Added {added} items")
-            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
-            self.activateWindow()
-            self.raise_()
+        paths = [Path(line) for line in lines]
+        self.file_manager.ingest_paths(paths)
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+        self.activateWindow()
+        self.raise_()
 
     def dragEnterEvent(self, e: QDragEnterEvent):
         if e.mimeData().hasUrls(): e.acceptProposedAction()
 
     def dropEvent(self, e: QDropEvent):
         urls = e.mimeData().urls()
+        if not urls:
+            return
         if len(urls) == 1:
             p = Path(urls[0].toLocalFile())
-            if p.suffix.lower() == '.dbi':
+            if p.suffix.lower() == '.dbi' and p.exists():
                 self.file_manager.load_preset(p)
                 return
-        
-        current = self.file_manager._get_current_checked_state()
-        added = 0
-        for url in urls:
-            p = Path(url.toLocalFile())
-            if p.is_file() and self.file_manager.is_supported_file(p):
-                self.file_manager.file_list[p.name] = p.resolve()
-                current.add(p.name)
-                added += 1
-            elif p.is_dir():
-                mode = self.file_manager.prompt_folder_addition_mode(p.name)
-                if mode == 'as_is':
-                    self.file_manager.file_list[p.name] = p.resolve()
-                    current.add(p.name)
-                    added += 1
-                elif mode == 'scan':
-                    for f in p.rglob('*'):
-                        if f.is_file() and f.suffix.lower() in self.file_manager.SUPPORTED_EXTENSIONS:
-                             self.file_manager.file_list[f.name] = f.resolve()
-                             current.add(f.name)
-                             added += 1
-        if added:
-            self.file_manager.update_file_list(current)
-            self.log('info', f'Dropped {added} items')
+
+        paths = [Path(url.toLocalFile()) for url in urls]
+        self.file_manager.ingest_paths(paths)
 
     def restore_geometry(self):
         g = self.config.get('window_geometry')
@@ -361,6 +350,93 @@ class MainWindow(QMainWindow):
             if isinstance(h, CustomSplitterHandle):
                 h.is_collapsed = (s[i + 1] == 0)
                 h.update()
+
+
+    def on_hibernate_toggled(self, checked: bool):
+        self.config.set('hibernate_when_done', checked)
+        self.config.save()
+        if checked:
+            self.server_manager.snooze_inactivity()
+        self.log('info', f"Auto-hibernation {'enabled (5 min idle)' if checked else 'disabled'}")
+
+    def _check_inactivity(self):
+        """Periodically check if client has been idle for >= 5 minutes with hibernation enabled."""
+        if not (self.hibernate_checkbox and self.hibernate_checkbox.isChecked()):
+            return
+
+        # If the countdown dialog is already visible, check if activity resumed
+        if hasattr(self, '_hibernate_box') and self._hibernate_box and self._hibernate_box.isVisible():
+            handler = self.server_manager.get_active_handler()
+            if handler:
+                inactivity = handler.get_inactivity_seconds()
+                if inactivity is not None and inactivity < 5.0:
+                    # Client activity resumed during countdown! Cancel countdown
+                    if self._hibernate_timer and self._hibernate_timer.isActive():
+                        self._hibernate_timer.stop()
+                    self._hibernate_box.reject()
+                    self.server_manager.snooze_inactivity()
+                    self.log('info', 'Client activity detected: hibernation cancelled.')
+            return
+
+        inactivity_sec = self.server_manager.get_inactivity_seconds()
+        if inactivity_sec is not None and inactivity_sec >= 300.0:  # 5 minutes
+            self.log('warning', f'No client activity for 5 minutes. Preparing hibernation.')
+            self.start_hibernation_countdown(30)
+
+    def start_hibernation_countdown(self, seconds: int = 30):
+        self._hibernate_seconds_left = seconds
+        if self._hibernate_timer is None:
+            self._hibernate_timer = QTimer(self)
+            self._hibernate_timer.timeout.connect(self._on_hibernate_tick)
+
+        self._hibernate_box = QMessageBox(self)
+        self._hibernate_box.setWindowTitle("PC Hibernation")
+        self._hibernate_box.setIcon(QMessageBox.Icon.Information)
+        self._hibernate_box.setText(
+            f"No activity between Switch and PC for over 5 minutes.\n\n"
+            f"Console is idle. PC will enter hibernation in {seconds} seconds."
+        )
+        cancel_btn = self._hibernate_box.addButton("Cancel Hibernation", QMessageBox.ButtonRole.RejectRole)
+        self._hibernate_box.setDefaultButton(cancel_btn)
+        self._hibernate_timer.start(1000)
+
+        res = self._hibernate_box.exec()
+        if self._hibernate_timer.isActive():
+            self._hibernate_timer.stop()
+            self.server_manager.snooze_inactivity()
+            self.log('info', 'PC Hibernation cancelled by user.')
+
+    def _on_hibernate_tick(self):
+        self._hibernate_seconds_left -= 1
+        if hasattr(self, '_hibernate_box') and self._hibernate_box.isVisible():
+            self._hibernate_box.setText(
+                f"No activity between Switch and PC for over 5 minutes.\n\n"
+                f"Console is idle. PC will enter hibernation in {self._hibernate_seconds_left} seconds."
+            )
+        if self._hibernate_seconds_left <= 0:
+            self._hibernate_timer.stop()
+            if hasattr(self, '_hibernate_box') and self._hibernate_box.isVisible():
+                self._hibernate_box.done(0)
+            self.execute_hibernation()
+
+    def execute_hibernation(self):
+        self.log('warning', 'Putting PC into hibernation now...')
+        # Safely stop any running servers before hibernation
+        try:
+            if self.server_manager.usb_handler:
+                self.server_manager.stop_usb_server()
+            if self.server_manager.http_handler:
+                self.server_manager.stop_http_server()
+            if self.server_manager.ftp_handler:
+                self.server_manager.stop_ftp_server()
+        except Exception as e:
+            self.log('error', f'Error stopping servers before hibernation: {e}')
+
+        import os
+        if sys.platform == 'win32':
+            os.system("shutdown /h")
+        else:
+            self.log('error', 'Hibernation is only supported on Windows')
 
     def closeEvent(self, e):
         if self.server_manager.usb_handler and self.server_manager.usb_handler.is_running:

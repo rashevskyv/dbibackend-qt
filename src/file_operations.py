@@ -1,50 +1,115 @@
 """
-File Operations Manager for DBI Backend
-Handles file list management, adding/removing files, and UI updates for the file tree.
+File Operations Manager for DBI Backend.
+Handles file queue, folder hierarchies, conflict handling, and UI interactions.
 """
-import sys
-import json
 from pathlib import Path
-from typing import Dict, Set
-from datetime import datetime
+from typing import Dict, Optional, Sequence, Union, List
 
-from PyQt6.QtWidgets import QFileDialog, QTreeWidgetItem, QMessageBox, QMenu, QCheckBox, QWidget, QHBoxLayout
+from PyQt6.QtWidgets import (
+    QFileDialog, QTreeWidgetItem, QCheckBox, QStyle
+)
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QBrush
+from PyQt6.QtGui import QColor, QBrush
 
-from .widgets import FileTreeWidgetItem, MissingFileDialog
+from .widgets import (
+    CHECKED_ROLE, IS_FOLDER_ROLE, FILE_PATH_ROLE, IS_CONFLICT_ROLE
+)
 from .utility_functions import format_size
+from .folder_dialog import FolderModeDialog
+from .queue_manager import (
+    QueueManager, SUPPORTED_EXTENSIONS, STATUS_QUEUED,
+    STATUS_PROCESS, STATUS_DONE, STATUS_FAILED, STATUS_SKIPPED
+)
+from .preset_manager import PresetManager
+from .tree_item_builder import (
+    build_folder_row, build_file_row,
+    update_folder_checkbox_visual, update_folder_aggregate_status
+)
+
 
 class FileManager:
-    """Manages file lists and interactions with the file tree widget"""
+    """Manages file queue, folder hierarchy, and interactions with the tree widget."""
 
-    SUPPORTED_EXTENSIONS = {'.nsp', '.nsz', '.xci', '.xcz'}
+    SUPPORTED_EXTENSIONS = SUPPORTED_EXTENSIONS
 
     def __init__(self, main_window):
         self.main_window = main_window
-        self.file_list: Dict[str, Path] = {}
-        self.item_map: Dict[str, QTreeWidgetItem] = {} # Map filename -> QTreeWidgetItem for fast lookup
-        self.presets_dir = self._get_presets_directory()
+        self.queue = QueueManager()
+        self.preset_manager = PresetManager(main_window, self)
+        self.presets_dir = self.preset_manager.presets_dir
         self.preset_loaded = False
 
-    def _get_presets_directory(self) -> Path:
-        if getattr(sys, 'frozen', False):
-            base_dir = Path(sys.executable).parent
-        else:
-            base_dir = Path(__file__).parent.parent
-        
-        if base_dir.name == 'src': base_dir = base_dir.parent
-        presets_dir = base_dir / 'presets'
-        presets_dir.mkdir(exist_ok=True)
-        return presets_dir
+        self.file_list: Dict[str, Path] = {}
+        self.item_map: Dict[str, QTreeWidgetItem] = {}
+        self.path_to_item: Dict[Path, QTreeWidgetItem] = {}
+        self.folder_items: Dict[Path, QTreeWidgetItem] = {}
+        self.file_targets: Dict[str, int] = {}
+        self._updating_checkboxes = False
 
     def is_supported_file(self, path: Path) -> bool:
-        if self.main_window.mode_switch.mode() in ('http', 'ftp'):
+        if self.main_window.mode_switch and self.main_window.mode_switch.mode() in ('http', 'ftp'):
             return True
         return path.suffix.lower() in self.SUPPORTED_EXTENSIONS
 
+    def ingest_paths(self, paths: Sequence[Union[str, Path]], default_folder_mode: Optional[str] = None):
+        """Unified ingestion pipeline for files and folders from UI, D&D, or CLI."""
+        resolved_paths: List[Path] = []
+        for p in paths:
+            try:
+                p_obj = Path(p).resolve()
+                if p_obj.exists() and p_obj not in resolved_paths:
+                    resolved_paths.append(p_obj)
+            except Exception:
+                continue
+
+        if not resolved_paths:
+            return
+
+        batch_folder_mode = default_folder_mode
+        added_files = 0
+        added_folders = 0
+
+        for path in resolved_paths:
+            if path.is_file():
+                if self.is_supported_file(path):
+                    added_files += self.queue.add_flat_files([path])
+            elif path.is_dir():
+                found_files = self.queue.scan_folder(path, self.SUPPORTED_EXTENSIONS)
+                if not found_files:
+                    self.main_window.log('warning', f'No supported files found in folder: {path.name}')
+                    continue
+
+                chosen_mode = batch_folder_mode
+                if chosen_mode is None:
+                    mode, apply_all = FolderModeDialog.ask_mode(path.name, self.main_window)
+                    if mode is None:
+                        continue
+                    if apply_all:
+                        batch_folder_mode = mode
+                    chosen_mode = mode
+
+                if chosen_mode == FolderModeDialog.MODE_FOLDER:
+                    added_files += self.queue.add_folder_hierarchical(path, found_files)
+                    added_folders += 1
+                elif chosen_mode == FolderModeDialog.MODE_FILES:
+                    added_files += self.queue.add_flat_files(found_files)
+
+        conflicts = self.queue.recompute_conflicts()
+        for cname in conflicts:
+            self.main_window.log('warning', f"Duplicate filename conflict: '{cname}'. Conflicting files cannot be transferred.")
+
+        self.update_file_list()
+
+        if added_folders > 0 or added_files > 0:
+            summary = []
+            if added_folders > 0:
+                summary.append(f"{added_folders} folder(s)")
+            if added_files > 0:
+                summary.append(f"{added_files} file(s)")
+            self.main_window.log('info', f"Added {', '.join(summary)}")
+
     def add_files(self):
-        """Add files using the last known files directory"""
+        """Add files using file dialog and route to unified ingestion."""
         self.preset_loaded = False
         files, _ = QFileDialog.getOpenFileNames(
             self.main_window, "Select Files",
@@ -52,185 +117,254 @@ class FileManager:
             "Switch Files (*.nsp *.nsz *.xci *.xcz);;All Files (*)"
         )
         if files:
-            current_checked = self._get_current_checked_state()
-            selected_dir = str(Path(files[0]).parent)
-            self.main_window.config.set('last_file_directory', selected_dir)
-            
-            added_count = 0
-            for f in files:
-                p = Path(f)
-                if self.is_supported_file(p):
-                    self.file_list[p.name] = p.resolve()
-                    current_checked.add(p.name)
-                    added_count += 1
-            if added_count > 0:
-                self.update_file_list(current_checked)
-                self.main_window.log('info', f'Added {added_count} files')
-
-    def prompt_folder_addition_mode(self, folder_name: str) -> Optional[str]:
-        """
-        Shows a dialog asking the user whether to add the folder 'as is' or 'scan'.
-        Returns 'as_is' or 'scan' or None (if cancelled).
-        """
-        msg_box = QMessageBox(self.main_window)
-        msg_box.setWindowTitle("Add Folder")
-        msg_box.setText(f"How do you want to add the folder:\n\"{folder_name}\"?")
-        
-        as_is_btn = msg_box.addButton("Add as is (Hierarchical)", QMessageBox.ButtonRole.YesRole)
-        scan_btn = msg_box.addButton("Scan for Switch files (Flat)", QMessageBox.ButtonRole.NoRole)
-        cancel_btn = msg_box.addButton(QMessageBox.StandardButton.Cancel)
-        
-        msg_box.exec()
-        
-        clicked = msg_box.clickedButton()
-        if clicked == as_is_btn:
-            return 'as_is'
-        elif clicked == scan_btn:
-            return 'scan'
-        return None
+            self.main_window.config.set('last_file_directory', str(Path(files[0]).parent))
+            self.ingest_paths([Path(f) for f in files])
 
     def add_folder(self):
-        """Add folder using the last known folder directory"""
+        """Add folder using directory dialog and route to unified ingestion."""
         self.preset_loaded = False
         folder = QFileDialog.getExistingDirectory(
             self.main_window, "Select Folder",
             self.main_window.config.get('last_folder_directory', '')
         )
         if folder:
-            current_checked = self._get_current_checked_state()
             self.main_window.config.set('last_folder_directory', folder)
-            p = Path(folder)
-            
-            mode = self.prompt_folder_addition_mode(p.name)
-            if mode is None:
-                return
-                
-            if mode == 'as_is':
-                self.file_list[p.name] = p.resolve()
-                current_checked.add(p.name)
-                self.update_file_list(current_checked)
-                self.main_window.log('info', f'Added folder: {p.name}')
-            elif mode == 'scan':
-                added_count = 0
-                for f in p.rglob('*'):
-                    if f.is_file() and f.suffix.lower() in self.SUPPORTED_EXTENSIONS:
-                        self.file_list[f.name] = f.resolve()
-                        current_checked.add(f.name)
-                        added_count += 1
-                if added_count > 0:
-                    self.update_file_list(current_checked)
-                    self.main_window.log('info', f'Scanned and added {added_count} files from folder')
-                else:
-                    self.main_window.log('warning', 'No supported files found')
+            self.ingest_paths([Path(folder)])
 
     def clear_file_list(self):
+        """Clear all queue state and reset the tree."""
         self.preset_loaded = False
+        self.queue.clear()
         self.file_list.clear()
+        self.item_map.clear()
+        self.path_to_item.clear()
+        self.folder_items.clear()
+        self.file_targets.clear()
         self.main_window.file_tree.clear()
         self.main_window.progress_delegate.clear_all()
         self.update_count_label()
         self.main_window.header_checkbox.setChecked(False)
         self.main_window.log('info', 'File list cleared')
 
-    def _get_current_checked_state(self) -> Set[str]:
-        checked = set()
-        tree = self.main_window.file_tree
-        for i in range(tree.topLevelItemCount()):
-            item = tree.topLevelItem(i)
-            if self.is_item_checked(item):
-                checked.add(item.text(1))
-        return checked
+    def remove_selected_items(self, selected_items: List[QTreeWidgetItem]):
+        """Remove selected items (folders or files) and re-evaluate conflicts."""
+        for item in selected_items:
+            path_str = item.data(5, FILE_PATH_ROLE)
+            if path_str:
+                self.queue.remove_path(Path(path_str))
+        self.queue.recompute_conflicts()
+        self.update_file_list()
+        self.main_window.log('info', f'Removed {len(selected_items)} item(s)')
+        if self.main_window.server_manager.usb_handler and self.main_window.server_manager.usb_handler.is_running:
+            checked_names = {it.text(1) for it in self.iter_checked_items()}
+            self.main_window.server_manager.sync_usb_files(self.file_list, checked_names, self.file_targets)
 
-    def update_file_list(self, previously_checked: Set[str] = None):
-        from .widgets import CHECKED_ROLE
+    def move_selected_items(self, delta: int):
+        """Move selected items up (delta=-1) or down (delta=+1) in queue order."""
+        selected_items = self.main_window.file_tree.selectedItems()
+        if not selected_items:
+            return
+
+        def item_index(it):
+            parent = it.parent()
+            if parent:
+                return parent.indexOfChild(it)
+            return self.main_window.file_tree.indexOfTopLevelItem(it)
+
+        sorted_items = sorted(selected_items, key=item_index, reverse=(delta > 0))
+
+        moved = False
+        paths_to_reselect = []
+        for it in sorted_items:
+            p_str = it.data(5, FILE_PATH_ROLE)
+            if p_str:
+                p = Path(p_str)
+                if self.queue.move_item(p, delta):
+                    moved = True
+                    paths_to_reselect.append(p)
+
+        if moved:
+            self.update_file_list()
+            for p in paths_to_reselect:
+                item = self.path_to_item.get(p) or self.folder_items.get(p)
+                if item:
+                    item.setSelected(True)
+            if self.main_window.server_manager.usb_handler and self.main_window.server_manager.usb_handler.is_running:
+                checked_names = {it.text(1) for it in self.iter_checked_items()}
+                self.main_window.server_manager.sync_usb_files(self.file_list, checked_names, self.file_targets)
+
+    def update_file_list(self):
+        """Populate the tree widget reflecting folders and files with accurate icons and states in explicit queue order."""
         self.main_window.file_tree.clear()
         self.item_map.clear()
+        self.path_to_item.clear()
+        self.folder_items.clear()
         self.main_window.header_checkbox.blockSignals(True)
-        for name, path in self.file_list.items():
-            try:
-                if path.is_dir():
-                    try:
-                        size = sum(f.stat().st_size for f in path.rglob('*') if f.is_file())
-                    except Exception:
-                        size = 0
-                else:
-                    size = path.stat().st_size
-                item = FileTreeWidgetItem(self.main_window.file_tree)
-                checkbox = QCheckBox()
-                should = True
-                if previously_checked is not None: should = name in previously_checked
-                checkbox.setChecked(should)
-                # Cache the checked state on the item so FileTreeWidgetItem.__lt__
-                # and update_count_label don't need to walk the widget tree.
-                item.setData(0, CHECKED_ROLE, should)
-                checkbox.stateChanged.connect(
-                    lambda state, it=item: it.setData(0, CHECKED_ROLE, state == Qt.CheckState.Checked.value)
-                )
-                checkbox.stateChanged.connect(self.main_window.on_item_checked)
-                w = QWidget()
-                l = QHBoxLayout(w)
-                l.addWidget(checkbox)
-                l.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                l.setContentsMargins(0,0,0,0)
-                w.setLayout(l)
-                self.main_window.file_tree.setItemWidget(item, 0, w)
-                item.setText(1, name)
-                item.setText(2, format_size(size))
-                item.setData(2, Qt.ItemDataRole.UserRole, size)
-                item.setText(3, "Queued")
-                item.setData(3, Qt.ItemDataRole.UserRole, 0)
-                item.setText(4, str(path))
-                self.item_map[name] = item
 
-                if not path.exists():
-                    checkbox.setChecked(False)
-                    checkbox.setEnabled(False)
-                    item.setText(2, "0 B")
-                    item.setData(2, Qt.ItemDataRole.UserRole, 0)
-                    item.setText(3, "⚠️ Missing")
-                    item.setForeground(3, QColor('#F44336'))
-                    item.setData(3, Qt.ItemDataRole.UserRole, 5) # New status for missing
-                    for c in range(self.main_window.file_tree.columnCount()):
-                        item.setForeground(c, QBrush(QColor('#808080')))
-            except: continue
+        folder_icon = self.main_window.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon)
+        file_icon = self.main_window.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)
+
+        # Build entries in explicit queue order
+        for item_path in self.queue.order:
+            if item_path in self.queue.folders:
+                folder_path = item_path
+                folder_rec = self.queue.folders[folder_path]
+                folder_item = build_folder_row(
+                    self.main_window.file_tree, folder_path, folder_rec, folder_icon,
+                    self._on_folder_checkbox_toggled, self.on_folder_target_changed
+                )
+
+                folder_total_size = 0
+                for child_path in folder_rec.files:
+                    if child_path not in self.queue.files:
+                        continue
+                    rec = self.queue.files[child_path]
+                    folder_total_size += rec.size
+
+                    should_check = rec.checked
+                    cur_target = rec.target
+                    child_item = build_file_row(
+                        folder_item, child_path, rec, file_icon, should_check, cur_target,
+                        self._on_child_checkbox_toggled, self.on_target_changed
+                    )
+
+                    if not rec.in_conflict:
+                        self.item_map[rec.name] = child_item
+                    folder_item.addChild(child_item)
+                    self.path_to_item[child_path] = child_item
+
+                folder_item.setText(2, format_size(folder_total_size))
+                folder_item.setData(2, Qt.ItemDataRole.UserRole, folder_total_size)
+                folder_item.setExpanded(True)
+                self.folder_items[folder_path] = folder_item
+                update_folder_checkbox_visual(folder_item, self.is_item_checked, self._checkbox_for)
+                update_folder_aggregate_status(folder_item)
+            elif item_path in self.queue.files:
+                file_path = item_path
+                rec = self.queue.files[file_path]
+                if rec.folder_path is not None:
+                    continue
+
+                should_check = rec.checked
+                cur_target = rec.target
+                item = build_file_row(
+                    self.main_window.file_tree, file_path, rec, file_icon, should_check, cur_target,
+                    self._on_standalone_checkbox_toggled, self.on_target_changed
+                )
+
+                if not rec.in_conflict:
+                    self.item_map[rec.name] = item
+                self.path_to_item[file_path] = item
+
+        # Fallback for any standalone files not in queue.order
+        for file_path, rec in self.queue.files.items():
+            if rec.folder_path is not None or file_path in self.path_to_item:
+                continue
+            should_check = rec.checked
+            cur_target = rec.target
+            item = build_file_row(
+                self.main_window.file_tree, file_path, rec, file_icon, should_check, cur_target,
+                self._on_standalone_checkbox_toggled, self.on_target_changed
+            )
+            if not rec.in_conflict:
+                self.item_map[rec.name] = item
+            self.path_to_item[file_path] = item
+
+        self.file_list = self.queue.get_transfer_file_list()
+        self.file_targets = {
+            rec.name: rec.target for rec in self.queue.files.values() if not rec.in_conflict
+        }
+        for rec in self.queue.files.values():
+            if rec.status_code != STATUS_QUEUED and not rec.in_conflict:
+                self.update_file_status(rec.name, rec.status)
         self.main_window.header_checkbox.blockSignals(False)
         self.update_count_label()
         self.main_window.on_item_checked()
         if self.main_window.search_box.text():
             self.filter_files(self.main_window.search_box.text())
 
-    # ---- Tree helpers -------------------------------------------------
-    # Iteration / checkbox access used to be inlined in 12+ places; the
-    # helpers below centralize the patterns so callers don't have to
-    # walk the widget tree themselves.
+    def _on_folder_checkbox_toggled(self, folder_item: QTreeWidgetItem, state: int):
+        if self._updating_checkboxes:
+            return
+        self._updating_checkboxes = True
+        try:
+            is_checked = (state == Qt.CheckState.Checked.value or state == 2)
+            folder_item.setData(0, CHECKED_ROLE, is_checked)
+            for i in range(folder_item.childCount()):
+                child = folder_item.child(i)
+                if child.data(0, IS_CONFLICT_ROLE):
+                    continue
+                child_cb = self._checkbox_for(child)
+                if child_cb and child_cb.isEnabled():
+                    child_cb.setChecked(is_checked)
+                child.setData(0, CHECKED_ROLE, is_checked)
+                c_path_str = child.data(5, FILE_PATH_ROLE)
+                if c_path_str and Path(c_path_str) in self.queue.files:
+                    self.queue.files[Path(c_path_str)].checked = is_checked
+        finally:
+            self._updating_checkboxes = False
+        self.update_count_label()
+        self.main_window.on_item_checked()
 
-    def iter_items(self):
-        """Yield every top-level item in the file tree."""
+    def _on_child_checkbox_toggled(self, child_item: QTreeWidgetItem, state: int):
+        if self._updating_checkboxes:
+            return
+        is_checked = (state == Qt.CheckState.Checked.value or state == 2)
+        child_item.setData(0, CHECKED_ROLE, is_checked)
+        c_path_str = child_item.data(5, FILE_PATH_ROLE)
+        if c_path_str and Path(c_path_str) in self.queue.files:
+            self.queue.files[Path(c_path_str)].checked = is_checked
+
+        parent = child_item.parent()
+        if parent:
+            self._updating_checkboxes = True
+            try:
+                update_folder_checkbox_visual(parent, self.is_item_checked, self._checkbox_for)
+            finally:
+                self._updating_checkboxes = False
+        self.update_count_label()
+        self.main_window.on_item_checked()
+
+    def _on_standalone_checkbox_toggled(self, item: QTreeWidgetItem, state: int):
+        if self._updating_checkboxes:
+            return
+        is_checked = (state == Qt.CheckState.Checked.value or state == 2)
+        item.setData(0, CHECKED_ROLE, is_checked)
+        p_str = item.data(5, FILE_PATH_ROLE)
+        if p_str and Path(p_str) in self.queue.files:
+            self.queue.files[Path(p_str)].checked = is_checked
+        self.update_count_label()
+        self.main_window.on_item_checked()
+
+    def iter_top_level_items(self):
         tree = self.main_window.file_tree
         for i in range(tree.topLevelItemCount()):
             yield tree.topLevelItem(i)
 
+    def iter_items(self):
+        for top in self.iter_top_level_items():
+            yield top
+            for c in range(top.childCount()):
+                yield top.child(c)
+
+    def iter_file_items(self):
+        for top in self.iter_top_level_items():
+            if top.data(0, IS_FOLDER_ROLE):
+                for c in range(top.childCount()):
+                    yield top.child(c)
+            else:
+                yield top
+
     def iter_checked_items(self):
-        """Yield only items whose checkbox is currently checked."""
-        for item in self.iter_items():
+        for item in self.iter_file_items():
             if self.is_item_checked(item):
                 yield item
 
-    def _checkbox_for(self, item):
-        """Return the QCheckBox embedded in column 0's widget, or None."""
+    def _checkbox_for(self, item) -> Optional[QCheckBox]:
         w = self.main_window.file_tree.itemWidget(item, 0)
-        if w is None:
-            return None
-        return w.findChild(QCheckBox)
+        return w.findChild(QCheckBox) if w else None
 
     def is_item_checked(self, item) -> bool:
-        """Read the cached checked state for a tree item.
-
-        Falls back to the widget tree only if the cache isn't populated yet
-        (e.g. when called before :meth:`update_file_list` had a chance to seed
-        it). All hot paths should hit the cached branch.
-        """
-        from .widgets import CHECKED_ROLE
         cached = item.data(0, CHECKED_ROLE)
         if cached is not None:
             return bool(cached)
@@ -238,19 +372,20 @@ class FileManager:
         return cb.isChecked() if cb is not None else False
 
     def set_item_checked(self, item, value: bool):
-        """Set the checkbox for ``item`` to ``value`` (no-op if absent)."""
+        if item.data(0, IS_CONFLICT_ROLE):
+            return
         cb = self._checkbox_for(item)
         if cb is not None:
             cb.setChecked(value)
-
-    # ------------------------------------------------------------------
+        if item.data(0, IS_FOLDER_ROLE):
+            self._on_folder_checkbox_toggled(item, Qt.CheckState.Checked.value if value else Qt.CheckState.Unchecked.value)
 
     def update_count_label(self):
         total_size = 0
         total_count = 0
         selected_size = 0
         selected_count = 0
-        for item in self.iter_items():
+        for item in self.iter_file_items():
             size = item.data(2, Qt.ItemDataRole.UserRole) or 0
             total_count += 1
             total_size += size
@@ -261,247 +396,203 @@ class FileManager:
                 f"{format_size(selected_size)} / {format_size(total_size)} total")
         self.main_window.file_count_label.setText(text)
 
+    def on_target_changed(self, file_key, target_idx: int):
+        item = self.path_to_item.get(file_key) if isinstance(file_key, Path) else self.item_map.get(file_key)
+        if item is not None:
+            path = Path(item.data(5, FILE_PATH_ROLE))
+            rec = self.queue.files[path]
+            rec.target = target_idx
+            if not rec.in_conflict:
+                self.file_targets[rec.name] = target_idx
+            target_names = ["Auto", "SD Card", "NAND"]
+            item.setText(3, target_names[target_idx] if 0 <= target_idx < len(target_names) else "Auto")
+            item.setData(3, Qt.ItemDataRole.UserRole, target_idx)
+        if self.main_window.server_manager.usb_handler and self.main_window.server_manager.usb_handler.is_running:
+            checked_names = {it.text(1) for it in self.iter_checked_items()}
+            self.main_window.server_manager.sync_usb_files(self.file_list, checked_names, self.file_targets)
+
+    def on_folder_target_changed(self, folder_item: QTreeWidgetItem, target_idx: int):
+        target_names = ["Auto", "SD Card", "NAND"]
+        folder_item.setText(3, target_names[target_idx] if 0 <= target_idx < len(target_names) else "Auto")
+        folder_item.setData(3, Qt.ItemDataRole.UserRole, target_idx)
+        for i in range(folder_item.childCount()):
+            child = folder_item.child(i)
+            fname = child.text(1)
+            rec = self.queue.files.get(Path(child.data(5, FILE_PATH_ROLE)))
+            if rec:
+                rec.target = target_idx
+                if not rec.in_conflict:
+                    self.file_targets[fname] = target_idx
+            w = self.main_window.file_tree.itemWidget(child, 3)
+            combo = w if isinstance(w, QComboBox) else (w.findChild(QComboBox) if w else None)
+            if combo:
+                combo.blockSignals(True)
+                combo.setCurrentIndex(target_idx)
+                combo.blockSignals(False)
+            child.setText(3, target_names[target_idx] if 0 <= target_idx < len(target_names) else "Auto")
+            child.setData(3, Qt.ItemDataRole.UserRole, target_idx)
+        if self.main_window.server_manager.usb_handler and self.main_window.server_manager.usb_handler.is_running:
+            checked_names = {it.text(1) for it in self.iter_checked_items()}
+            self.main_window.server_manager.sync_usb_files(self.file_list, checked_names, self.file_targets)
+
+    def set_target_for_selected(self, target_idx: int):
+        selected = self.main_window.file_tree.selectedItems()
+        if not selected:
+            return
+        for item in selected:
+            if item.data(0, IS_FOLDER_ROLE):
+                self.on_folder_target_changed(item, target_idx)
+            else:
+                self.on_target_changed(Path(item.data(5, FILE_PATH_ROLE)), target_idx)
+
     def update_file_status(self, filename: str, status: str):
         item = self.item_map.get(filename)
-        if item:
+        if not item:
+            return
+        path_str = item.data(5, FILE_PATH_ROLE)
+        rec = self.queue.files.get(Path(path_str)) if path_str else None
+        if rec:
+            rec.status = status
+            rec.status_code = {
+                'skipped': STATUS_SKIPPED, 'process': STATUS_PROCESS,
+                'done': STATUS_DONE, 'failed': STATUS_FAILED
+            }.get(status, STATUS_QUEUED)
+        if status == 'skipped':
+            item.setText(4, '⏭ Skipped')
+            item.setForeground(4, QColor('#808080'))
+            item.setData(4, Qt.ItemDataRole.UserRole, STATUS_SKIPPED)
+            for c in range(self.main_window.file_tree.columnCount()):
+                item.setForeground(c, QBrush(QColor('#808080')))
+        else:
+            for c in range(self.main_window.file_tree.columnCount()):
+                item.setForeground(c, QBrush(self.main_window.palette().text().color()))
             if status == 'process':
-                item.setText(3, '🔄 Process')
-                item.setForeground(3, QColor('#2196F3'))
-                item.setData(3, Qt.ItemDataRole.UserRole, 1)
+                item.setText(4, '🔄 Process')
+                item.setForeground(4, QColor('#2196F3'))
+                item.setData(4, Qt.ItemDataRole.UserRole, STATUS_PROCESS)
             elif status == 'done':
-                item.setText(3, '✅ Done')
-                item.setForeground(3, QColor('#4CAF50'))
-                item.setData(3, Qt.ItemDataRole.UserRole, 2)
+                item.setText(4, '✅ Done')
+                item.setForeground(4, QColor('#4CAF50'))
+                item.setData(4, Qt.ItemDataRole.UserRole, STATUS_DONE)
             elif status == 'failed':
-                item.setText(3, '❌ Failed')
-                item.setForeground(3, QColor('#F44336'))
-                item.setData(3, Qt.ItemDataRole.UserRole, 3)
-            elif status == 'skipped':
-                item.setText(3, '⏭ Skipped')
-                item.setForeground(3, QColor('#808080'))
-                item.setData(3, Qt.ItemDataRole.UserRole, 4)
-                for c in range(self.main_window.file_tree.columnCount()):
-                    item.setForeground(c, QBrush(QColor('#808080')))
+                item.setText(4, '❌ Failed')
+                item.setForeground(4, QColor('#F44336'))
+                item.setData(4, Qt.ItemDataRole.UserRole, STATUS_FAILED)
             else:
-                item.setText(3, 'Queued')
-                item.setForeground(3, QColor(self.main_window.palette().text().color()))
-                item.setData(3, Qt.ItemDataRole.UserRole, 0)
+                item.setText(4, 'Queued')
+                item.setData(4, Qt.ItemDataRole.UserRole, STATUS_QUEUED)
+
+        w = self.main_window.file_tree.itemWidget(item, 0)
+        if w:
+            from .tree_item_builder import DragHandle
+            handle = w.findChild(DragHandle)
+            if handle:
+                handle.set_draggable(status not in ('process', 'done'))
+
+        parent = item.parent()
+        if parent:
+            update_folder_aggregate_status(parent)
+
+    def set_file_status(self, filename: str, status: Union[str, int]):
+        m = {STATUS_PROCESS: 'process', STATUS_DONE: 'done', STATUS_FAILED: 'failed', STATUS_SKIPPED: 'skipped', STATUS_QUEUED: 'queued'}
+        self.update_file_status(filename, m.get(status, status) if isinstance(status, int) else status)
+
+    def reorder_dragged_path(self, src_path: Path, tgt_path: Optional[Path], before: bool = True) -> bool:
+        src_res = src_path.resolve()
+        is_child, parent_path = False, None
+        for f_path, f_rec in self.queue.folders.items():
+            if src_res in f_rec.files:
+                is_child, parent_path = True, f_path
+                break
+        if self.queue.reorder_dragged_path(src_path, is_child, parent_path, tgt_path, not before):
+            self.update_file_list()
+            item = self.path_to_item.get(src_res) or self.folder_items.get(src_res)
+            if item: item.setSelected(True)
+            if hasattr(self.main_window, 'server_manager') and self.main_window.server_manager.usb_handler and self.main_window.server_manager.usb_handler.is_running:
+                checked_names = {it.text(1) for it in self.iter_checked_items()}
+                self.main_window.server_manager.sync_usb_files(self.file_list, checked_names, self.file_targets)
+            return True
+        return False
 
     def get_file_status_code(self, filename: str) -> int:
-        item = self.item_map.get(filename)
-        if item is None:
-            return 0
-        return item.data(3, Qt.ItemDataRole.UserRole) or 0
+        item = self.item_map.get(filename); return (item.data(4, Qt.ItemDataRole.UserRole) or 0) if item else 0
 
     def get_file_status(self, filename: str) -> str:
-        item = self.item_map.get(filename)
-        return item.text(3) if item else ""
+        item = self.item_map.get(filename); return item.text(4) if item else ""
 
     def invert_selected_files(self):
         selected = self.main_window.file_tree.selectedItems()
-        if not selected: return
+        if not selected:
+            return
         for item in selected:
-            self.set_item_checked(item, not self.is_item_checked(item))
+            is_folder = item.data(0, IS_FOLDER_ROLE)
+            current = self.is_item_checked(item)
+            if is_folder:
+                self.set_item_checked(item, not current)
+            else:
+                if not item.data(0, IS_CONFLICT_ROLE):
+                    self.set_item_checked(item, not current)
         self.main_window.on_item_checked()
-        curr = self.main_window.file_tree.currentItem()
-        if curr:
-            idx = self.main_window.file_tree.indexOfTopLevelItem(curr)
-            next_idx = idx + 1
-            if next_idx < self.main_window.file_tree.topLevelItemCount():
-                next_item = self.main_window.file_tree.topLevelItem(next_idx)
-                self.main_window.file_tree.clearSelection()
-                next_item.setSelected(True)
-                self.main_window.file_tree.setCurrentItem(next_item)
-            elif self.main_window.file_tree.topLevelItemCount() > 0:
-                next_item = self.main_window.file_tree.topLevelItem(0)
-                self.main_window.file_tree.clearSelection()
-                next_item.setSelected(True)
-                self.main_window.file_tree.setCurrentItem(next_item)
 
     def filter_files(self, text: str):
         search = text.lower()
-        for item in self.iter_items():
-            item.setHidden(search not in item.text(1).lower())
+        for top in self.iter_top_level_items():
+            if top.data(0, IS_FOLDER_ROLE):
+                f_match = search in top.text(1).lower()
+                c_matches = False
+                for c in range(top.childCount()):
+                    child = top.child(c)
+                    cm = search in child.text(1).lower()
+                    child.setHidden(not cm and not f_match)
+                    if cm:
+                        c_matches = True
+                top.setHidden(not f_match and not c_matches)
+                if c_matches:
+                    top.setExpanded(True)
+            else:
+                top.setHidden(search not in top.text(1).lower())
 
     def dim_unchecked_items(self):
-        gray = QBrush(QColor('#808080'))
-        column_count = self.main_window.file_tree.columnCount()
+        gray, col_count = QBrush(QColor('#808080')), self.main_window.file_tree.columnCount()
         for item in self.iter_items():
             if not self.is_item_checked(item):
-                for c in range(column_count):
-                    item.setForeground(c, gray)
+                for c in range(col_count): item.setForeground(c, gray)
 
     def reset_items_visuals(self):
         brush = QBrush(self.main_window.palette().text().color())
         self.main_window.progress_delegate.clear_all()
         self.main_window.file_tree.viewport().update()
-        column_count = self.main_window.file_tree.columnCount()
+        col_count = self.main_window.file_tree.columnCount()
+        for rec in self.queue.files.values():
+            rec.status = 'Queued'
+            rec.status_code = STATUS_QUEUED
         for item in self.iter_items():
-            for c in range(column_count):
+            if item.data(0, IS_CONFLICT_ROLE):
+                continue
+            for c in range(col_count):
                 item.setForeground(c, brush)
-            item.setText(3, "Queued")
-            item.setData(3, Qt.ItemDataRole.UserRole, 0)
+            item.setText(4, "Queued")
+            item.setData(4, Qt.ItemDataRole.UserRole, STATUS_QUEUED)
 
     def handle_server_start(self):
-        """Called when any server starts. Dims unchecked files."""
         self.dim_unchecked_items()
 
     def handle_server_stop(self):
-        """Called when server stops. Resets visuals."""
+        if hasattr(self.main_window, 'server_manager'):
+            self.main_window.server_manager.session_ended = False
         self.reset_items_visuals()
-        # Reset progress bars and labels
-        self.main_window.current_progress.setValue(0)
-        self.main_window.current_progress.setFormat("0%")
-        self.main_window.overall_progress.setValue(0)
-        self.main_window.overall_progress.setFormat("0%")
+        self.main_window.current_progress.setValue(0); self.main_window.current_progress.setFormat("0%")
+        self.main_window.overall_progress.setValue(0); self.main_window.overall_progress.setFormat("0%")
         self.main_window.current_file_label.setText("No transfer in progress")
         self.main_window.overall_label.setText("0 / 0 files")
         self.main_window.speed_label.setText("Speed: 0 MB/s")
         self.main_window.eta_label.setText("ETA: --:--:--")
         from . import __version__
         self.main_window.setWindowTitle(f"DBI Backend Qt v{__version__}")
-        if self.main_window.taskbar_manager: self.main_window.taskbar_manager.hide_progress()
+        if self.main_window.taskbar_manager:
+            self.main_window.taskbar_manager.hide_progress()
 
-    def handle_installation_start(self, requested_filenames: list):
-        """Called when the first real data request arrives.
-        Marks checked but unrequested files as Skipped."""
-        requested_set = set(requested_filenames)
-        for filename, item in self.item_map.items():
-            if self.is_item_checked(item) and filename not in requested_set:
-                self.update_file_status(filename, 'skipped')
-
-        # Sort once at the end
-        self.main_window.file_tree.sortItems(3, self.main_window.file_tree.header().sortIndicatorOrder())
-
-    # --- Presets & Batches ---
-
-    def save_file_list_as_batch(self):
-        if not self.file_list: return
-        path, _ = QFileDialog.getSaveFileName(self.main_window, "Batch", "", "Batch (*.bat)")
-        if path:
-            checked = []
-            for item in self.iter_checked_items():
-                name = item.text(1)
-                if name in self.file_list:
-                    checked.append(self.file_list[name])
-            if not checked:
-                QMessageBox.warning(self.main_window, "No Selection", "None checked.")
-                return
-            try:
-                with open(path, 'w', encoding='utf-8') as f:
-                    f.write('@echo off\n')
-                    f.write('dbi_backend.exe -- files ^\n')
-                    for p in checked: f.write(f'"{p}" ^\n')
-                self.main_window.log('success', f'Saved batch: {path}')
-            except Exception as e: self.main_window.log('error', f'Error: {e}')
-
-    def save_preset(self):
-        """Save preset using the last known preset directory"""
-        if not self.file_list: return
-        
-        default_dir = self.main_window.config.get('last_preset_directory', str(self.presets_dir))
-        path, _ = QFileDialog.getSaveFileName(self.main_window, "Save Preset", default_dir, "DBI Presets (*.dbi)")
-        
-        if path:
-            self.main_window.config.set('last_preset_directory', str(Path(path).parent))
-            data = []
-            for item in self.iter_items():
-                name = item.text(1)
-                if name in self.file_list:
-                    data.append({
-                        "name": name,
-                        "path": str(self.file_list[name]),
-                        "checked": self.is_item_checked(item),
-                    })
-            
-            blob = {"name": Path(path).stem, "created_at": datetime.now().isoformat(), "files": data}
-            try:
-                with open(path, 'w', encoding='utf-8') as f: json.dump(blob, f, indent=2)
-                self.main_window.update_presets_menu()
-                self.main_window.log('success', f'Saved preset: {Path(path).name}')
-            except Exception as e: self.main_window.log('error', f'Error: {e}')
-
-    def load_preset(self, path: Path = None):
-        """Load preset using the last known preset directory"""
-        if not path:
-            default_dir = self.main_window.config.get('last_preset_directory', str(self.presets_dir))
-            s, _ = QFileDialog.getOpenFileName(self.main_window, "Load Preset", default_dir, "DBI Presets (*.dbi);;All Files (*)")
-            if s: 
-                path = Path(s)
-                self.main_window.config.set('last_preset_directory', str(path.parent))
-        
-        if path and path.exists():
-            try:
-                self.preset_loaded = True
-                with open(path, 'r', encoding='utf-8') as f: d = json.load(f)
-                self.file_list.clear()
-                to_check = set()
-                
-                raw_files = []
-                if isinstance(d, dict) and "files" in d and isinstance(d["files"], list):
-                    raw_files = d["files"]
-                else:
-                    items = d.items() if isinstance(d, dict) else []
-                    for n, p_str in items:
-                        raw_files.append({"name": n, "path": p_str, "checked": True})
-
-                bulk_action = None
-                cancelled = False
-                for e in raw_files:
-                    name = e.get("name", "")
-                    p_str = e.get("path", "")
-                    p = Path(p_str)
-                    is_checked = e.get("checked", True)
-
-                    if not p.exists():
-                        if bulk_action == MissingFileDialog.CANCEL:
-                            # Already cancelled — skip everything
-                            cancelled = True
-                            break
-                        elif bulk_action in (MissingFileDialog.IGNORE, MissingFileDialog.REMOVE):
-                            if bulk_action == MissingFileDialog.REMOVE: continue
-                            # If IGNORE, we add it but it will be handled by update_file_list
-                        else:
-                            dlg = MissingFileDialog(name, p_str, self.main_window)
-                            dlg.exec()
-
-                            if dlg.result_code == MissingFileDialog.CANCEL:
-                                cancelled = True
-                                break
-
-                            if dlg.apply_all: bulk_action = dlg.result_code
-
-                            if dlg.result_code == MissingFileDialog.REMOVE:
-                                continue
-                            elif dlg.result_code == MissingFileDialog.UPDATE:
-                                ext_filter = "Switch Files (*.nsp *.nsz *.xci *.xcz);;All Files (*)"
-                                new_path, _ = QFileDialog.getOpenFileName(
-                                    self.main_window, f"Locate {name}",
-                                    str(p.parent), ext_filter
-                                )
-                                if new_path:
-                                    p = Path(new_path)
-
-                    self.file_list[p.name] = p
-                    if is_checked and p.exists(): to_check.add(p.name)
-
-                if cancelled:
-                    self.file_list.clear()
-                    self.preset_loaded = False
-                    self.main_window.log('info', 'Preset loading cancelled')
-                    return
-
-                self.update_file_list(to_check)
-                self.main_window.log('info', f'Loaded preset: {path.name}')
-            except Exception as e: self.main_window.log('error', f'Error loading: {e}')
-
-    def delete_preset(self):
-        """Delete preset using the last known preset directory"""
-        default_dir = self.main_window.config.get('last_preset_directory', str(self.presets_dir))
-        s, _ = QFileDialog.getOpenFileName(self.main_window, "Delete", default_dir, "DBI Presets (*.dbi)")
-        if s:
-            try:
-                Path(s).unlink()
-                self.main_window.update_presets_menu()
-                self.main_window.log('info', f'Deleted: {Path(s).name}')
-            except Exception as e: self.main_window.log('error', f'Error: {e}')
+    def save_file_list_as_batch(self): self.preset_manager.save_file_list_as_batch()
+    def save_preset(self): self.preset_manager.save_preset()
+    def load_preset(self, path: Optional[Path] = None): self.preset_manager.load_preset(path)
+    def delete_preset(self): self.preset_manager.delete_preset()
