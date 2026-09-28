@@ -25,6 +25,10 @@ from .tree_item_builder import (
     build_folder_row, build_file_row,
     update_folder_checkbox_visual, update_folder_aggregate_status
 )
+from .queue_reorder import (
+    move_selected_items as qr_move_selected,
+    reorder_dragged_path as qr_reorder_dragged,
+)
 
 
 class FileManager:
@@ -161,37 +165,7 @@ class FileManager:
 
     def move_selected_items(self, delta: int):
         """Move selected items up (delta=-1) or down (delta=+1) in queue order."""
-        selected_items = self.main_window.file_tree.selectedItems()
-        if not selected_items:
-            return
-
-        def item_index(it):
-            parent = it.parent()
-            if parent:
-                return parent.indexOfChild(it)
-            return self.main_window.file_tree.indexOfTopLevelItem(it)
-
-        sorted_items = sorted(selected_items, key=item_index, reverse=(delta > 0))
-
-        moved = False
-        paths_to_reselect = []
-        for it in sorted_items:
-            p_str = it.data(5, FILE_PATH_ROLE)
-            if p_str:
-                p = Path(p_str)
-                if self.queue.move_item(p, delta):
-                    moved = True
-                    paths_to_reselect.append(p)
-
-        if moved:
-            self.update_file_list()
-            for p in paths_to_reselect:
-                item = self.path_to_item.get(p) or self.folder_items.get(p)
-                if item:
-                    item.setSelected(True)
-            if self.main_window.server_manager.usb_handler and self.main_window.server_manager.usb_handler.is_running:
-                checked_names = {it.text(1) for it in self.iter_checked_items()}
-                self.main_window.server_manager.sync_usb_files(self.file_list, checked_names, self.file_targets)
+        qr_move_selected(self, delta)
 
     def update_file_list(self):
         """Populate the tree widget reflecting folders and files with accurate icons and states in explicit queue order."""
@@ -498,21 +472,7 @@ class FileManager:
         self.update_file_status(filename, m.get(status, status) if isinstance(status, int) else status)
 
     def reorder_dragged_path(self, src_path: Path, tgt_path: Optional[Path], before: bool = True) -> bool:
-        src_res = src_path.resolve()
-        is_child, parent_path = False, None
-        for f_path, f_rec in self.queue.folders.items():
-            if src_res in f_rec.files:
-                is_child, parent_path = True, f_path
-                break
-        if self.queue.reorder_dragged_path(src_path, is_child, parent_path, tgt_path, not before):
-            self.update_file_list()
-            item = self.path_to_item.get(src_res) or self.folder_items.get(src_res)
-            if item: item.setSelected(True)
-            if hasattr(self.main_window, 'server_manager') and self.main_window.server_manager.usb_handler and self.main_window.server_manager.usb_handler.is_running:
-                checked_names = {it.text(1) for it in self.iter_checked_items()}
-                self.main_window.server_manager.sync_usb_files(self.file_list, checked_names, self.file_targets)
-            return True
-        return False
+        return qr_reorder_dragged(self, src_path, tgt_path, before)
 
     def get_file_status_code(self, filename: str) -> int:
         item = self.item_map.get(filename); return (item.data(4, Qt.ItemDataRole.UserRole) or 0) if item else 0
@@ -556,7 +516,11 @@ class FileManager:
         gray, col_count = QBrush(QColor('#808080')), self.main_window.file_tree.columnCount()
         for item in self.iter_items():
             if not self.is_item_checked(item):
-                for c in range(col_count): item.setForeground(c, gray)
+                status_code = item.data(4, Qt.ItemDataRole.UserRole)
+                if status_code in (STATUS_DONE, STATUS_FAILED):
+                    continue
+                for c in range(col_count):
+                    item.setForeground(c, gray)
 
     def reset_items_visuals(self):
         brush = QBrush(self.main_window.palette().text().color())

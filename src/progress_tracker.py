@@ -16,13 +16,20 @@ class ProgressTracker:
         self.requested_files: Set[str] = set()
         self.completed_files_set: Set[str] = set()
         self.file_sizes: Dict[str, int] = {}
-        self.transferred_bytes = 0
         self.completed_files = 0
         self.total_files = len(file_list)
         self.file_bytes_sent: Dict[str, int] = {name: 0 for name in file_list.keys()}
         self.skipped_files: Set[str] = set()
         
         self._preinit_totals()
+
+    @property
+    def transferred_bytes(self) -> int:
+        return self.unique_bytes_transferred
+
+    @transferred_bytes.setter
+    def transferred_bytes(self, value: int):
+        self.unique_bytes_transferred = value
 
     def _preinit_totals(self):
         """Pre-initialize with all files in the batch for 'Overall' progress consistency.
@@ -150,7 +157,6 @@ class ProgressTracker:
         self.total_requested_size = 0
         self.requested_files = set()
         self.completed_files_set = set()
-        self.transferred_bytes = 0
         self.completed_files = 0
         self.file_bytes_sent = {name: 0 for name in self.file_list.keys()}
         self.skipped_files = set()

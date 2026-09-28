@@ -2,7 +2,7 @@
 
 **DBI Backend Qt** is a modern, feature-rich graphical user interface (GUI) for the **DBI** installer (Nintendo Switch). Built with Python 3 and PyQt6, this tool provides a superior alternative to traditional CLI backends, offering an advanced file queue, visual feedback, and deep OS integration.
 
-![Version](https://img.shields.io/badge/version-2.8.0-blue)
+![Version](https://img.shields.io/badge/version-2.8.3-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -11,20 +11,23 @@
 ## ✨ Key Features
 
 ### 🔄 Two-Way Sphaira Synchronization & Queue Management
-*   **Live Queue Modification:** Add new files (via Drag & Drop or Add buttons) or toggle checkboxes in the PC application at any time during an active USB session. Sphaira dynamically reflects queue changes on the fly without having to restart the installation session.
-*   **Real-time Status Tracking:** When Sphaira finishes installing a game or skips a package (already installed or user-skipped), it transmits a notification back to the PC. The PC immediately unchecks the item, marks it as **Done** or **Skipped**, and dynamically recalculates remaining bytes, overall progress, and ETA.
+*   **Live Queue Modification & Drag Handles:** Add new files (via Drag & Drop or Add buttons), toggle checkboxes, or reorder unstarted queue items using dedicated drag handles (or `Alt+Up` / `Alt+Down`) at any time during an active USB session. Sphaira dynamically reflects queue changes on the fly without having to restart the installation session, while active and completed files are safely guarded.
+*   **Table Header Select-All:** Master checkbox integrated directly into the table header allows selecting or deselecting all items with a single click.
+*   **Real-time Status Tracking & Target Progress:** When Sphaira finishes installing a game or skips a package (already installed or user-skipped), it transmits a notification back to the PC. The PC immediately unchecks the item, marks it as **Done** or **Skipped**, and dynamically recalculates remaining bytes, overall progress, and ETA. The Target column uses transparent rendering so the row-wide progress bar remains fully visible. Repeated metadata requests for already installed titles preserve their completed status without restarting the session.
 *   **Install Location Sync (Target):** Configure where each game should be installed directly from the PC table (`Auto`, `SD Card`, `NAND / System memory`) via dropdowns or right-click context menus. The choice is synced to Sphaira in real time.
-*   **Console Free Space Display:** Shows the Nintendo Switch's available and total storage space for both microSD and NAND directly in the status bar (`🎮 SD: X GB free | NAND: Y GB free`).
+*   **Console Free Space Display:** Shows the Nintendo Switch's available and total storage space for both microSD and NAND directly in the status bar and File Queue top header (`🎮 SD: X GB free | NAND: Y GB free`).
 
 ### 🌙 Auto-Hibernation
 *   **Hibernate PC when Idle (5 min):** Option to automatically put your Windows PC into hibernation when there has been no communication between the Nintendo Switch console and the server for over 5 minutes (indicating all transfers have finished and the console is no longer waiting for or accepting files). Includes a 30-second countdown prompt with an option to abort if you are still at your computer, and automatically cancels if the console resumes activity.
 
 ### 📡 Transfer Modes
-*   **USB Backend:** Direct installation via USB cable using the MTP/DBI protocol. High-speed and reliable. Supports only Switch game files (`.nsp`, `.nsz`, `.xci`, `.xcz`).
+*   **USB Backend:** Direct installation via USB cable using the MTP/DBI protocol. High-speed and reliable. Supports only Switch game files (`.nsp`, `.nsz`, `.xci`, `.xcz`). Features unique byte-range interval tracking to avoid duplicating progress when ranges are re-requested.
 *   **HTTP Server:** Turns your PC into a local network repository. Use the "Install from HTTP" menu in DBI to install games over Wi-Fi or LAN. Supports adding any folders (as virtual directories) and files of any type.
 *   **FTP Server:** Serves your files over a local FTP server. Use the "Install from FTP" network source in DBI or any standard FTP client (like FileZilla). Supports adding folders and files of any type.
 
-### 📁 Virtual File System (HTTP & FTP)
+### 📁 Virtual File System & Folder Ingestion
+*   **Folder Ingestion Modes:** When adding folders via button, drag & drop, or command line, choose between recursively scanning all files or preserving the hierarchical folder structure.
+*   **Duplicate Basename Protection:** Files with identical basenames from different locations are flagged with conflict indicators and excluded from transfer to protect the Switch filesystem.
 *   **DBI Client Filter:** When accessed via the Switch's DBI program (detected by User-Agent for HTTP, or username/password matching for FTP), the servers automatically present a flat listing containing only compatible installation files (`.nsp`, `.nsz`, `.xci`, `.xcz`) for seamless installation.
 *   **Hierarchical Browsing:** When accessed via standard web browsers or standard FTP clients, the servers present the actual nested directory structures, recursive size calculations, and allow downloading all files without extension filtering.
 
@@ -38,7 +41,7 @@
 *   **Robust Stop:** Fully responsive "Stop" button that breaks blocking USB operations via device reset.
 
 ### 💾 Preset System (.dbi)
-*   **Custom Format:** Save your carefully selected file lists, including their checkbox states, into `.dbi` files.
+*   **Custom Format:** Save your carefully selected file lists, including their checkbox states, targets, and folder structures, into `.dbi` files.
 *   **Shell Integration:** Supports "Open With..." — double-click any `.dbi` file in Windows Explorer to load your preset directly into the app.
 *   **Quick Access:** A dedicated "Presets" menu for rapid switching between different game sets.
 
@@ -66,6 +69,7 @@
 | Key | Action |
 | :--- | :--- |
 | **Space** | Toggle checkbox of selected item and move to the next file |
+| **Alt + Up / Down** | Move selected pending queue item up or down |
 | **Ctrl + O** | Add files to queue |
 | **Ctrl + Shift + O** | Add folder to queue |
 | **Ctrl + B** | Export list as a `.bat` file for the classic DBI CLI |

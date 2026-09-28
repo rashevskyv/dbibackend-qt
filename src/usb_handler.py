@@ -373,6 +373,8 @@ class USBHandler(QThread):
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_PACKAGE_STATUS, 0), timeout=10000)
 
         # Emit signal to UI thread
+        if status == dbi_protocol.STATUS_INSTALLED:
+            self.progress_tracker.completed_files_set.add(name)
         self.package_status_received.emit(name, status, result_code)
         with self._lock:
             self._retained_active_files.pop(name, None)
@@ -450,13 +452,6 @@ class USBHandler(QThread):
 
         is_metadata = range_size < dbi_protocol.METADATA_THRESHOLD
         
-        # --- Logic for UI State ---
-        if is_metadata and range_offset == 0 and name in self.progress_tracker.requested_files:
-            # Switch restarted logic
-            self.log_message.emit('warning', 'Switch reset file selection.')
-            self.progress_tracker.reset()
-            self.transfer_reset.emit()
-
         if is_metadata:
             self.progress_tracker.register_file_request(name)
         elif not is_metadata:
@@ -520,8 +515,9 @@ class USBHandler(QThread):
                 self.last_activity_time = time.time()
                 
                 if not is_metadata:
-                    self.progress_tracker.transferred_bytes += sent
-                    self.current_file_bytes_sent += sent # Track local file progress
+                    chunk_offset = range_offset + range_bytes_sent - sent
+                    new_file_unique = self.progress_tracker.add_interval(name, chunk_offset, chunk_offset + sent)
+                    self.current_file_bytes_sent = new_file_unique
 
                     # Throttle UI updates: at sustained 100 MB/s this loop
                     # iterates 100x/sec; emitting a cross-thread signal each
@@ -530,11 +526,11 @@ class USBHandler(QThread):
                     if now - self._last_progress_emit >= self._progress_emit_interval:
                         self._last_progress_emit = now
                         elapsed = now - self.transfer_start_time
-                        speed = (self.progress_tracker.transferred_bytes / elapsed / 1048576) if elapsed > 0 else 0.0
+                        speed = (self.progress_tracker.unique_bytes_transferred / elapsed / 1048576) if elapsed > 0 else 0.0
 
                         self.progress_updated.emit(
                             name,
-                            self.progress_tracker.transferred_bytes,
+                            self.progress_tracker.unique_bytes_transferred,
                             speed,
                             self.progress_tracker.total_requested_size,
                             len(self.progress_tracker.requested_files),
@@ -559,11 +555,7 @@ class USBHandler(QThread):
 
         # --- Completion Logic ---
         if not is_metadata:
-             # Register valid data interval
-             if range_bytes_sent > 0:
-                 total_file_transferred = self.progress_tracker.add_interval(name, range_offset, range_offset + range_bytes_sent)
-             else:
-                 total_file_transferred = self.progress_tracker.file_bytes_sent.get(name, 0)
+             total_file_transferred = self.progress_tracker.file_bytes_sent.get(name, 0)
              
              # Calculate percentage for file list status
              pct = int((total_file_transferred / self.current_file_size) * 100) if self.current_file_size > 0 else 0

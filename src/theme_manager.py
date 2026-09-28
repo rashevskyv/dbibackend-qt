@@ -45,6 +45,31 @@ class ThemeManager:
     QStatusBar QLabel { background: transparent; }
     QSizeGrip { background: transparent; width: 16px; height: 16px; }
     
+    /* Tree Target ComboBox */
+    QTreeWidget QComboBox {
+        background-color: transparent;
+        color: #000000;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        padding: 1px 18px 1px 4px;
+    }
+    QTreeWidget QComboBox:hover, QTreeWidget QComboBox:focus {
+        border: 1px solid #b0b0b0;
+    }
+    QTreeWidget QComboBox::drop-down {
+        subcontrol-origin: padding;
+        subcontrol-position: top right;
+        width: 16px;
+        border-left: none;
+    }
+    QTreeWidget QComboBox QAbstractItemView {
+        background-color: #ffffff;
+        color: #000000;
+        border: 1px solid #cccccc;
+        selection-background-color: #2196F3;
+        selection-color: #ffffff;
+    }
+
     QSplitter::handle { background-color: transparent; }
     """
 
@@ -81,6 +106,31 @@ class ThemeManager:
     QStatusBar::item { border: none; }
     QStatusBar QLabel { background: transparent; }
     QSizeGrip { background: transparent; width: 16px; height: 16px; }
+
+    /* Tree Target ComboBox */
+    QTreeWidget QComboBox {
+        background-color: transparent;
+        color: #ffffff;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        padding: 1px 18px 1px 4px;
+    }
+    QTreeWidget QComboBox:hover, QTreeWidget QComboBox:focus {
+        border: 1px solid #3d3d3d;
+    }
+    QTreeWidget QComboBox::drop-down {
+        subcontrol-origin: padding;
+        subcontrol-position: top right;
+        width: 16px;
+        border-left: none;
+    }
+    QTreeWidget QComboBox QAbstractItemView {
+        background-color: #252526;
+        color: #cccccc;
+        border: 1px solid #3d3d3d;
+        selection-background-color: #37373d;
+        selection-color: #ffffff;
+    }
 
     QSplitter::handle { background-color: transparent; }
     

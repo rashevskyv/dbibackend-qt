@@ -206,6 +206,7 @@ def build_folder_row(
     tree.setItemWidget(folder_item, 0, create_row_checkbox_widget(folder_item, f_cb, is_draggable=f_draggable))
 
     f_combo = QComboBox()
+    f_combo.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
     f_combo.addItems(["Auto", "SD Card", "NAND"])
     f_combo.setCurrentIndex(folder_rec.target)
     f_combo.currentIndexChanged.connect(lambda idx, it=folder_item: on_target(it, idx))
@@ -259,6 +260,7 @@ def build_file_row(
     tree.setItemWidget(item, 0, create_row_checkbox_widget(item, cb, is_draggable=c_draggable))
 
     combo = QComboBox()
+    combo.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
     combo.addItems(["Auto", "SD Card", "NAND"])
     combo.setCurrentIndex(cur_target)
     combo.currentIndexChanged.connect(lambda idx, path=file_path: on_target(path, idx))

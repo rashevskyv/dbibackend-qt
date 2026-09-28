@@ -245,7 +245,12 @@ class SessionCoordinator:
         if item is not None:
             rect = self.main_window.file_tree.visualItemRect(item)
             if rect.isValid() and not rect.isNull():
+                rect.setX(0)
+                rect.setWidth(self.main_window.file_tree.viewport().width())
                 self.main_window.file_tree.viewport().update(rect)
+                w = self.main_window.file_tree.itemWidget(item, 3)
+                if w:
+                    w.update()
             else:
                 self.main_window.file_tree.viewport().update()
         else:
@@ -262,6 +267,16 @@ class SessionCoordinator:
         self.main_window.progress_delegate.set_progress(filename, 100)
         self.main_window.progress_delegate.skipped_files.discard(filename)
         self._uncheck_file(filename)
+        item = self.main_window.file_manager.item_map.get(filename)
+        if item is not None:
+            rect = self.main_window.file_tree.visualItemRect(item)
+            if rect.isValid() and not rect.isNull():
+                rect.setX(0)
+                rect.setWidth(self.main_window.file_tree.viewport().width())
+                self.main_window.file_tree.viewport().update(rect)
+                w = self.main_window.file_tree.itemWidget(item, 3)
+                if w:
+                    w.update()
 
         path = self.main_window.file_manager.file_list.get(filename)
         fsize = path.stat().st_size if path and path.exists() else 0
