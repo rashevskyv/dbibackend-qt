@@ -22,7 +22,7 @@ class ThemeManager:
     QTreeWidget, QListWidget, QTableWidget { background-color: #ffffff; color: #000000; border: 1px solid #c0c0c0; alternate-background-color: #f9f9f9; }
     QTreeWidget::item:selected { background-color: #2196F3; color: #ffffff; }
     QHeaderView::section { background-color: #e0e0e0; color: #000000; padding: 4px; border: 1px solid #d0d0d0; }
-    QGroupBox { border: 1px solid #cccccc; border-radius: 4px; margin-top: 1.1em; padding-top: 10px; }
+    QGroupBox { border: 1px solid #cccccc; border-radius: 4px; margin-top: 0.8em; padding-top: 4px; }
     QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 3px; color: #333333; left: 10px; }
     
     /* Progress Bar Light - Green */
@@ -55,12 +55,24 @@ class ThemeManager:
     }
     QTreeWidget QComboBox:hover, QTreeWidget QComboBox:focus {
         border: 1px solid #b0b0b0;
+        background-color: rgba(0, 0, 0, 0.04);
     }
     QTreeWidget QComboBox::drop-down {
         subcontrol-origin: padding;
-        subcontrol-position: top right;
-        width: 16px;
+        subcontrol-position: center right;
+        width: 14px;
         border-left: none;
+    }
+    QTreeWidget QComboBox::down-arrow {
+        width: 0;
+        height: 0;
+        border-left: 3px solid transparent;
+        border-right: 3px solid transparent;
+        border-top: 4px solid #666666;
+        margin-right: 4px;
+    }
+    QTreeWidget QComboBox::down-arrow:hover {
+        border-top: 4px solid #000000;
     }
     QTreeWidget QComboBox QAbstractItemView {
         background-color: #ffffff;
@@ -84,7 +96,7 @@ class ThemeManager:
     QTreeWidget, QListWidget, QTableWidget { background-color: #252526; color: #cccccc; border: 1px solid #3d3d3d; alternate-background-color: #2d2d2d; }
     QTreeWidget::item:selected { background-color: #37373d; color: #ffffff; border: 1px solid #2196F3; }
     QHeaderView::section { background-color: #2d2d2d; color: #ffffff; padding: 4px; border: 1px solid #3d3d3d; }
-    QGroupBox { border: 1px solid #3d3d3d; border-radius: 4px; margin-top: 1.1em; padding-top: 10px; }
+    QGroupBox { border: 1px solid #3d3d3d; border-radius: 4px; margin-top: 0.8em; padding-top: 4px; }
     QGroupBox::title { color: #cccccc; subcontrol-origin: margin; left: 10px; }
     
     /* Progress Bar Dark - Blue (Requested) */
@@ -117,12 +129,24 @@ class ThemeManager:
     }
     QTreeWidget QComboBox:hover, QTreeWidget QComboBox:focus {
         border: 1px solid #3d3d3d;
+        background-color: rgba(255, 255, 255, 0.06);
     }
     QTreeWidget QComboBox::drop-down {
         subcontrol-origin: padding;
-        subcontrol-position: top right;
-        width: 16px;
+        subcontrol-position: center right;
+        width: 14px;
         border-left: none;
+    }
+    QTreeWidget QComboBox::down-arrow {
+        width: 0;
+        height: 0;
+        border-left: 3px solid transparent;
+        border-right: 3px solid transparent;
+        border-top: 4px solid #888888;
+        margin-right: 4px;
+    }
+    QTreeWidget QComboBox::down-arrow:hover {
+        border-top: 4px solid #ffffff;
     }
     QTreeWidget QComboBox QAbstractItemView {
         background-color: #252526;

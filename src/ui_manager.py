@@ -15,6 +15,8 @@ from .widgets import (
     ZoomableTreeWidget, CustomSplitter, ProgressDelegate, AnimatedProgressBar,
     ModeSwitch, CheckBoxHeaderView, ElidingLabel
 )
+from .storage_widget import SwitchStorageWidget
+
 
 class UIManager:
     """Manages the creation of UI components."""
@@ -211,6 +213,8 @@ class UIManager:
         """Create file list section with Mode Toggle and IP Label"""
         group = QGroupBox('File Queue')
         layout = QVBoxLayout()
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(4)
 
         # Pass main_window to tree for file_manager access
         self.main_window.file_tree = ZoomableTreeWidget(self.main_window)
@@ -242,16 +246,22 @@ class UIManager:
 
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(15, 0, 15, 0)
-        
-        header_layout.addStretch(1)
+        header_layout.setContentsMargins(4, 2, 4, 2)
+        header_layout.setSpacing(10)
 
         self.header_widget = header_widget
+
+        # Sphaira-style dual storage bars for microSD and NAND
+        self.main_window.storage_bars = SwitchStorageWidget(header_widget)
+        self.storage_bars = self.main_window.storage_bars
+        header_layout.addWidget(self.main_window.storage_bars, 2)
+
+        # Retain switch_storage_label for tests and backwards compatibility
         self.main_window.switch_storage_label = ElidingLabel("")
         self.switch_storage_label = self.main_window.switch_storage_label
-        self.main_window.switch_storage_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
-        self.main_window.switch_storage_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(self.main_window.switch_storage_label, 3)
+        self.main_window.switch_storage_label.setStyleSheet("color: transparent; font-size: 1px;")
+        self.main_window.switch_storage_label.setMaximumWidth(1)
+        header_layout.addWidget(self.main_window.switch_storage_label)
 
         header_layout.addStretch(1)
         

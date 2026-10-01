@@ -2,7 +2,7 @@
 
 **DBI Backend Qt** is a modern, feature-rich graphical user interface (GUI) for the **DBI** installer (Nintendo Switch). Built with Python 3 and PyQt6, this tool provides a superior alternative to traditional CLI backends, offering an advanced file queue, visual feedback, and deep OS integration.
 
-![Version](https://img.shields.io/badge/version-2.8.3-blue)
+![Version](https://img.shields.io/badge/version-2.8.4-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -13,9 +13,10 @@
 ### 🔄 Two-Way Sphaira Synchronization & Queue Management
 *   **Live Queue Modification & Drag Handles:** Add new files (via Drag & Drop or Add buttons), toggle checkboxes, or reorder unstarted queue items using dedicated drag handles (or `Alt+Up` / `Alt+Down`) at any time during an active USB session. Sphaira dynamically reflects queue changes on the fly without having to restart the installation session, while active and completed files are safely guarded.
 *   **Table Header Select-All:** Master checkbox integrated directly into the table header allows selecting or deselecting all items with a single click.
-*   **Real-time Status Tracking & Target Progress:** When Sphaira finishes installing a game or skips a package (already installed or user-skipped), it transmits a notification back to the PC. The PC immediately unchecks the item, marks it as **Done** or **Skipped**, and dynamically recalculates remaining bytes, overall progress, and ETA. The Target column uses transparent rendering so the row-wide progress bar remains fully visible. Repeated metadata requests for already installed titles preserve their completed status without restarting the session.
+*   **Real-time Status Tracking & Target Progress:** When Sphaira finishes installing a game or skips a package (already installed or user-skipped), it transmits a notification back to the PC. The PC immediately unchecks the item, marks it as **Done** or **Skipped**, and dynamically recalculates remaining bytes, overall progress, and ETA. The Target column uses clean native dropdown styling with transparent cell background, eliminating double text ghosting while ensuring the row-wide progress bar remains fully visible.
 *   **Install Location Sync (Target):** Configure where each game should be installed directly from the PC table (`Auto`, `SD Card`, `NAND / System memory`) via dropdowns or right-click context menus. The choice is synced to Sphaira in real time.
-*   **Console Free Space Display:** Shows the Nintendo Switch's available and total storage space for both microSD and NAND directly in the status bar and File Queue top header (`🎮 SD: X GB free | NAND: Y GB free`).
+*   **Sphaira-Style Dynamic Dual Storage Bars:** Directly inside the File Queue header, two stacked capacity bars show **microSD** and **NAND** status in the authentic style of Sphaira (SFIRE). Each bar dynamically reflects committed disk space, color thresholds (Green <=75%, Amber >75%, Red >90%), free space readout, and an active installation segment (yellow) tracking real-time write progress of the installing title.
+*   **SFIRE-Synchronized ETA:** ETA calculation is fully aligned with Sphaira's `FormatEta` (`Xh Ym` / `Xm Ys`) and displays dual progress (`ETA: <file_eta> / <total_eta>`) powered by a smoothed sliding-window speed estimate.
 
 ### 🌙 Auto-Hibernation
 *   **Hibernate PC when Idle (5 min):** Option to automatically put your Windows PC into hibernation when there has been no communication between the Nintendo Switch console and the server for over 5 minutes (indicating all transfers have finished and the console is no longer waiting for or accepting files). Includes a 30-second countdown prompt with an option to abort if you are still at your computer, and automatically cancels if the console resumes activity.

@@ -195,6 +195,9 @@ class ElidingLabel(QLabel):
             return
         metrics = self.fontMetrics()
         avail_width = max(0, self.width() - 4)
+        if avail_width <= 0:
+            super().setText(self._full_text)
+            return
         elided = metrics.elidedText(self._full_text, Qt.TextElideMode.ElideRight, avail_width)
         super().setText(elided)
 

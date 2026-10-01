@@ -211,7 +211,7 @@ def build_folder_row(
     f_combo.setCurrentIndex(folder_rec.target)
     f_combo.currentIndexChanged.connect(lambda idx, it=folder_item: on_target(it, idx))
     tree.setItemWidget(folder_item, 3, f_combo)
-    folder_item.setText(3, ["Auto", "SD Card", "NAND"][folder_rec.target])
+    folder_item.setText(3, "")
     folder_item.setData(3, Qt.ItemDataRole.UserRole, folder_rec.target)
 
     return folder_item
@@ -265,7 +265,7 @@ def build_file_row(
     combo.setCurrentIndex(cur_target)
     combo.currentIndexChanged.connect(lambda idx, path=file_path: on_target(path, idx))
     tree.setItemWidget(item, 3, combo)
-    item.setText(3, ["Auto", "SD Card", "NAND"][cur_target])
+    item.setText(3, "")
     item.setData(3, Qt.ItemDataRole.UserRole, cur_target)
 
     return item

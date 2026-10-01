@@ -10,6 +10,8 @@ import traceback
 from pathlib import Path
 from typing import Dict, Optional, Set
 from enum import Enum
+import collections
+
 
 import usb.core
 import usb.util
@@ -110,6 +112,8 @@ class USBHandler(QThread):
         # bus is sustaining 30-100 MB/s.
         self._progress_emit_interval = 0.05  # seconds
         self._last_progress_emit = 0.0
+        self._speed_samples = collections.deque(maxlen=60)
+
 
         # File handle caching
         self.cached_file_path = None
@@ -523,10 +527,20 @@ class USBHandler(QThread):
                     # iterates 100x/sec; emitting a cross-thread signal each
                     # iteration overwhelms the event loop and stalls UI input.
                     now = time.time()
+                    self._speed_samples.append((now, self.progress_tracker.unique_bytes_transferred))
+                    while len(self._speed_samples) > 2 and (now - self._speed_samples[0][0]) > 30.0:
+                        self._speed_samples.popleft()
+
                     if now - self._last_progress_emit >= self._progress_emit_interval:
                         self._last_progress_emit = now
-                        elapsed = now - self.transfer_start_time
-                        speed = (self.progress_tracker.unique_bytes_transferred / elapsed / 1048576) if elapsed > 0 else 0.0
+                        elapsed = (now - self.transfer_start_time) if self.transfer_start_time else 0.0
+                        t0, b0 = self._speed_samples[0]
+                        dt = now - t0
+                        db = self.progress_tracker.unique_bytes_transferred - b0
+                        if dt >= 0.5 and db >= 0:
+                            speed = db / dt / 1048576
+                        else:
+                            speed = (self.progress_tracker.unique_bytes_transferred / elapsed / 1048576) if elapsed > 0 else 0.0
 
                         self.progress_updated.emit(
                             name,

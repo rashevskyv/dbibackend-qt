@@ -378,16 +378,14 @@ class FileManager:
             rec.target = target_idx
             if not rec.in_conflict:
                 self.file_targets[rec.name] = target_idx
-            target_names = ["Auto", "SD Card", "NAND"]
-            item.setText(3, target_names[target_idx] if 0 <= target_idx < len(target_names) else "Auto")
+            item.setText(3, "")
             item.setData(3, Qt.ItemDataRole.UserRole, target_idx)
         if self.main_window.server_manager.usb_handler and self.main_window.server_manager.usb_handler.is_running:
             checked_names = {it.text(1) for it in self.iter_checked_items()}
             self.main_window.server_manager.sync_usb_files(self.file_list, checked_names, self.file_targets)
 
     def on_folder_target_changed(self, folder_item: QTreeWidgetItem, target_idx: int):
-        target_names = ["Auto", "SD Card", "NAND"]
-        folder_item.setText(3, target_names[target_idx] if 0 <= target_idx < len(target_names) else "Auto")
+        folder_item.setText(3, "")
         folder_item.setData(3, Qt.ItemDataRole.UserRole, target_idx)
         for i in range(folder_item.childCount()):
             child = folder_item.child(i)
@@ -403,7 +401,7 @@ class FileManager:
                 combo.blockSignals(True)
                 combo.setCurrentIndex(target_idx)
                 combo.blockSignals(False)
-            child.setText(3, target_names[target_idx] if 0 <= target_idx < len(target_names) else "Auto")
+            child.setText(3, "")
             child.setData(3, Qt.ItemDataRole.UserRole, target_idx)
         if self.main_window.server_manager.usb_handler and self.main_window.server_manager.usb_handler.is_running:
             checked_names = {it.text(1) for it in self.iter_checked_items()}

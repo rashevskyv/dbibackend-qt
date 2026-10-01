@@ -10,7 +10,7 @@ from typing import Dict, Set, Optional
 from PyQt6.QtWidgets import QMessageBox
 
 from . import dbi_protocol
-from .utility_functions import format_size, format_time
+from .utility_functions import format_size, format_time, format_sphaira_eta
 
 
 class SessionCoordinator:
@@ -37,6 +37,12 @@ class SessionCoordinator:
         self.manual_stop: bool = False
         self.last_activity_time: Optional[float] = None
         self.has_communicated: bool = False
+
+        # Console storage state (bytes)
+        self.nand_free: int = 0
+        self.nand_total: int = 0
+        self.sd_free: int = 0
+        self.sd_total: int = 0
 
     def get_inactivity_seconds(self) -> Optional[float]:
         """
@@ -124,6 +130,8 @@ class SessionCoordinator:
         self.main_window.speed_label.setText('Speed: 0 MB/s')
         self.main_window.eta_label.setText('ETA: --:--:--')
         self.main_window.current_file_label.setText('Waiting for Switch...')
+        if getattr(self.main_window, 'storage_bars', None):
+            self.main_window.storage_bars.clear_install_progress()
         if self.main_window.session_time_label:
             self.main_window.session_time_label.setText('')
         if hasattr(self.main_window, 'queue_sync_status') and self.main_window.queue_sync_status:
@@ -143,7 +151,8 @@ class SessionCoordinator:
             self.main_window.taskbar_manager.set_progress_value(0)
 
     def _update_overall_progress_ui(
-        self, transferred: int, total_req_size: int, speed: float, completed: int, total_files: int
+        self, transferred: int, total_req_size: int, speed: float, completed: int, total_files: int,
+        cur_bytes: int = 0, cur_size: int = 0
     ):
         if total_req_size > 0:
             raw_pct = (transferred / total_req_size) * 100
@@ -154,9 +163,21 @@ class SessionCoordinator:
                 overall_pct = 100
                 self.main_window.eta_label.setText('ETA: Done')
             elif speed > 0 and total_req_size > transferred:
-                remaining_bytes = total_req_size - transferred
-                sec = remaining_bytes / (speed * 1024 * 1024)
-                self.main_window.eta_label.setText(f'ETA: {format_time(int(sec))}')
+                speed_bps = speed * 1024 * 1024
+                tot_rem = max(0, total_req_size - transferred)
+                total_sec = int(tot_rem / speed_bps)
+                tot_str = format_sphaira_eta(total_sec)
+
+                cur_rem = max(0, cur_size - cur_bytes) if (cur_size > cur_bytes and cur_size > 0) else 0
+                file_sec = int(cur_rem / speed_bps) if cur_rem > 0 else 0
+                file_str = format_sphaira_eta(file_sec)
+
+                if total_files > 1 and file_str:
+                    self.main_window.eta_label.setText(f'ETA: {file_str} / {tot_str or "--"}')
+                elif tot_str:
+                    self.main_window.eta_label.setText(f'ETA: {tot_str}')
+                else:
+                    self.main_window.eta_label.setText('ETA: --:--:--')
             else:
                 self.main_window.eta_label.setText('ETA: --:--:--')
 
@@ -232,8 +253,20 @@ class SessionCoordinator:
         completed = self.transfer_stats['completed_files'] + self.transfer_stats['skipped_files']
         total_files = self.transfer_stats['total_files']
 
-        self._update_overall_progress_ui(transferred, total_req_size, speed, completed, total_files)
+        self._update_overall_progress_ui(transferred, total_req_size, speed, completed, total_files, cur_bytes, cur_size)
         self._update_overall_files_label(completed, total_files)
+
+        if getattr(self.main_window, 'storage_bars', None):
+            target_idx = self.main_window.file_manager.file_targets.get(filename, 0)
+            if target_idx == 1:
+                target_dest = 'sd'
+            elif target_idx == 2:
+                target_dest = 'nand'
+            else:
+                sd_free = getattr(self, 'sd_free', 0)
+                nand_free = getattr(self, 'nand_free', 0)
+                target_dest = 'sd' if (sd_free >= nand_free or sd_free > cur_size) else 'nand'
+            self.main_window.storage_bars.set_install_progress(target_dest, cur_bytes, cur_size)
 
         if self.transfer_stats['start_time']:
             elapsed = int((datetime.now() - self.transfer_stats['start_time']).total_seconds())
@@ -309,9 +342,15 @@ class SessionCoordinator:
             if self.main_window.taskbar_manager:
                 self.main_window.taskbar_manager.set_progress_value(100)
 
+        if getattr(self.main_window, 'storage_bars', None):
+            self.main_window.storage_bars.clear_install_progress()
+
     def on_file_skipped(self, filename: str, size: int):
         self._unmark_completed(filename)
         self.route_tracker('mark_file_skipped', filename)
+
+        if getattr(self.main_window, 'storage_bars', None):
+            self.main_window.storage_bars.clear_install_progress()
 
         if filename not in self.skipped_files_set:
             self.skipped_files_set.add(filename)
@@ -367,10 +406,17 @@ class SessionCoordinator:
             self.main_window.log('error', f'Console install failed: {filename} (Result: 0x{result_code:08X})')
             self._unmark_completed(filename)
             self._unmark_skipped(filename)
+            if getattr(self.main_window, 'storage_bars', None):
+                self.main_window.storage_bars.clear_install_progress()
             self.main_window.progress_delegate.set_progress(filename, 0)
             self.main_window.file_manager.update_file_status(filename, 'failed')
 
     def on_storage_info_received(self, nand_free: int, nand_total: int, sd_free: int, sd_total: int):
+        self.nand_free = nand_free
+        self.nand_total = nand_total
+        self.sd_free = sd_free
+        self.sd_total = sd_total
+
         storage_text = f"🎮 SD: {format_size(sd_free)} · NAND: {format_size(nand_free)}"
         if getattr(self.main_window, 'switch_storage_label', None):
             self.main_window.switch_storage_label.setText(storage_text)
@@ -378,6 +424,8 @@ class SessionCoordinator:
                 f"microSD: {format_size(sd_free)} free of {format_size(sd_total)}\n"
                 f"NAND: {format_size(nand_free)} free of {format_size(nand_total)}"
             )
+        if getattr(self.main_window, 'storage_bars', None):
+            self.main_window.storage_bars.set_storage_info(nand_free, nand_total, sd_free, sd_total)
         self.main_window.log(
             'info',
             f"Switch Storage Info: SD {format_size(sd_free)} free of {format_size(sd_total)}, "
@@ -385,6 +433,8 @@ class SessionCoordinator:
         )
 
     def on_all_transfers_complete(self):
+        if getattr(self.main_window, 'storage_bars', None):
+            self.main_window.storage_bars.clear_install_progress()
         success = self.transfer_stats['completed_files']
         skipped = self.transfer_stats['skipped_files']
         total = self.transfer_stats['total_files']
