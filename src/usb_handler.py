@@ -259,7 +259,8 @@ class USBHandler(QThread):
                     if problem and not self._driver_problem_reported:
                         self._driver_problem_reported = True
                         self.driver_problem.emit(problem)
-                    retry_count += 1
+                    if not problem:  # keep waiting while the user installs the driver
+                        retry_count += 1
                     time.sleep(1)
                     continue
 

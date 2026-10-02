@@ -5,6 +5,7 @@ Windows needs a driver libusb can talk to (WinUSB, libusbK or libusb0) bound to
 USB\\VID_057E&PID_3000; a fresh PC has none. Linux needs a udev rule so a normal
 user may open the device. macOS needs nothing.
 """
+import base64
 import ctypes
 import subprocess
 import sys
@@ -94,8 +95,18 @@ class _ShellExecuteInfo(ctypes.Structure):
     ]
 
 
+def elevated_installer_args(log: Path) -> str:
+    """PowerShell arguments with the installer passed inline. Running the .ps1 by
+    path would let anything that can write to that folder swap the script
+    between here and the UAC prompt and get it run as administrator."""
+    script = Path(__file__).with_name('install_winusb.ps1').read_text(encoding='utf-8')
+    log_literal = str(log).replace("'", "''")
+    command = f"& {{\n{script}\n}} -LogPath '{log_literal}'"
+    encoded = base64.b64encode(command.encode('utf-16-le')).decode('ascii')
+    return f'-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}'
+
+
 def _install_windows() -> Tuple[bool, str]:
-    script = Path(__file__).with_name('install_winusb.ps1')
     log = Path(tempfile.gettempdir()) / 'dbi-winusb-install.log'
     log.unlink(missing_ok=True)
     info = _ShellExecuteInfo()
@@ -103,7 +114,7 @@ def _install_windows() -> Tuple[bool, str]:
     info.fMask = 0x40  # SEE_MASK_NOCLOSEPROCESS
     info.lpVerb = 'runas'  # UAC prompt
     info.lpFile = 'powershell.exe'
-    info.lpParameters = f'-NoProfile -ExecutionPolicy Bypass -File "{script}" -LogPath "{log}"'
+    info.lpParameters = elevated_installer_args(log)
     info.nShow = 0
     if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(info)):
         if ctypes.GetLastError() == 1223:  # ERROR_CANCELLED
@@ -116,7 +127,8 @@ def _install_windows() -> Tuple[bool, str]:
     code = ctypes.c_ulong()
     kernel32.GetExitCodeProcess(ctypes.c_void_p(info.hProcess), ctypes.byref(code))
     kernel32.CloseHandle(ctypes.c_void_p(info.hProcess))
-    details = log.read_text(encoding='utf-8', errors='replace').strip() if log.exists() else ''
+    # Windows PowerShell's Out-File -Encoding utf8 writes a BOM
+    details = log.read_text(encoding='utf-8-sig', errors='replace').strip() if log.exists() else ''
     if code.value == 0:
         return True, 'WinUSB driver installed. Replug the console if it does not connect.'
     return False, f'Driver installation failed (code {code.value}).\n\n{details}'.strip()

@@ -67,12 +67,20 @@ def test_bundled_libusb1_backend_comes_first():
     assert len(backends) == 2 and 'libusb1' in type(backends[0]).__module__
 
 
-def test_installer_script_is_valid_powershell():
+def test_elevated_command_is_inline_and_valid_powershell(tmp_path):
+    """The elevated installer gets the script inline (no file path to swap) and it parses."""
     if sys.platform != 'win32':
         return
+    import base64
     import subprocess
-    script = Path(usb_driver.__file__).with_name('install_winusb.ps1')
+    log = tmp_path / "it's.log"
+    args = usb_driver.elevated_installer_args(log)
+    assert '-File' not in args and 'install_winusb.ps1' not in args
+    command = base64.b64decode(args.split('-EncodedCommand ')[1]).decode('utf-16-le')
+    assert command.endswith(f"-LogPath '{str(log).replace(chr(39), chr(39) * 2)}'")
+    (tmp_path / 'cmd.ps1').write_text(command, encoding='utf-8-sig')
     check = ("$e=$null; [System.Management.Automation.Language.Parser]::ParseFile("
-             f"'{script}', [ref]$null, [ref]$e) | Out-Null; $e.Count")
+             f"'{tmp_path / 'cmd.ps1'}', [ref]$null, [ref]$e) | Out-Null; $e.Count")
     out = subprocess.run(['powershell', '-NoProfile', '-Command', check], capture_output=True, text=True)
     assert out.stdout.strip() == '0', out.stdout + out.stderr
+    assert len(args) < 32767  # CreateProcess command-line limit
