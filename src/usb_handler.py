@@ -112,7 +112,8 @@ class USBHandler(QThread):
         # bus is sustaining 30-100 MB/s.
         self._progress_emit_interval = 0.05  # seconds
         self._last_progress_emit = 0.0
-        self._speed_samples = collections.deque(maxlen=60)
+        # (time, unique bytes) per chunk; bounded by the 30 s trim in the send loop
+        self._speed_samples = collections.deque()
 
 
         # File handle caching

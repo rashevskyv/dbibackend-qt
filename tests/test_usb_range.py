@@ -107,5 +107,38 @@ def test_usb_range():
     main()
 
 
+def test_speed_window_is_time_bounded(monkeypatch):
+    """The speed window is bounded by time (~30 s), not by a fixed number of chunks."""
+    from src import usb_handler as uh_mod
+    app = QCoreApplication.instance() or QCoreApplication([])
+    clock = [1000.0]
+
+    def fake_time():
+        clock[0] += 0.1
+        return clock[0]
+
+    monkeypatch.setattr(uh_mod.time, 'time', fake_time)
+    monkeypatch.setattr(uh_mod.dbi_protocol, 'BUFFER_SEGMENT_DATA_SIZE', 4096)
+
+    size = 4096 * 250  # 250 chunks, two clock ticks each -> ~50 s of fake transfer
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.nsp') as tmp:
+        tmp.write(b'X' * size)
+        tmp_path = Path(tmp.name)
+    handler = USBHandler({tmp_path.name: tmp_path})
+    handler.is_running = True
+    req_header = struct.pack('<IQ4x', size, 0) + tmp_path.name.encode('utf-8')
+    handler.in_ep = FakeInEp([req_header, b'\x00' * 16])
+    handler.out_ep = FakeOutEp()
+    try:
+        handler.process_file_range_command(len(req_header))
+    finally:
+        if handler.cached_file_handle:
+            handler.cached_file_handle.close()
+        tmp_path.unlink()
+
+    span = handler._speed_samples[-1][0] - handler._speed_samples[0][0]
+    assert 25.0 < span <= 30.0, f"speed window spans {span:.1f}s"
+
+
 if __name__ == '__main__':
     main()

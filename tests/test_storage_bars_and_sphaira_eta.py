@@ -129,8 +129,8 @@ def test_sphaira_synchronized_eta_in_coordinator():
     sc = win.server_manager.session
 
     # Case 1: Multiple files with active transfer
-    # total 10 GB, transferred 2 GB, speed 20 MB/s -> total remaining 8 GB = 400 sec -> 6m 40s
-    # current file 2 GB, transferred 1 GB -> file remaining 1 GB = 50 sec -> 0m 50s
+    # total 10 GiB, transferred 2 GiB, speed 20 MiB/s -> total remaining 8192 MiB = 409 sec -> 6m 49s
+    # current file 2 GiB, transferred 1 GiB -> file remaining 1024 MiB = 51 sec -> 0m 51s
     total_req = 10 * 1024 * 1024 * 1024
     transferred = 2 * 1024 * 1024 * 1024
     cur_size = 2 * 1024 * 1024 * 1024
@@ -146,10 +146,8 @@ def test_sphaira_synchronized_eta_in_coordinator():
         cur_bytes=cur_bytes,
         cur_size=cur_size
     )
-    eta_text = win.eta_label.text()
-    assert "ETA:" in eta_text
-    assert "/" in eta_text  # Dual ETA format: file / total
-    assert "m" in eta_text
+    # Dual ETA format: file / total
+    assert win.eta_label.text() == "ETA: 0m 51s / 6m 49s"
 
     # Case 2: Terminal Done
     sc._update_overall_progress_ui(

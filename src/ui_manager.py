@@ -259,8 +259,7 @@ class UIManager:
         # Retain switch_storage_label for tests and backwards compatibility
         self.main_window.switch_storage_label = ElidingLabel("")
         self.switch_storage_label = self.main_window.switch_storage_label
-        self.main_window.switch_storage_label.setStyleSheet("color: transparent; font-size: 1px;")
-        self.main_window.switch_storage_label.setMaximumWidth(1)
+        self.main_window.switch_storage_label.hide()
         header_layout.addWidget(self.main_window.switch_storage_label)
 
         header_layout.addStretch(1)
