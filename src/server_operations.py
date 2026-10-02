@@ -190,6 +190,7 @@ class ServerManager:
         uh.package_status_received.connect(self.on_package_status_received)
         uh.storage_info_received.connect(self.on_storage_info_received)
         uh.queue_sync_confirmed.connect(self.on_queue_sync_confirmed)
+        uh.driver_problem.connect(self.main_window.offer_usb_driver_install)
         uh.finished.connect(self.on_usb_server_stopped)
         uh.start()
         self.session.session_active = True

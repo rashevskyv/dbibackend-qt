@@ -2,7 +2,7 @@
 
 **DBI Backend Qt** is a modern, feature-rich graphical user interface (GUI) for the **DBI** installer (Nintendo Switch). Built with Python 3 and PyQt6, this tool provides a superior alternative to traditional CLI backends, offering an advanced file queue, visual feedback, and deep OS integration.
 
-![Version](https://img.shields.io/badge/version-2.8.5-blue)
+![Version](https://img.shields.io/badge/version-2.9.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -82,8 +82,11 @@
 ## 🚀 Getting Started
 
 ### Prerequisites
-1.  **Drivers:** Ensure you have the `libusb-win32` driver installed for your Nintendo Switch (usually done via **Zadig**).
-2.  **Python 3.11+** (if running from source).
+1.  **USB driver:** nothing to do by hand.
+    *   **Windows:** the first time the console is seen without a driver, the app offers to install **WinUSB** (one administrator prompt). You can also run it any time from **Help > Install USB Driver**. A driver you already installed with Zadig (libusbK, libusb-win32 or WinUSB) keeps working and is left alone.
+    *   **Linux:** if your user cannot open the console, the app offers to install a udev rule (`/etc/udev/rules.d/99-nintendo-switch-dbi.rules`) via `pkexec`.
+    *   **macOS:** no driver needed.
+2.  **Python 3.11+** (if running from source). libusb-1.0 comes with the `libusb-package` dependency.
 
 ### Running from Source
 ```bash

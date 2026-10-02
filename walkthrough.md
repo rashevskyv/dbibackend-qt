@@ -1,6 +1,15 @@
 # Walkthrough
 
-Журнал змін за версіями, найновіші зверху. Поточна версія — **2.8.5**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.0**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+
+## 2.9.0 — USB без Zadig
+
+- **libusb-1.0 у комплекті** (`libusb-package`): раніше pyusb знаходив лише `libusb0.dll`, яку Zadig кладе в System32, тож на чистому ПК бекенд не мав жодного USB-бекенда.
+- **`src/usb_driver.py`**: `find_and_reset_switch()` пробує спершу вбудований libusb-1.0 (WinUSB, libusbK), потім системний (libusb0). Консоль без драйвера дає `NotImplementedError` → `no_driver`; відмова в доступі в Linux (errno 13) → `no_access`.
+- **Windows**: `src/install_winusb.ps1` генерує INF для вбудованого `winusb.sys`, каталог (`New-FileCatalog`), підписує його новим самопідписаним сертифікатом, довіреним лише на цьому ПК (приватний ключ видаляється одразу), і ставить пакет через `pnputil /add-driver /install`. Запуск — через UAC (`ShellExecuteEx runas`), окремий потік, помилки — у `%TEMP%\dbi-winusb-install.log`. Механізм той самий, що в Zadig/libwdi, але без WDK.
+- **Коли пропонується**: при старті, якщо реєстр (`Enum\USB\VID_057E&PID_3000`) показує консоль без WinUSB/libusbK/libusb0; при підключенні, якщо libusb каже `no_driver`; вручну — Help > Install USB Driver. Наявний драйвер Zadig не чіпається.
+- **Linux**: правило udev `/etc/udev/rules.d/99-nintendo-switch-dbi.rules` через `pkexec`. macOS — нічого.
+- **Kefir Hub не змінено**: MS OS 2.0 дескриптори вимагають відповіді на vendor-запит до пристрою, а libnx `usb:ds` віддає застосунку лише запити до інтерфейсу.
 
 ## 2.8.5 — виправлення після аудиту 2.8.4
 

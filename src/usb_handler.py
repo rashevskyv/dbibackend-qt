@@ -12,13 +12,13 @@ from typing import Dict, Optional, Set
 from enum import Enum
 import collections
 
-
 import usb.core
 import usb.util
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from . import dbi_protocol
 from .progress_tracker import ProgressTracker
+from .usb_driver import usb_backends, find_and_reset_switch
 
 class ConnectionStatus(Enum):
     DISCONNECTED = 0
@@ -41,6 +41,7 @@ class USBHandler(QThread):
     package_status_received = pyqtSignal(str, int, int) # filename, status, result_code
     storage_info_received = pyqtSignal(object, object, object, object) # nand_free, nand_total, sd_free, sd_total
     queue_sync_confirmed = pyqtSignal(int)
+    driver_problem = pyqtSignal(str)  # 'no_driver' (Windows) or 'no_access' (Linux), once per handler
 
     @staticmethod
     def _expand_files(file_dict: Dict[str, Path], checked_set: Set[str]):
@@ -96,6 +97,8 @@ class USBHandler(QThread):
 
         self.is_running = False
         self.dev = None
+        self._usb_backends = usb_backends()
+        self._driver_problem_reported = False
         self.in_ep = None
         self.out_ep = None
         self.transfer_start_time = None
@@ -251,13 +254,15 @@ class USBHandler(QThread):
         
         while self.is_running and retry_count < 30:
             try:
-                self.dev = usb.core.find(idVendor=0x057E, idProduct=0x3000)
+                self.dev, problem = find_and_reset_switch(self._usb_backends)
                 if self.dev is None:
+                    if problem and not self._driver_problem_reported:
+                        self._driver_problem_reported = True
+                        self.driver_problem.emit(problem)
                     retry_count += 1
                     time.sleep(1)
                     continue
 
-                self.dev.reset()
                 time.sleep(1)
                 self.dev.set_configuration()
                 cfg = self.dev.get_active_configuration()

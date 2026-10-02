@@ -16,6 +16,7 @@ from .widgets import (
     ModeSwitch, CheckBoxHeaderView, ElidingLabel
 )
 from .storage_widget import SwitchStorageWidget
+from .usb_driver import can_install_driver
 
 
 class UIManager:
@@ -101,6 +102,10 @@ class UIManager:
 
         # Help menu
         help_menu = menubar.addMenu('&Help')
+        if can_install_driver():
+            driver_action = QAction('Install USB Driver...', self.main_window)
+            driver_action.triggered.connect(lambda: self.main_window.offer_usb_driver_install('manual'))
+            help_menu.addAction(driver_action)
         about_action = QAction('&About', self.main_window)
         about_action.triggered.connect(self.main_window.show_about)
         help_menu.addAction(about_action)

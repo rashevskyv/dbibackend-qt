@@ -34,6 +34,8 @@ a = Analysis(
         'usb.backend.libusb1',
         'usb.backend.libusb0',
         'usb.backend.openusb',
+        # Bundled libusb-1.0.dll (its PyInstaller hook ships the DLL)
+        'libusb_package',
         # Application modules
         'src',
         'src.config_manager',

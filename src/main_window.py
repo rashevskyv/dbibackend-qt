@@ -24,6 +24,7 @@ from .ui_manager import UIManager
 from .file_operations import FileManager
 from .server_operations import ServerManager
 from .utility_functions import format_time
+from .usb_driver import DriverInstallThread, UDEV_RULE_PATH, windows_driver_missing
 
 
 class MainWindow(QMainWindow):
@@ -87,6 +88,11 @@ class MainWindow(QMainWindow):
         
         self.server_manager.reconnect_timer.timeout.connect(self.server_manager.check_connection)
         self.server_manager.reconnect_timer.start(2000)
+
+        self._driver_thread = None
+        self._driver_offered = False
+        if windows_driver_missing():
+            QTimer.singleShot(500, lambda: self.offer_usb_driver_install('no_driver'))
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -292,6 +298,37 @@ class MainWindow(QMainWindow):
 
     def show_about(self):
         QMessageBox.about(self, 'About', f'<h2>DBI Backend Qt</h2><p>Version {__version__}</p>')
+
+    def offer_usb_driver_install(self, problem: str = 'manual'):
+        """Ask once per run (always when chosen from the menu) and install the
+        driver or udev rule the console needs."""
+        if self._driver_thread is not None and self._driver_thread.isRunning():
+            return
+        if problem != 'manual':
+            if self._driver_offered:
+                return
+            self._driver_offered = True
+        if sys.platform == 'win32':
+            text = ('Install the WinUSB driver for the Nintendo Switch?\n\n'
+                    'Without it Windows does not let DBI Backend talk to the console over USB. '
+                    'Windows will ask for administrator permission.')
+        else:
+            text = ('Allow your user to access the Nintendo Switch over USB?\n\n'
+                    f'This installs a udev rule ({UDEV_RULE_PATH}) and asks for your password.')
+        if QMessageBox.question(self, 'USB Driver', text) != QMessageBox.StandardButton.Yes:
+            self.log('warning', 'USB driver not installed. Use Help > Install USB Driver to install it later.')
+            return
+        self.log('info', 'Installing USB driver...')
+        self._driver_thread = DriverInstallThread(self)
+        self._driver_thread.done.connect(self._on_usb_driver_installed)
+        self._driver_thread.start()
+
+    def _on_usb_driver_installed(self, ok: bool, message: str):
+        self.log('success' if ok else 'error', message.splitlines()[0])
+        if ok:
+            QMessageBox.information(self, 'USB Driver', message)
+        else:
+            QMessageBox.warning(self, 'USB Driver', message)
 
     def handle_external_files(self, message: str):
         lines = [line.strip() for line in message.strip().split('\n') if line.strip()]

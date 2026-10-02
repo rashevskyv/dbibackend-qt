@@ -77,7 +77,7 @@ The `dist\dbibackend-qt.exe` file is fully portable and can be:
 - Run without Python installed
 - Distributed to users
 
-**Note**: Users will still need libusb drivers installed for Nintendo Switch (VID: 057E, PID: 3000). Use Zadig to install WinUSB driver.
+**Note**: The exe bundles libusb-1.0 and installs the WinUSB driver for the Switch (VID 057E, PID 3000) itself on first use (Help > Install USB Driver). Zadig is not needed.
 
 ## Troubleshooting / Вирішення проблем
 
@@ -96,5 +96,5 @@ The `dist\dbibackend-qt.exe` file is fully portable and can be:
 ### Executable doesn't start / EXE не запускається
 - Run with console enabled (`console=True` in spec) to see errors
 - Запустіть з консоллю (`console=True` в spec) щоб побачити помилки
-- Check libusb drivers on target machine (Zadig: VID=057E, PID=3000)
-- Перевірте драйвери libusb на цільовому ПК (Zadig: VID=057E, PID=3000)
+- If the console does not connect, run Help > Install USB Driver (VID=057E, PID=3000)
+- Якщо консоль не підключається, запустіть Help > Install USB Driver (VID=057E, PID=3000)

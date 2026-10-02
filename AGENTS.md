@@ -38,7 +38,7 @@ python main.py "path/to/file1.nsp" "path/to/file2.nsp"
 pip install -r requirements.txt
 ```
 
-**Important for Windows:** You need to install libusb drivers for the Nintendo Switch device (VID: 057E, PID: 3000). Use Zadig to install WinUSB driver or download libusb-win32.
+**USB driver:** `src/usb_driver.py` handles it. libusb-1.0 is bundled via `libusb-package`; on Windows the app installs WinUSB for VID 057E / PID 3000 itself (`src/install_winusb.ps1`, elevated via UAC), on Linux it offers a udev rule via `pkexec`. Existing Zadig drivers (libusbK, libusb0, WinUSB) keep working.
 
 ### Development
 
@@ -205,7 +205,7 @@ avg_speed = sum(self.speed_samples) / len(self.speed_samples)
 
 ## Common Pitfalls
 
-1. **USB Driver Issues (Windows):** Most common failure. Ensure WinUSB driver is installed for Switch device. Check Device Manager.
+1. **USB Driver Issues (Windows):** A driverless Switch makes libusb raise `NotImplementedError` on open; `find_and_reset_switch()` reports it as `no_driver` and the UI offers Help > Install USB Driver. Check Device Manager if it still fails.
 
 2. **Duplicate Filenames:** If you add files with same basename from different directories, only the last one is kept. Consider warning users or using full path as key.
 
