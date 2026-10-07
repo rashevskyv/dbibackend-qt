@@ -345,6 +345,12 @@ class UIManager:
         stats_layout.addWidget(self.main_window.speed_label)
         stats_layout.addStretch()
 
+        self.main_window.auto_connect_checkbox = QCheckBox('Start USB server when Switch connects')
+        self.main_window.auto_connect_checkbox.setToolTip('Start the USB server by itself as soon as a Switch in USB install mode is plugged in (Kefir Hub opens that mode automatically)')
+        self.main_window.auto_connect_checkbox.setChecked(bool(self.main_window.config.get('auto_connect', True)))
+        self.main_window.auto_connect_checkbox.toggled.connect(lambda c: self.main_window.server_manager.on_auto_connect_toggled(c))
+        stats_layout.addWidget(self.main_window.auto_connect_checkbox)
+
         self.main_window.hibernate_checkbox = QCheckBox('Hibernate PC when idle (5 min)')
         self.main_window.hibernate_checkbox.setToolTip('Automatically hibernate PC after 5 minutes of inactivity between Switch and PC')
         self.main_window.hibernate_checkbox.setChecked(self.main_window.config.get('hibernate_when_done', False))

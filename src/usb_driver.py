@@ -37,6 +37,18 @@ def usb_backends() -> list:
     return backends
 
 
+def switch_present(backends: List) -> bool:
+    """True when a Switch in USB install mode (VID 057E / PID 3000) is plugged in.
+    Only enumerates; never opens or resets the device, so it is safe to poll."""
+    for backend in backends:
+        try:
+            if usb.core.find(idVendor=SWITCH_VID, idProduct=SWITCH_PID, backend=backend) is not None:
+                return True
+        except (usb.core.NoBackendError, usb.core.USBError):
+            continue
+    return False
+
+
 def find_and_reset_switch(backends: List) -> Tuple[Optional[object], Optional[str]]:
     """Find the Switch and open it with the first backend that can.
 

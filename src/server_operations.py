@@ -18,11 +18,25 @@ from PyQt6.QtWidgets import (
 )
 
 from . import __version__
+from .usb_driver import usb_backends, switch_present
 from .usb_handler import USBHandler, ConnectionStatus
 from .http_handler import HTTPHandler
 from .ftp_handler import FTPHandler
 from .network_transfer_handler import NetworkTransferHandler
 from .session_coordinator import SessionCoordinator
+
+
+def auto_start_decision(enabled: bool, mode: str, server_active: bool, present: bool, armed: bool):
+    """Whether to start the USB server for a Switch that just appeared on the cable.
+
+    Returns (start, armed). The trigger is armed while no Switch is plugged in and
+    fires once when one appears; it stays disarmed until the console goes away, so a
+    server the user stopped by hand is not restarted while the same console sits there."""
+    if not present:
+        return False, True
+    if not enabled or mode != 'usb' or server_active or not armed:
+        return False, armed
+    return True, False
 
 
 class ServerManager:
@@ -35,6 +49,11 @@ class ServerManager:
         self.http_handler = None
         self.ftp_handler = None
         self.reconnect_timer = QTimer()
+        # Kefir Hub opens its USB install link for a few seconds when a PC is
+        # plugged in and waits for a backend to answer; check_connection() starts
+        # the server as soon as the console shows up, no button press needed.
+        self._probe_backends = usb_backends()
+        self._auto_start_armed = True
 
     # Session State Properties (forwarded to session coordinator)
     @property
@@ -378,9 +397,27 @@ class ServerManager:
             self.main_window.clear_list_btn.setEnabled(True)
 
     def check_connection(self):
-        if self.main_window.mode_switch.mode() == 'usb':
+        mode = self.main_window.mode_switch.mode()
+        if mode == 'usb':
             if self.usb_handler is None and self.main_window.file_tree.topLevelItemCount() > 0:
                 self.main_window.start_server_btn.setEnabled(True)
+
+        start, self._auto_start_armed = auto_start_decision(
+            bool(self.main_window.config.get('auto_connect', True)),
+            mode,
+            self.get_active_handler() is not None,
+            switch_present(self._probe_backends),
+            self._auto_start_armed,
+        )
+        if start:
+            self.main_window.log('info', 'Switch detected on USB — starting USB server')
+            self.start_usb_server()
+
+    def on_auto_connect_toggled(self, checked: bool):
+        self.main_window.config.set('auto_connect', checked)
+        self.main_window.config.save()
+        self._auto_start_armed = True
+        self.main_window.log('info', f"Auto-start on Switch connect {'enabled' if checked else 'disabled'}")
 
     def on_connection_changed(self, status):
         if status == ConnectionStatus.CONNECTED:
