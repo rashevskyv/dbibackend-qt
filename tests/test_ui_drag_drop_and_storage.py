@@ -289,3 +289,84 @@ def test_alt_up_down_shortcuts_retained_and_toolbar_cleaned():
     # Keyboard shortcuts Alt+Up / Alt+Down still exist on MainWindow shortcuts
     assert win.shortcut_move_up.key().toString() == "Alt+Up"
     assert win.shortcut_move_down.key().toString() == "Alt+Down"
+
+
+def test_move_selected_next_in_queue_and_context_menu(tmp_path, monkeypatch):
+    """Verify 'Set as Next in Queue' moves selected items right after active/completed items."""
+    app = QApplication.instance() or QApplication(sys.argv)
+    win = MainWindow()
+    fm = win.file_manager
+
+    # Create dummy nsp files
+    f1 = tmp_path / "game1.nsp"
+    f2 = tmp_path / "game2.nsp"
+    f3 = tmp_path / "game3.nsp"
+    f4 = tmp_path / "game4.nsp"
+    f5 = tmp_path / "game5.nsp"
+    for f in (f1, f2, f3, f4, f5):
+        f.write_bytes(b"\x00" * 1024)
+
+    fm.ingest_paths([f1, f2, f3, f4, f5])
+    r1, r2, r3, r4, r5 = f1.resolve(), f2.resolve(), f3.resolve(), f4.resolve(), f5.resolve()
+    assert fm.queue.order == [r1, r2, r3, r4, r5]
+
+    # Freeze r1 (done) and r2 (in process) -> frozen_len = 2
+    from src.queue_manager import STATUS_DONE, STATUS_PROCESS
+    fm.queue.files[r1].status_code = STATUS_DONE
+    fm.queue.files[r2].status_code = STATUS_PROCESS
+
+    # Select r5 and trigger move_selected_next
+    win.file_tree.clearSelection()
+    item5 = fm.path_to_item[r5]
+    item5.setSelected(True)
+
+    moved = fm.move_selected_next()
+    assert moved is True
+    # r5 should now be immediately after active items (at index 2)
+    assert fm.queue.order == [r1, r2, r5, r3, r4]
+
+    # Try moving already done r1 -> cannot be moved
+    win.file_tree.clearSelection()
+    item1 = fm.path_to_item[r1]
+    item1.setSelected(True)
+    moved_done = fm.move_selected_next()
+    assert moved_done is False
+    assert fm.queue.order == [r1, r2, r5, r3, r4]
+
+    # Folder child test
+    folder = tmp_path / "subfolder"
+    folder.mkdir()
+    c1 = folder / "child1.nsp"
+    c2 = folder / "child2.nsp"
+    c3 = folder / "child3.nsp"
+    for c in (c1, c2, c3):
+        c.write_bytes(b"\x00" * 512)
+
+    fm.ingest_paths([folder], default_folder_mode="folder")
+    rc1, rc2, rc3 = c1.resolve(), c2.resolve(), c3.resolve()
+    f_res = folder.resolve()
+    assert fm.queue.folders[f_res].files == [rc1, rc2, rc3]
+
+    # Freeze rc1
+    fm.queue.files[rc1].status_code = STATUS_DONE
+
+    # Select rc3 inside folder
+    win.file_tree.clearSelection()
+    item_c3 = fm.path_to_item[rc3]
+    item_c3.setSelected(True)
+    moved_child = fm.move_selected_next()
+    assert moved_child is True
+    assert fm.queue.folders[f_res].files == [rc1, rc3, rc2]
+
+    # Context menu test: verify 'Set as Next in Queue' exists
+    from PyQt6.QtWidgets import QMenu
+    menu_actions = []
+    orig_exec = QMenu.exec
+    monkeypatch.setattr(QMenu, "exec", lambda self, *args: menu_actions.extend([a.text() for a in self.actions()]))
+    from PyQt6.QtCore import QPoint
+    win.show_context_menu(QPoint(10, 10))
+    assert "Set as Next in Queue" in menu_actions
+    assert "Move Up (Alt+Up)" in menu_actions
+    assert "Move Down (Alt+Down)" in menu_actions
+    win.close()
+

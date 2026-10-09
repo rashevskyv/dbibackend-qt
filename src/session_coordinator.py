@@ -11,6 +11,8 @@ from PyQt6.QtWidgets import QMessageBox
 
 from . import dbi_protocol
 from .utility_functions import format_size, format_time, format_sphaira_eta
+from .session_report import build_report
+from .widgets import FILE_PATH_ROLE
 
 
 class SessionCoordinator:
@@ -37,6 +39,15 @@ class SessionCoordinator:
         self.manual_stop: bool = False
         self.last_activity_time: Optional[float] = None
         self.has_communicated: bool = False
+
+        # the console's last queue plan (name -> dict) and the row under the mouse
+        self.queue_plan: Dict[str, dict] = {}
+        self.hover_file: Optional[str] = None
+        # name -> (package status, result code) as the console reported it; feeds the report
+        self.results: Dict[str, tuple] = {}
+        self._report_box = None
+        # names already unticked as installed; never unticked again (the user may tick them back)
+        self.auto_unticked_installed: Set[str] = set()
 
         # Console storage state (bytes)
         self.nand_free: int = 0
@@ -141,6 +152,7 @@ class SessionCoordinator:
         self.reset_ui_for_start()
         self.transfer_stats['total_files'] = total_files
         self.transfer_stats['start_time'] = datetime.now()
+        self.results.clear()
         self.manual_stop = False
         self.has_communicated = False
         self.last_activity_time = None
@@ -393,6 +405,7 @@ class SessionCoordinator:
         )
 
     def on_package_status_received(self, filename: str, status: int, result_code: int):
+        self.results[filename] = (status, result_code)
         if status == dbi_protocol.STATUS_INSTALLED:
             self.main_window.log('success', f'Console confirmed installed: {filename}')
             self.on_transfer_complete(filename)
@@ -410,6 +423,24 @@ class SessionCoordinator:
                 self.main_window.storage_bars.clear_install_progress()
             self.main_window.progress_delegate.set_progress(filename, 0)
             self.main_window.file_manager.update_file_status(filename, 'failed')
+            # unticked, so a retry is an explicit tick again (context menu "Retry"); the
+            # console requeues a passed package only after it saw it unticked.
+            self._uncheck_file(filename)
+
+    def retry(self, names: list):
+        """Failed or skipped packages back into the queue, right after what is installing."""
+        fm = self.main_window.file_manager
+        for name in names:
+            item = fm.item_map.get(name)
+            if item is None:
+                continue
+            self._unmark_skipped(name)
+            self.main_window.progress_delegate.set_progress(name, 0)
+            fm.update_file_status(name, '')
+            fm.set_item_checked(item, True)
+            self.main_window.log('info', f'Retry: {name}')
+        fm.move_selected_next()
+        self.main_window.on_item_checked()
 
     def on_storage_info_received(self, nand_free: int, nand_total: int, sd_free: int, sd_total: int):
         self.nand_free = nand_free
@@ -431,6 +462,86 @@ class SessionCoordinator:
             f"Switch Storage Info: SD {format_size(sd_free)} free of {format_size(sd_total)}, "
             f"NAND {format_size(nand_free)} free of {format_size(nand_total)}"
         )
+
+    # Queue plan from the console (CMD_ID_QUEUE_PLAN): the console's selection and
+    # targets win when they are based on our current revision, so a tick removed
+    # on the console stays removed here; Auto rows show where the console will
+    # really put them; the storage bars get the same projection the Hub draws.
+    def on_queue_plan_received(self, revision: int, items: list):
+        self.queue_plan = {it['name']: it for it in items}
+        fm = self.main_window.file_manager
+        uh = self.server_manager.usb_handler
+        current_rev = uh.queue_revision if uh else -1
+        if revision == current_rev:
+            for it in items:
+                item = fm.item_map.get(it['name'])
+                if item is None:
+                    continue
+                if fm.is_item_checked(item) != it['selected']:
+                    fm.set_item_checked(item, it['selected'])
+                combo = self.main_window.file_tree.itemWidget(item, 3)
+                if combo is not None and combo.currentIndex() != it['target']:
+                    combo.setCurrentIndex(it['target'])
+        for it in items:
+            item = fm.item_map.get(it['name'])
+            combo = self.main_window.file_tree.itemWidget(item, 3) if item is not None else None
+            if combo is not None:
+                dest = 'SD' if it['planned_sd'] else 'NAND'
+                combo.setItemText(0, f'Auto → {dest}' if it['analysis_ok'] and not it['already_installed'] else 'Auto')
+        self._handle_installed(items)
+        self._reset_unfit_targets(items)
+        self.refresh_storage_projection()
+
+    def _reset_unfit_targets(self, items: list):
+        """A package pinned to a drive it cannot fit on would only fail there: back to Auto."""
+        fm = self.main_window.file_manager
+        for it in items:
+            if not it['selected'] or it['target'] not in (1, 2) or it['name'] == self.current_processing_file:
+                continue
+            item = fm.item_map.get(it['name'])
+            if item is None or fm.get_file_status_code(it['name']) in (1, 2):  # installing / done
+                continue
+            why = fm.target_problem(it['name'], Path(item.data(5, FILE_PATH_ROLE)), it['target'])
+            combo = self.main_window.file_tree.itemWidget(item, 3)
+            if why and combo is not None:
+                self.main_window.log('warning', f'Target set back to Auto: {why}')
+                combo.setCurrentIndex(0)  # on_target_changed stores and syncs it
+
+    def _handle_installed(self, items: list):
+        """Rows the console reports as installed get an "Installed" status. Those the
+        skip mode will skip are unticked once per name; a tick the user puts back
+        stays, because the name is remembered."""
+        fm = self.main_window.file_manager
+        unticked = []
+        for it in items:
+            item = fm.item_map.get(it['name'])
+            if item is None:
+                continue
+            if it['already_installed'] and fm.get_file_status_code(it['name']) == 0:  # STATUS_QUEUED
+                item.setText(4, '📦 Installed')
+            if it.get('no_space') and it['selected'] and it['name'] not in self.auto_unticked_installed:
+                self.auto_unticked_installed.add(it['name'])
+                fm.set_item_checked(item, False)
+                unticked.append(it['name'])
+        if unticked:
+            self.main_window.log('info', f'Unticked {len(unticked)} already installed: {", ".join(unticked)}')
+            self.main_window.on_item_checked()
+
+    def set_hover_file(self, name: Optional[str]):
+        """The row under the mouse takes the head of its drive's planned segment, like the Hub's cursor row."""
+        self.hover_file = name
+        self.refresh_storage_projection()
+
+    def refresh_storage_projection(self):
+        bars = getattr(self.main_window, 'storage_bars', None)
+        if bars is None:
+            return
+        plan = getattr(self, 'queue_plan', {})
+        if not plan or self.current_processing_file:
+            bars.clear_projection()
+            return
+        nand_req, sd_req, nand_focus, sd_focus = dbi_protocol.plan_projection(plan.values(), getattr(self, 'hover_file', None))
+        bars.set_projection(nand_req, sd_req, nand_focus, sd_focus)
 
     def on_all_transfers_complete(self):
         if getattr(self.main_window, 'storage_bars', None):
@@ -506,15 +617,11 @@ class SessionCoordinator:
 
         self.main_window.speed_label.setText('Speed: 0 MB/s')
 
-        if self.main_window.hibernate_checkbox and self.main_window.hibernate_checkbox.isChecked():
-            self.main_window.log(
-                'info',
-                f"Session complete (Installed: {success}, Skipped: {skipped}, Time: {time_taken}). "
-                f"Inactivity monitor active."
-            )
-        else:
-            msg = f"Session Complete!\n\nInstalled: {success}\nSkipped: {skipped}\nTime: {time_taken}"
-            QMessageBox.information(self.main_window, "Complete", msg)
+        hibernating = bool(self.main_window.hibernate_checkbox and self.main_window.hibernate_checkbox.isChecked())
+        uh = self.server_manager.usb_handler
+        self.write_report(uh or self.active_network_handler(), show=not hibernating)
+        if hibernating:
+            self.main_window.log('info', f"Session complete (Time: {time_taken}). Inactivity monitor active.")
 
         for attr in ('usb_handler', 'http_handler', 'ftp_handler'):
             h = getattr(self.server_manager, attr)
@@ -524,6 +631,45 @@ class SessionCoordinator:
                 setattr(self.server_manager, attr, None)
 
         self.server_manager._set_server_ui_state(False)
+
+    def write_report(self, handler, show: bool):
+        """Write the session report to reports/ and the log; show it unless the PC is
+        about to sleep. Called when the console ends the session and when the server
+        stops without that (link lost, manual stop, hibernation)."""
+        fm = self.main_window.file_manager
+        results = dict(self.results)
+        # hosts without package status (original DBI, HTTP, FTP): what the transfer saw
+        for n in self.completed_files_set:
+            results.setdefault(n, (dbi_protocol.STATUS_INSTALLED, 0))
+        for n in self.skipped_files_set:
+            results.setdefault(n, (dbi_protocol.STATUS_USER_SKIPPED, 0))
+        if not results:  # nothing happened: a server that started and stopped again
+            return
+        pending = [it.text(1) for it in fm.iter_checked_items()]
+        summary, text, clean = build_report(
+            results, pending, self.queue_plan, getattr(handler, 'read_errors', {}),
+            self.transfer_stats['start_time'], datetime.now(),
+        )
+        self.main_window.log('success' if clean else 'warning', f'Report: {summary}')
+        path = None
+        if self.main_window.log_path:  # real app only; tests write no files
+            path = fm.preset_manager.presets_dir.parent / 'reports' / f'report_{datetime.now():%Y%m%d_%H%M%S}.txt'
+            try:
+                path.parent.mkdir(exist_ok=True)
+                path.write_text(text, encoding='utf-8')
+                self.main_window.log('info', f'Report saved: {path}')
+            except OSError as e:
+                self.main_window.log('error', f'Report not saved: {e}')
+        print(text)
+        if show:
+            box = QMessageBox(self.main_window)
+            box.setWindowTitle('Session report')
+            box.setIcon(QMessageBox.Icon.Information if clean else QMessageBox.Icon.Warning)
+            box.setText(summary.replace(', ', '\n') + (f'\n\nSaved to {path}' if path else ''))
+            box.setDetailedText(text)
+            box.setModal(False)
+            box.show()
+            self._report_box = box  # keep it alive while it is open
 
     def on_queue_sync_confirmed(self, revision: int):
         if hasattr(self.main_window, 'queue_sync_status') and self.main_window.queue_sync_status:

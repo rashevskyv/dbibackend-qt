@@ -8,10 +8,10 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout,
     QHeaderView
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect, QMimeData, QPoint
+from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect, QMimeData, QPoint, QTimer
 from PyQt6.QtGui import (
     QColor, QPainter, QBrush, QWheelEvent, QLinearGradient,
-    QDrag, QPixmap
+    QDrag, QPixmap, QPalette
 )
 
 # Custom data roles used to cache state on items so the sort comparator and
@@ -209,6 +209,7 @@ class ElidingLabel(QLabel):
 class ZoomableTreeWidget(QTreeWidget):
     """QTreeWidget with Ctrl+Wheel zoom, context awareness, and queue drag-and-drop reordering."""
     space_pressed = pyqtSignal()
+    hover_left = pyqtSignal()  # the mouse left the rows (pairs with itemEntered)
 
     def __init__(self, main_window):
         super().__init__(main_window)
@@ -220,6 +221,64 @@ class ZoomableTreeWidget(QTreeWidget):
         self.setSortingEnabled(False)
         self.header().setSortIndicatorShown(False)
         self.setAcceptDrops(True)
+
+        # The package being installed stays on screen: when its row is scrolled
+        # out of view, this strip shows it pinned over the first row. A child of
+        # the tree, not of the viewport, so scrolling does not move it.
+        self.active_banner = QLabel(self)
+        self.active_banner.hide()
+        self.active_banner.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.active_banner.setToolTip('Installing now. Click to scroll to it.')
+        self.active_banner.mousePressEvent = lambda e: self._scroll_to_active()
+        self._banner_timer = QTimer(self)
+        self._banner_timer.timeout.connect(self.refresh_active_banner)
+        self._banner_timer.start(300)  # ponytail: polled; cheap, no signal plumbing
+
+    def _active_item(self):
+        win = self.window()
+        session = getattr(getattr(win, 'server_manager', None), 'session', None)
+        fm = getattr(win, 'file_manager', None)
+        name = getattr(session, 'current_processing_file', None)
+        if not (fm and name):
+            return None
+        item = fm.item_map.get(name)
+        # only while it is installing; a finished row is not pinned
+        return item if item is not None and (item.data(4, Qt.ItemDataRole.UserRole) or 0) == 1 else None
+
+    def _scroll_to_active(self):
+        item = self._active_item()
+        if item is not None:
+            self.scrollToItem(item, QTreeWidget.ScrollHint.PositionAtCenter)
+
+    def refresh_active_banner(self):
+        item = self._active_item()
+        rect = self.visualItemRect(item) if item is not None else QRect()
+        vp = self.viewport().rect()
+        if item is None or (rect.isValid() and vp.contains(rect)):
+            self.active_banner.hide()
+            return
+        name = item.text(1)
+        delegate = getattr(self.window(), 'progress_delegate', None)
+        pct = delegate.progress_data.get(name, 0) if delegate else 0
+        combo = self.itemWidget(item, 3)
+        target = combo.currentText() if combo is not None and hasattr(combo, 'currentText') else ''
+        self.active_banner.setText(f'🔄  {name}   →  {target}   {pct}%')
+        p = max(0.001, min(0.998, pct / 100))
+        base = self.palette().color(QPalette.ColorRole.Base).name()
+        text = self.palette().color(QPalette.ColorRole.Text).name()
+        self.active_banner.setStyleSheet(
+            f'QLabel {{ padding: 0 8px; color: {text}; font-weight: bold; border-bottom: 2px solid #2196F3;'
+            f' background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1f5f8f, stop:{p:.3f} #1f5f8f,'
+            f' stop:{p + 0.001:.3f} {base}, stop:1 {base}); }}')
+        g = self.viewport().geometry()
+        h = rect.height() if rect.height() > 0 else self.fontMetrics().height() + 10
+        self.active_banner.setGeometry(g.x(), g.y(), g.width(), h)
+        self.active_banner.show()
+        self.active_banner.raise_()
+
+    def leaveEvent(self, event):
+        self.hover_left.emit()
+        super().leaveEvent(event)
 
     def wheelEvent(self, event: QWheelEvent):
         if event.modifiers() == Qt.KeyboardModifier.ControlModifier:

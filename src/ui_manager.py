@@ -249,6 +249,13 @@ class UIManager:
         self.main_window.progress_delegate = ProgressDelegate(self.main_window.file_tree, self.main_window.file_tree)
         self.main_window.file_tree.setItemDelegate(self.main_window.progress_delegate)
 
+        # the row under the mouse is shown inside the storage bars, like the Hub's cursor row.
+        self.main_window.file_tree.setMouseTracking(True)
+        self.main_window.file_tree.itemEntered.connect(
+            lambda item, _col: self.main_window.server_manager.session.set_hover_file(item.text(1) if item else None))
+        self.main_window.file_tree.hover_left.connect(
+            lambda: self.main_window.server_manager.session.set_hover_file(None))
+
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(4, 2, 4, 2)
@@ -351,9 +358,21 @@ class UIManager:
         self.main_window.auto_connect_checkbox.toggled.connect(lambda c: self.main_window.server_manager.on_auto_connect_toggled(c))
         stats_layout.addWidget(self.main_window.auto_connect_checkbox)
 
+        stats_layout.addWidget(QLabel('Already installed:'))
+        self.main_window.skip_mode_combo = QComboBox()
+        # index == dbi_protocol.SKIP_MODE_*
+        self.main_window.skip_mode_combo.addItems(['Console setting', 'Reinstall', 'Skip', 'Prompt'])
+        self.main_window.skip_mode_combo.setToolTip(
+            'What the console does with games that are already installed.\n'
+            'Skip: they take no space in the plan and are unticked once (tick again to keep them).\n'
+            'Console setting: Kefir Hub uses its own "Skip if already installed".')
+        self.main_window.skip_mode_combo.setCurrentIndex(int(self.main_window.config.get('skip_installed_mode', 2)))
+        self.main_window.skip_mode_combo.currentIndexChanged.connect(self.main_window.on_skip_mode_changed)
+        stats_layout.addWidget(self.main_window.skip_mode_combo)
+
         self.main_window.hibernate_checkbox = QCheckBox('Hibernate PC when idle (5 min)')
-        self.main_window.hibernate_checkbox.setToolTip('Automatically hibernate PC after 5 minutes of inactivity between Switch and PC')
-        self.main_window.hibernate_checkbox.setChecked(self.main_window.config.get('hibernate_when_done', False))
+        self.main_window.hibernate_checkbox.setToolTip('After 5 minutes without the console: hibernates by itself (3 min warning) only when nobody uses the PC; otherwise asks. Off at every start.')
+        self.main_window.hibernate_checkbox.setChecked(False)  # off at every start, on purpose
         self.main_window.hibernate_checkbox.toggled.connect(self.main_window.on_hibernate_toggled)
         stats_layout.addWidget(self.main_window.hibernate_checkbox)
 

@@ -66,31 +66,59 @@ class PresetManager:
         )
         if path:
             self.main_window.config.set('last_preset_directory', str(Path(path).parent))
-            from .widgets import FILE_PATH_ROLE
-            data = []
-            for item in fm.iter_file_items():
-                name = item.text(1)
-                p_str = item.data(5, FILE_PATH_ROLE)
-                if p_str:
-                    data.append({
-                        "name": name,
-                        "path": p_str,
-                        "checked": fm.is_item_checked(item),
-                        "folder": str(fm.queue.files[Path(p_str)].folder_path) if fm.queue.files[Path(p_str)].folder_path else None,
-                        "target": item.data(3, Qt.ItemDataRole.UserRole) or 0,
-                    })
-            blob = {
-                "name": Path(path).stem,
-                "created_at": datetime.now().isoformat(),
-                "files": data
-            }
             try:
                 with open(path, 'w', encoding='utf-8') as f:
-                    json.dump(blob, f, indent=2)
+                    json.dump(self._blob(Path(path).stem), f, indent=2)
                 self.main_window.update_presets_menu()
                 self.main_window.log('success', f'Saved preset: {Path(path).name}')
             except Exception as e:
                 self.main_window.log('error', f'Error: {e}')
+
+    def _files(self) -> list:
+        fm = self.file_manager
+        from .widgets import FILE_PATH_ROLE
+        data = []
+        for item in fm.iter_file_items():
+            p_str = item.data(5, FILE_PATH_ROLE)
+            if p_str:
+                rec = fm.queue.files[Path(p_str)]
+                data.append({
+                    "name": item.text(1),
+                    "path": p_str,
+                    "checked": fm.is_item_checked(item),
+                    "folder": str(rec.folder_path) if rec.folder_path else None,
+                    "target": item.data(3, Qt.ItemDataRole.UserRole) or 0,
+                })
+        return data
+
+    def _blob(self, name: str) -> dict:
+        return {"name": name, "created_at": datetime.now().isoformat(), "files": self._files()}
+
+    # Resume after a crash, power loss, reboot or a console that fell asleep:
+    # the live queue is mirrored to resume.dbi. Installed rows are unchecked by
+    # the session, so the checked rows in it are exactly what is still to do.
+    @property
+    def resume_path(self) -> Path:
+        return self.presets_dir.parent / 'resume.dbi'
+
+    def autosave(self):
+        files = self._files()
+        if files == getattr(self, '_last_autosave', None):
+            return
+        tmp = self.resume_path.with_suffix('.tmp')
+        try:
+            tmp.write_text(json.dumps({"name": "resume", "created_at": datetime.now().isoformat(), "files": files}, indent=2), encoding='utf-8')
+            tmp.replace(self.resume_path)  # atomic: a power cut never leaves half a file
+            self._last_autosave = files
+        except OSError as e:
+            print(f'[resume] autosave failed: {e}')
+
+    def pending_resume_count(self) -> int:
+        try:
+            files = json.loads(self.resume_path.read_text(encoding='utf-8'))['files']
+            return sum(1 for e in files if e.get('checked', True) and Path(e['path']).exists())
+        except (OSError, ValueError, KeyError, TypeError):
+            return 0
 
     def load_preset(self, path: Optional[Path] = None):
         if not path:

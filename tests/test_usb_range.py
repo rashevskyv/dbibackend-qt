@@ -140,5 +140,24 @@ def test_speed_window_is_time_bounded(monkeypatch):
     assert 25.0 < span <= 30.0, f"speed window spans {span:.1f}s"
 
 
+def test_missing_file_answers_zero_size_and_keeps_link():
+    """A queued file deleted from disk: reply size 0, no ack read, no USBError (the console skips it)."""
+    app = QCoreApplication.instance() or QCoreApplication([])
+    gone = Path(tempfile.gettempdir()) / 'dbi_missing_test_file.nsp'
+    gone.unlink(missing_ok=True)
+    handler = USBHandler({gone.name: gone})
+    handler.is_running = True
+    req_header = struct.pack('<IQI', 704, 0, len(gone.name)) + gone.name.encode('utf-8')
+    handler.in_ep = FakeInEp([req_header])
+    written = []
+    handler.out_ep = FakeOutEp(write_fn=lambda d: written.append(bytes(d)) or len(d))
+
+    handler.process_file_range_command(len(req_header))  # must not raise
+
+    assert handler.in_ep.responses == []  # header consumed, no ack waited for
+    assert len(written) == 2  # ack + response
+    assert struct.unpack('<4sIII', written[1]) == (b'DBI0', 1, 2, 0)
+
+
 if __name__ == '__main__':
     main()

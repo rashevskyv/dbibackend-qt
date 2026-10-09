@@ -235,12 +235,40 @@ class QueueManager:
             )
         return False
 
-    def _frozen_prefix_len_top_level(self) -> int:
-        frozen_len = 0
-        for k, p in enumerate(self.order):
-            if self._is_active_or_done(p):
-                frozen_len = max(frozen_len, k + 1)
-        return frozen_len
+    def _file_active_or_done(self, p: Path) -> bool:
+        rec = self.files.get(p)
+        return bool(rec and rec.status_code in (STATUS_PROCESS, STATUS_DONE))
+
+    @staticmethod
+    def _frozen_len(seq, is_frozen) -> int:
+        """Rows up to the last installing or installed one; nothing is moved into them."""
+        return max((k + 1 for k, p in enumerate(seq) if is_frozen(p)), default=0)
+
+    @classmethod
+    def _can_move(cls, seq, from_idx: int, to_idx: int, is_frozen) -> bool:
+        """A row that is not installing or installed may leave the frozen prefix (a failed
+        or skipped game sitting between finished ones) but only to land after it."""
+        if is_frozen(seq[from_idx]):
+            return False
+        frozen = cls._frozen_len(seq, is_frozen)
+        if from_idx < frozen:
+            frozen -= 1  # the prefix is one row shorter once this row is out of it
+        return to_idx >= frozen
+
+    @classmethod
+    def _to_next(cls, seq: list, chosen: List[Path], is_frozen) -> bool:
+        """Put the chosen rows (queue order kept) right after the frozen prefix."""
+        chosen_set = set(chosen)
+        movable = [p for p in seq if p in chosen_set and not is_frozen(p)]
+        if not movable:
+            return False
+        rest = [p for p in seq if p not in set(movable)]
+        frozen = cls._frozen_len(rest, is_frozen)
+        new = rest[:frozen] + movable + rest[frozen:]
+        if new == seq:
+            return False
+        seq[:] = new
+        return True
 
     def reorder_top_level(self, from_idx: int, to_idx: int) -> bool:
         n = len(self.order)
@@ -248,8 +276,7 @@ class QueueManager:
             return False
         if from_idx == to_idx:
             return False
-        frozen_len = self._frozen_prefix_len_top_level()
-        if from_idx < frozen_len or to_idx < frozen_len:
+        if not self._can_move(self.order, from_idx, to_idx, self._is_active_or_done):
             return False
         item = self.order.pop(from_idx)
         self.order.insert(to_idx, item)
@@ -265,16 +292,22 @@ class QueueManager:
             return False
         if from_idx == to_idx:
             return False
-        frozen_len = 0
-        for k, cp in enumerate(files):
-            rec = self.files.get(cp)
-            if rec and rec.status_code in (STATUS_PROCESS, STATUS_DONE):
-                frozen_len = max(frozen_len, k + 1)
-        if from_idx < frozen_len or to_idx < frozen_len:
+        if not self._can_move(files, from_idx, to_idx, self._file_active_or_done):
             return False
         item = files.pop(from_idx)
         files.insert(to_idx, item)
         return True
+
+    def move_top_level_to_next(self, paths: List[Path]) -> bool:
+        """Move specified top-level items to immediately follow active/completed items."""
+        return self._to_next(self.order, [p.resolve() for p in paths], self._is_active_or_done)
+
+    def move_child_items_to_next(self, folder_path: Path, child_paths: List[Path]) -> bool:
+        """Move specified child items in a folder to immediately follow active/completed items in that folder."""
+        folder = self.folders.get(folder_path.resolve())
+        if not folder:
+            return False
+        return self._to_next(folder.files, [p.resolve() for p in child_paths], self._file_active_or_done)
 
     def reorder_dragged_path(
         self,

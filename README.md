@@ -2,7 +2,7 @@
 
 **DBI Backend Qt** is a modern, feature-rich graphical user interface (GUI) for the **DBI** installer (Nintendo Switch). Built with Python 3 and PyQt6, this tool provides a superior alternative to traditional CLI backends, offering an advanced file queue, visual feedback, and deep OS integration.
 
-![Version](https://img.shields.io/badge/version-2.9.1-blue)
+![Version](https://img.shields.io/badge/version-2.9.4-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -11,18 +11,29 @@
 ## ✨ Key Features
 
 ### 🔄 Two-Way Sphaira Synchronization & Queue Management
-*   **Live Queue Modification & Drag Handles:** Add new files (via Drag & Drop or Add buttons), toggle checkboxes, or reorder unstarted queue items using dedicated drag handles (or `Alt+Up` / `Alt+Down`) at any time during an active USB session. Sphaira dynamically reflects queue changes on the fly without having to restart the installation session, while active and completed files are safely guarded.
+*   **Live Queue Modification & Context Menu "Set as Next in Queue":** Add new files (via Drag & Drop or Add buttons), toggle checkboxes, reorder unstarted queue items using dedicated drag handles (or `Alt+Up` / `Alt+Down`), or right-click any game to select **"Set as Next in Queue"** to immediately position it next in line after active/completed items. Sphaira dynamically reflects queue changes on the fly without restarting the installation session, while active and completed files are safely guarded.
+*   **Queue Plan Synchronization & Target Resolution:** When paired with Sphaira/Kefir Hub, the console reports its planned install queue (`CMD_ID_QUEUE_PLAN`). Items in `Auto` mode dynamically display their planned target (`Auto → SD` or `Auto → NAND`), unchecking an item on the console propagates to the PC without getting re-enabled, and packages pinned to drives they cannot fit on are safely reset to Auto.
+*   **Dynamic Storage Projection & Cursor Hover:** The storage bars calculate live drive projections based on planned packages (marking green for fitting or red for overflowing), with interactive highlight segments showing the footprint of the package currently hovered under the mouse pointer.
+*   **Pinned Active Item Banner:** When scrolling away from the currently installing game in long queues, a pinned header banner stays anchored at the top of the file list, showing the title, target, percentage progress bar, and clickable jump to scroll straight back to the active item.
 *   **Table Header Select-All:** Master checkbox integrated directly into the table header allows selecting or deselecting all items with a single click.
 *   **Real-time Status Tracking & Target Progress:** When Sphaira finishes installing a game or skips a package (already installed or user-skipped), it transmits a notification back to the PC. The PC immediately unchecks the item, marks it as **Done** or **Skipped**, and dynamically recalculates remaining bytes, overall progress, and ETA. The Target column uses clean native dropdown styling with transparent cell background, eliminating double text ghosting while ensuring the row-wide progress bar remains fully visible.
 *   **Install Location Sync (Target):** Configure where each game should be installed directly from the PC table (`Auto`, `SD Card`, `NAND / System memory`) via dropdowns or right-click context menus. The choice is synced to Sphaira in real time.
-*   **Sphaira-Style Dynamic Dual Storage Bars:** Directly inside the File Queue header, two stacked capacity bars show **microSD** and **NAND** status in the authentic style of Sphaira (SFIRE). Each bar dynamically reflects committed disk space, color thresholds (Green <=75%, Amber >75%, Red >90%), free space readout, and an active installation segment (yellow) tracking real-time write progress of the installing title.
+*   **Already Installed Policy:** Configurable handling for already installed packages (`Console setting`, `Reinstall`, `Skip`, `Prompt`), propagated directly to the console over SPHQ headers.
+*   **Sphaira-Style Dynamic Dual Storage Bars:** Directly inside the File Queue header, two stacked capacity bars show **microSD** and **NAND** status in the authentic style of Sphaira (SFIRE). Each bar dynamically reflects committed disk space, color thresholds (Green <=75%, Amber >75%, Red >90%), and during installation displays all three metrics at once in full Sphaira format: `+<written> / <package_size> / <free_space>` (e.g. `+128.8 MB / 162.5 MB / 7.4 GB`), alongside an active installation yellow segment tracking real-time write progress.
 *   **SFIRE-Synchronized ETA:** ETA calculation is fully aligned with Sphaira's `FormatEta` (`Xh Ym` / `Xm Ys`) and displays dual progress (`ETA: <file_eta> / <total_eta>`) powered by a smoothed sliding-window speed estimate.
 
-### 🌙 Auto-Hibernation
-*   **Hibernate PC when Idle (5 min):** Option to automatically put your Windows PC into hibernation when there has been no communication between the Nintendo Switch console and the server for over 5 minutes (indicating all transfers have finished and the console is no longer waiting for or accepting files). Includes a 30-second countdown prompt with an option to abort if you are still at your computer, and automatically cancels if the console resumes activity.
+### 🛡️ Crash Resilience & End-of-Session Reporting
+*   **Automatic Queue Resume (`resume.dbi`):** The active queue state is atomically mirrored to `resume.dbi` as transfers progress. If the application closes, crashes, or the PC reboots, the next launch prompts to restore unfinished items with a single click.
+*   **Comprehensive Session Reports:** Automatically generates an end-of-session summary and text log upon completion or link loss. Categorizes installed, skipped, and failed packages, maps Horizon and Sphaira error codes into clear descriptions (e.g., missing firmware keys, corrupt NCA/NCZ, filesystem out of space), and flags DLC/updates installed without their base game. Saved to `reports/report_YYYYMMDD_HHMMSS.txt`.
+*   **Safe Log Rotation:** Existing session logs are rotated to `log.prev.txt` on launch, preventing loss of debug traces after unexpected crashes.
+
+### 🌙 Smart User-Aware Auto-Hibernation
+*   **User-Aware Inactivity Guard:** When auto-hibernation is enabled, the system monitors physical mouse and keyboard inputs via Windows `GetLastInputInfo`. If someone is actively using the PC, the system will never hibernate automatically, presenting only a manual button. When the user is away, it displays a 3-minute warning countdown with taskbar notifications before safely putting the computer to sleep once transfers finish. Automatically snoozes if console traffic resumes.
 
 ### 📡 Transfer Modes
 *   **USB Backend:** Direct installation via USB cable using the MTP/DBI protocol. High-speed and reliable. Supports only Switch game files (`.nsp`, `.nsz`, `.xci`, `.xcz`). Features unique byte-range interval tracking to avoid duplicating progress when ranges are re-requested.
+    *   **Automatic MTP Handoff:** If the Switch is connected in MTP mode while the USB server is waiting, the backend writes a trigger to the SD card via Windows Shell COM. Kefir Hub 0.14.038+ detects it and offers to switch seamlessly to PC Install (USB). If declined, it avoids re-prompting.
+    *   **Auto-Connect on Cable Plug-in:** Optional auto-start detects when the Switch appears in install mode on the USB cable and begins communication automatically without manual clicks.
 *   **HTTP Server:** Turns your PC into a local network repository. Use the "Install from HTTP" menu in DBI to install games over Wi-Fi or LAN. Supports adding any folders (as virtual directories) and files of any type.
 *   **FTP Server:** Serves your files over a local FTP server. Use the "Install from FTP" network source in DBI or any standard FTP client (like FileZilla). Supports adding folders and files of any type.
 

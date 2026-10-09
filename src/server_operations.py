@@ -55,6 +55,10 @@ class ServerManager:
         # the server as soon as the console shows up, no button press needed.
         self._probe_backends = usb_backends()
         self._auto_start_armed = True
+        # A console that sits in MTP (Kefir Hub's default on the cable) cannot see
+        # the USB server; an MTP marker file asks Kefir Hub to switch over.
+        self._marker_armed = True
+        self._marker_thread = None
 
     # Session State Properties (forwarded to session coordinator)
     @property
@@ -198,6 +202,7 @@ class ServerManager:
             initial_checked=set(checked_files.keys()),
             initial_targets=self.main_window.file_manager.file_targets,
         )
+        uh.skip_mode = self.main_window.skip_mode()
         uh.connection_changed.connect(self.on_connection_changed)
         uh.log_message.connect(self.main_window.log)
         uh.progress_updated.connect(self.on_progress_updated)
@@ -210,6 +215,7 @@ class ServerManager:
         uh.package_status_received.connect(self.on_package_status_received)
         uh.storage_info_received.connect(self.on_storage_info_received)
         uh.queue_sync_confirmed.connect(self.on_queue_sync_confirmed)
+        uh.queue_plan_received.connect(self.session.on_queue_plan_received)
         uh.driver_problem.connect(self.main_window.offer_usb_driver_install)
         uh.finished.connect(self.on_usb_server_stopped)
         uh.start()
@@ -347,6 +353,8 @@ class ServerManager:
 
     # Common Server Stop Handling
     def _stop_server(self, handler_attr: str):
+        # a server the user stopped is not restarted while the same console sits on the cable
+        self._auto_start_armed = False
         self.session.manual_stop = True
         self.session.session_active = False
         self.session.session_ended = False
@@ -361,6 +369,9 @@ class ServerManager:
         if getattr(handler, 'has_communicated', False):
             self.session.has_communicated = True
             self.session.last_activity_time = getattr(handler, 'last_activity_time', None) or time.time()
+        if not self.session.session_ended:
+            # the console did not end the session (link lost, stopped by hand, PC going to sleep)
+            self.session.write_report(handler, show=False)
         setattr(self, handler_attr, None)
         self._set_server_ui_state(False)
         if self.session.manual_stop or not self.session.session_ended:

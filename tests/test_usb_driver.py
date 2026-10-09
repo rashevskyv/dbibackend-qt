@@ -43,7 +43,14 @@ def test_reports_missing_windows_driver(monkeypatch):
 def test_reports_missing_linux_permission(monkeypatch):
     denied = usb.core.USBError('Access denied', errno=13)
     _patch_find(monkeypatch, {'libusb1': FakeDev(denied)})
+    monkeypatch.setattr(usb_driver.sys, 'platform', 'linux')
     assert usb_driver.find_and_reset_switch(['libusb1']) == (None, 'no_access')
+
+
+def test_console_open_elsewhere_on_windows_is_busy_not_a_driver_problem(monkeypatch):
+    _patch_find(monkeypatch, {'libusb1': FakeDev(usb.core.USBError('Access denied', errno=13))})
+    monkeypatch.setattr(usb_driver.sys, 'platform', 'win32')
+    assert usb_driver.find_and_reset_switch(['libusb1']) == (None, 'busy')
 
 
 def test_absent_console_and_missing_backend_are_not_driver_problems(monkeypatch):
@@ -84,3 +91,23 @@ def test_elevated_command_is_inline_and_valid_powershell(tmp_path):
     out = subprocess.run(['powershell', '-NoProfile', '-Command', check], capture_output=True, text=True)
     assert out.stdout.strip() == '0', out.stdout + out.stderr
     assert len(args) < 32767  # CreateProcess command-line limit
+
+
+def test_reconnect_releases_stale_device_before_searching(monkeypatch):
+    """A session that ended without Stop (Switch app exited) must not keep the
+    old handle while looking for the next app, or Windows never finds it."""
+    from src import usb_handler as uh_mod
+    handler = uh_mod.USBHandler({})
+    stale = object()
+    handler.dev, handler.is_running = stale, True
+    disposed = []
+    monkeypatch.setattr(uh_mod.usb.util, 'dispose_resources', disposed.append)
+
+    def fake_find(backends):
+        assert handler.dev is None and disposed == [stale]
+        handler.is_running = False
+        return None, None
+    monkeypatch.setattr(uh_mod, 'find_and_reset_switch', fake_find)
+    monkeypatch.setattr(uh_mod.time, 'sleep', lambda s: None)
+
+    assert handler.connect_to_switch() is False

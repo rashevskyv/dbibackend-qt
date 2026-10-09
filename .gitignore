@@ -16,8 +16,14 @@ dist/
 # Application files
 config.json
 log.txt
+log.prev.txt
+resume.dbi
+resume.tmp
 build_output.log
 nul
+presets/*.bak*
+presets/client2.dbi
+presets/like.dbi
 
 # Virtual environments
 venv/

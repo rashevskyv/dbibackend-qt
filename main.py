@@ -9,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent)) # Add parent directory of src to path
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QTimer
 from src.main_window import MainWindow
 from src.single_instance import SingleInstanceManager
 
@@ -43,6 +44,7 @@ def main():
         window.handle_external_files("\n".join(args))
 
     window.show()
+    QTimer.singleShot(0, window.offer_resume)
 
     # Cleanup on exit
     app.aboutToQuit.connect(instance_manager.cleanup)

@@ -41,6 +41,7 @@ class USBHandler(QThread):
     package_status_received = pyqtSignal(str, int, int) # filename, status, result_code
     storage_info_received = pyqtSignal(object, object, object, object) # nand_free, nand_total, sd_free, sd_total
     queue_sync_confirmed = pyqtSignal(int)
+    queue_plan_received = pyqtSignal(int, list)  # revision the plan is based on, dbi_protocol.parse_queue_plan items
     driver_problem = pyqtSignal(str)  # 'no_driver' (Windows) or 'no_access' (Linux), once per handler
 
     @staticmethod
@@ -81,6 +82,9 @@ class USBHandler(QThread):
         super().__init__()
         self._lock = threading.Lock()
         self._selection_lock = self._lock # Backward compatibility alias
+        # "already installed" mode sent to the console with every list (dbi_protocol.SKIP_MODE_*)
+        self.skip_mode = dbi_protocol.SKIP_MODE_CONSOLE
+        self.read_errors: Dict[str, str] = {}  # name -> why the PC could not serve it (for the report)
 
         checked_raw = initial_checked if initial_checked is not None else set(file_list.keys())
         expanded_files, expanded_checked = self._expand_files(file_list, checked_raw)
@@ -223,6 +227,20 @@ class USBHandler(QThread):
             self.poll_commands()
         except Exception as e:
             self.log_message.emit('error', f'Critical error in USB thread: {e}')
+        finally:
+            self._release_device()
+
+    def _release_device(self):
+        """Close our handle and drop every reference to the device. A stale pyusb
+        Device keeps libusb's device object alive, and on Windows the console's
+        next enumeration (another homebrew, or DBI relaunched) is then not found
+        until the process exits."""
+        if self.dev is not None:
+            try:
+                usb.util.dispose_resources(self.dev)
+            except Exception:
+                pass
+        self.dev = self.in_ep = self.out_ep = None
 
     def stop(self):
         self.is_running = False
@@ -251,12 +269,19 @@ class USBHandler(QThread):
     def connect_to_switch(self) -> bool:
         self.connection_changed.emit(ConnectionStatus.CONNECTING)
         retry_count = 0
-        
+        last_error = None
+
         while self.is_running and retry_count < 30:
             try:
+                self._release_device()
                 self.dev, problem = find_and_reset_switch(self._usb_backends)
                 if self.dev is None:
-                    if problem and not self._driver_problem_reported:
+                    if problem == 'busy':
+                        if not self._driver_problem_reported:
+                            self._driver_problem_reported = True
+                            self.log_message.emit('warning', 'The Switch is open in another program (another DBI Backend?). Waiting for it.')
+                        retry_count += 1
+                    elif problem and not self._driver_problem_reported:
                         self._driver_problem_reported = True
                         self.driver_problem.emit(problem)
                     if not problem:  # keep waiting while the user installs the driver
@@ -280,8 +305,9 @@ class USBHandler(QThread):
                     self.record_activity()
                     return True
             except Exception as e:
-                # self.log_message.emit('debug', f"Connection retry: {e}")
-                pass
+                if str(e) != last_error:  # once per distinct error, not every second
+                    last_error = str(e)
+                    self.log_message.emit('warning', f'Connection retry: {e}')
             time.sleep(1)
         
         self.connection_changed.emit(ConnectionStatus.DISCONNECTED)
@@ -316,6 +342,8 @@ class USBHandler(QThread):
                     self.process_package_status_command(data_size)
                 elif cmd_id == dbi_protocol.CMD_ID_STORAGE_INFO:
                     self.process_storage_info_command(data_size)
+                elif cmd_id == dbi_protocol.CMD_ID_QUEUE_PLAN:
+                    self.process_queue_plan_command(data_size)
 
             except usb.core.USBTimeoutError:
                 # Timeout is normal in poll loop
@@ -414,6 +442,18 @@ class USBHandler(QThread):
         # Emit signal to UI thread
         self.storage_info_received.emit(nand_free, nand_total, sd_free, sd_total)
 
+    def process_queue_plan_command(self, data_size):
+        # same three-step shape as package status: ack, payload, empty response.
+        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_ACK, dbi_protocol.CMD_ID_QUEUE_PLAN, data_size), timeout=10000)
+        payload = bytes(self.in_ep.read(data_size, timeout=10000)) if data_size else b''
+        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_QUEUE_PLAN, 0), timeout=10000)
+        try:
+            revision, items = dbi_protocol.parse_queue_plan(payload)
+        except ValueError as e:
+            self.log_message.emit('warning', f'Queue plan from console ignored: {e}')
+            return
+        self.queue_plan_received.emit(revision, items)
+
     def process_list_command(self, data_size, cmd_id=dbi_protocol.CMD_ID_LIST):
         with self._lock:
             file_list_snapshot = list(self.file_list.items())
@@ -425,7 +465,7 @@ class USBHandler(QThread):
         self.log_message.emit('info', f'Sending list of {len(file_list_snapshot)} files (rev {rev})...')
         
         data = dbi_protocol.build_list_payload(
-            file_list_snapshot, selected_snapshot, targets_snapshot, data_size, rev
+            file_list_snapshot, selected_snapshot, targets_snapshot, data_size, rev, self.skip_mode
         )
 
         self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, cmd_id, len(data)))
@@ -450,16 +490,32 @@ class USBHandler(QThread):
         if not name_bytes:
             raise usb.core.USBError('Missing file range filename')
         name = name_bytes.decode('utf-8', errors='replace')
-        
-        # Respond
-        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_FILE_RANGE, range_size), timeout=10000)
-        self.in_ep.read(16, timeout=10000) # Final Ack
 
         with self._lock:
             path = self.file_list.get(name) or self._retained_active_files.get(name)
-        if not path: 
-            self.log_message.emit('error', f'Requested file not found in list: {name}')
-            raise usb.core.USBError(f'Requested file not found in list: {name}')
+        try:
+            if not path:
+                raise FileNotFoundError(f'not in the list: {name}')
+            if self.cached_file_path != path:
+                if self.cached_file_handle:
+                    self.cached_file_handle.close()
+                self.cached_file_handle = None
+                self.cached_file_handle = open(path, 'rb')
+                self.cached_file_path = path
+        except OSError as e:
+            # A file moved or deleted after it was queued. Answer with size 0: the
+            # console rejects the read (size mismatch, it sends no ack), fails only
+            # this package and goes on with the queue. Resetting the link instead
+            # killed the whole overnight session.
+            self.cached_file_path = None
+            self.read_errors[name] = f'Cannot read the file: {e}'
+            self.log_message.emit('error', f'Cannot read {name}: {e}. The console will skip it.')
+            self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_FILE_RANGE, 0), timeout=10000)
+            return
+
+        # Respond
+        self.out_ep.write(struct.pack('<4sIII', b'DBI0', dbi_protocol.CMD_TYPE_RESPONSE, dbi_protocol.CMD_ID_FILE_RANGE, range_size), timeout=10000)
+        self.in_ep.read(16, timeout=10000) # Final Ack
 
         is_metadata = range_size < dbi_protocol.METADATA_THRESHOLD
         

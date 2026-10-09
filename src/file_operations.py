@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Dict, Optional, Sequence, Union, List
 
 from PyQt6.QtWidgets import (
-    QFileDialog, QTreeWidgetItem, QCheckBox, QStyle
+    QFileDialog, QTreeWidgetItem, QCheckBox, QStyle, QComboBox, QToolTip
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QBrush
+from PyQt6.QtGui import QColor, QBrush, QCursor
 
 from .widgets import (
     CHECKED_ROLE, IS_FOLDER_ROLE, FILE_PATH_ROLE, IS_CONFLICT_ROLE
@@ -27,6 +27,7 @@ from .tree_item_builder import (
 )
 from .queue_reorder import (
     move_selected_items as qr_move_selected,
+    move_selected_items_next as qr_move_selected_next,
     reorder_dragged_path as qr_reorder_dragged,
 )
 
@@ -166,6 +167,10 @@ class FileManager:
     def move_selected_items(self, delta: int):
         """Move selected items up (delta=-1) or down (delta=+1) in queue order."""
         qr_move_selected(self, delta)
+
+    def move_selected_next(self):
+        """Move selected items to immediately follow active/done items in queue order."""
+        return qr_move_selected_next(self)
 
     def update_file_list(self):
         """Populate the tree widget reflecting folders and files with accurate icons and states in explicit queue order."""
@@ -370,10 +375,51 @@ class FileManager:
                 f"{format_size(selected_size)} / {format_size(total_size)} total")
         self.main_window.file_count_label.setText(text)
 
+    def target_problem(self, name: str, path: Path, target_idx: int) -> Optional[str]:
+        """Why the package cannot go to that drive, or None. Uses the console's free space
+        and the install size from its queue plan (file size x1.6 for nsz/xcz before that)."""
+        if target_idx not in (1, 2):
+            return None
+        s = self.main_window.server_manager.session
+        free, total, drive = (s.sd_free, s.sd_total, 'microSD') if target_idx == 1 else (s.nand_free, s.nand_total, 'NAND')
+        if not total:
+            return None  # the console has not reported its storage yet
+        plan = s.queue_plan.get(name)
+        if plan and plan.get('no_space'):
+            return None  # installed and will be skipped
+        if plan and plan['analysis_ok'] and plan['install_size']:
+            need = plan['install_size']
+        else:
+            try:
+                need = path.stat().st_size
+            except OSError:
+                return None
+            if path.suffix.lower() in ('.nsz', '.xcz'):
+                need = int(need * 1.6)
+        if need <= free:
+            return None
+        return f'{name} needs about {format_size(need)}, {drive} has {format_size(free)} free.'
+
+    def _refuse_target(self, item, why: str):
+        """Put the row's combo back to its current target and say why."""
+        rec = self.queue.files.get(Path(item.data(5, FILE_PATH_ROLE)))
+        w = self.main_window.file_tree.itemWidget(item, 3)
+        combo = w if isinstance(w, QComboBox) else (w.findChild(QComboBox) if w else None)
+        if combo and rec:
+            combo.blockSignals(True)
+            combo.setCurrentIndex(rec.target)
+            combo.blockSignals(False)
+        self.main_window.log('warning', f'Target not changed: {why}')
+        QToolTip.showText(QCursor.pos(), f'Does not fit: {why}')
+
     def on_target_changed(self, file_key, target_idx: int):
         item = self.path_to_item.get(file_key) if isinstance(file_key, Path) else self.item_map.get(file_key)
         if item is not None:
             path = Path(item.data(5, FILE_PATH_ROLE))
+            why = self.target_problem(item.text(1), path, target_idx)
+            if why:
+                self._refuse_target(item, why)
+                return
             rec = self.queue.files[path]
             rec.target = target_idx
             if not rec.in_conflict:
@@ -390,6 +436,10 @@ class FileManager:
         for i in range(folder_item.childCount()):
             child = folder_item.child(i)
             fname = child.text(1)
+            why = self.target_problem(fname, Path(child.data(5, FILE_PATH_ROLE)), target_idx)
+            if why:
+                self._refuse_target(child, why)
+                continue
             rec = self.queue.files.get(Path(child.data(5, FILE_PATH_ROLE)))
             if rec:
                 rec.target = target_idx

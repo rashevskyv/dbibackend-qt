@@ -1,6 +1,6 @@
 # Задачі
 
-Стан на 09.10.2026, версія 2.9.3. Контекст — [plan.md](plan.md), докази — [audit.md](audit.md), історія — [walkthrough.md](walkthrough.md).
+Стан на 09.10.2026, версія 2.9.4. Контекст — [plan.md](plan.md), докази — [audit.md](audit.md), історія — [walkthrough.md](walkthrough.md).
 
 ## Відкрите
 
@@ -14,6 +14,7 @@
 
 ## Виконано
 
+- [x] 2.9.4: 3 метрики пам'яті як у Sphaira (+focus/highlight/free), контекстне меню "Set as Next in Queue", план черги й проекція накопичувачів (CMD_ID_QUEUE_PLAN), закріплений банер активного встановлення, атомарне відновлення (resume.dbi), звіт сесії та розумна автогібернація.
 - [x] 2.9.3: маркер `kefir-hub.pc-install` по MTP просить Kefir Hub перейти в PC Install (USB).
 - [x] 2.9.1: сервер чекає, поки ставиться драйвер; інсталятор передається inline.
 - [x] 2.9.0: вбудований libusb-1.0, встановлення WinUSB самим застосунком, правило udev у Linux.

@@ -54,8 +54,9 @@ def find_and_reset_switch(backends: List) -> Tuple[Optional[object], Optional[st
     """Find the Switch and open it with the first backend that can.
 
     Returns (device, None) on success, otherwise (None, problem) where problem is
-    'no_driver' (Windows: nothing usable bound), 'no_access' (Linux: no udev rule)
-    or None (device not plugged in)."""
+    'no_driver' (Windows: nothing usable bound), 'no_access' (Linux: no udev rule),
+    'busy' (Windows: another program, e.g. a second DBI Backend, has it open; the
+    driver is fine) or None (device not plugged in)."""
     problem = None
     for backend in backends:
         try:
@@ -72,7 +73,8 @@ def find_and_reset_switch(backends: List) -> Tuple[Optional[object], Optional[st
         except usb.core.USBError as e:
             if e.errno != 13:
                 raise
-            problem = 'no_access'
+            # WinUSB opens are exclusive: access denied there means busy, not a missing driver.
+            problem = 'busy' if sys.platform == 'win32' else 'no_access'
     return None, problem
 
 

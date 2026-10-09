@@ -62,6 +62,8 @@ def test_storage_bar_row_and_widget_state():
     assert widget.nand_row.total_bytes == nand_total
     assert widget.sd_row.free_bytes == sd_free
     assert widget.sd_row.total_bytes == sd_total
+    assert widget.sd_row.get_value_text() == "23.3 GB free"
+    assert widget.nand_row.get_value_text() == "11.2 GB free"
     assert "microSD:" in widget.toolTip()
     assert "NAND:" in widget.toolTip()
 
@@ -74,6 +76,9 @@ def test_storage_bar_row_and_widget_state():
     assert widget.sd_row.focus_bytes == 1_500_000_000
     assert widget.sd_row.highlight_bytes == 16_500_000_000
     assert widget.nand_row.highlight_bytes == 0
+    # Sphaira 3-metric: +written / pkg_size / free
+    assert widget.sd_row.get_value_text() == "+1.4 GB / 15.4 GB / 23.3 GB"
+    assert widget.nand_row.get_value_text() == "11.2 GB free"
     assert "Installing to microSD:" in widget.toolTip()
 
     # Render in both dark and light themes without error
@@ -88,6 +93,7 @@ def test_storage_bar_row_and_widget_state():
     widget.clear_install_progress()
     assert widget.sd_row.highlight_bytes == 0
     assert widget.sd_row.focus_bytes == 0
+    assert widget.sd_row.get_value_text() == "23.3 GB free"
     assert "Installing to" not in widget.toolTip()
 
 
@@ -160,3 +166,28 @@ def test_sphaira_synchronized_eta_in_coordinator():
     assert win.eta_label.text() == "ETA: Done"
 
     win.close()
+
+
+def test_sphaira_three_metric_storage_value_text():
+    """Verify StorageBarRow matches Sphaira: +written / pkg_size / free."""
+    app = QApplication.instance() or QApplication(sys.argv)
+    row = StorageBarRow("microSD")
+    # Disconnected
+    assert row.get_value_text() == "--"
+
+    # Connected: 7.4 GB free of 32 GB NAND
+    row.set_storage(free_bytes=int(7.4 * 1024**3), total_bytes=32 * 1024**3)
+    assert row.get_value_text() == "7.4 GB free"
+
+    # Start installing 162.5 MB package (0 bytes transferred)
+    row.set_install_progress(focus_bytes=0, highlight_bytes=int(162.5 * 1024**2))
+    assert row.get_value_text() == "+0.0 B / 162.5 MB / 7.4 GB"
+
+    # 128.8 MB transferred of 162.5 MB package
+    row.set_install_progress(focus_bytes=int(128.8 * 1024**2), highlight_bytes=int(162.5 * 1024**2))
+    assert row.get_value_text() == "+128.8 MB / 162.5 MB / 7.4 GB"
+
+    # Finished / cleared
+    row.clear_install_progress()
+    assert row.get_value_text() == "7.4 GB free"
+
