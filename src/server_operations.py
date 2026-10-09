@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
 
 from . import __version__
 from .usb_driver import usb_backends, switch_present
+from . import mtp_marker
 from .usb_handler import USBHandler, ConnectionStatus
 from .http_handler import HTTPHandler
 from .ftp_handler import FTPHandler
@@ -412,6 +413,20 @@ class ServerManager:
         if start:
             self.main_window.log('info', 'Switch detected on USB — starting USB server')
             self.start_usb_server()
+
+        write, self._marker_armed = mtp_marker.marker_decision(
+            mode == 'usb' and self.usb_handler is not None and self.usb_handler.dev is None,
+            mtp_marker.SUPPORTED and switch_present(self._probe_backends, mtp_marker.MTP_PID),
+            self._marker_armed,
+        )
+        if write and (self._marker_thread is None or not self._marker_thread.isRunning()):
+            self.main_window.log('info', 'Switch is in MTP mode — asking Kefir Hub to open PC Install (USB)')
+            self._marker_thread = mtp_marker.MarkerWriteThread()
+            self._marker_thread.done.connect(self._on_marker_written)
+            self._marker_thread.start()
+
+    def _on_marker_written(self, ok: bool, msg: str):
+        self.main_window.log('success' if ok else 'warning', msg)
 
     def on_auto_connect_toggled(self, checked: bool):
         self.main_window.config.set('auto_connect', checked)
