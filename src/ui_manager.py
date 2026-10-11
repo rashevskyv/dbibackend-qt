@@ -239,7 +239,13 @@ class UIManager:
         self.main_window.file_tree.setAlternatingRowColors(True)
         self.main_window.file_tree.header().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
 
+        # The tree order is the install queue, so the view never sorts itself:
+        # a header click reorders the queue (FileManager.on_header_clicked).
         self.main_window.file_tree.setSortingEnabled(False)
+        header.setSectionsClickable(True)
+        header.setSortIndicatorShown(True)
+        header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
+        header.sectionClicked.connect(lambda section: self.main_window.file_manager.on_header_clicked(section))
 
         self.main_window.file_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
 

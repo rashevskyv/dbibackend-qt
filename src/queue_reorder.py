@@ -109,3 +109,15 @@ def reorder_dragged_path(file_manager, src_path: Path, tgt_path: Optional[Path],
             sm.sync_usb_files(file_manager.file_list, checked_names, file_manager.file_targets)
         return True
     return False
+
+
+def sort_queue(file_manager, column: str, descending: bool) -> bool:
+    """Reorder the install queue by a column; the tree shows the new queue order."""
+    if not file_manager.queue.sort_by(column, descending):
+        return False
+    file_manager.update_file_list()
+    sm = getattr(file_manager.main_window, 'server_manager', None)
+    if sm and sm.usb_handler and sm.usb_handler.is_running:
+        checked_names = {it.text(1) for it in file_manager.iter_checked_items()}
+        sm.sync_usb_files(file_manager.file_list, checked_names, file_manager.file_targets)
+    return True

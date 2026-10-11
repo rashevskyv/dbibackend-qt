@@ -8,8 +8,8 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QCheckBox, QComboBox, QTreeWidgetItem, QTreeWidget,
     QLabel, QApplication
 )
-from PyQt6.QtCore import Qt, QPoint, QMimeData
-from PyQt6.QtGui import QColor, QIcon, QDrag, QPixmap, QPainter
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QIcon
 
 from .widgets import (
     FileTreeWidgetItem, CHECKED_ROLE, IS_FOLDER_ROLE,
@@ -66,37 +66,8 @@ class DragHandle(QLabel):
             return
 
         tree = self.item.treeWidget()
-        if not tree:
-            return
-
-        p_str = self.item.data(5, FILE_PATH_ROLE)
-        if not p_str:
-            return
-
-        drag = QDrag(tree)
-        mime = QMimeData()
-        mime.setData("application/x-dbibackend-drag-path", p_str.encode('utf-8'))
-        is_child = (self.item.parent() is not None)
-        mime.setData("application/x-dbibackend-drag-kind", b"child" if is_child else b"top")
-        if is_child:
-            parent_p_str = self.item.parent().data(5, FILE_PATH_ROLE) or ""
-            mime.setData("application/x-dbibackend-drag-parent", parent_p_str.encode('utf-8'))
-
-        pixmap = QPixmap(160, 24)
-        pixmap.fill(QColor(33, 150, 243, 180))
-        painter = QPainter(pixmap)
-        painter.setPen(Qt.GlobalColor.white)
-        font = painter.font()
-        font.setPointSize(9)
-        painter.setFont(font)
-        name = self.item.text(1)
-        elided = painter.fontMetrics().elidedText(name, Qt.TextElideMode.ElideMiddle, 150)
-        painter.drawText(8, 16, elided)
-        painter.end()
-
-        drag.setPixmap(pixmap)
-        drag.setHotSpot(QPoint(10, 12))
-        drag.exec(Qt.DropAction.MoveAction)
+        if tree:
+            tree.start_row_drag(self.item)
         self._drag_start_pos = None
 
 

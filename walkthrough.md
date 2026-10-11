@@ -1,6 +1,15 @@
 # Walkthrough
 
-Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.4**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.5**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+
+## 2.9.5 — install queue: drag rows, sort by column header
+
+- **Row drag (`src/widgets.py`, `src/tree_item_builder.py`):** press and move on a queue row (name, size, target, status or path cell) and the row moves to the drop point. The drag handle still works. Rows that are installing or done, and conflict rows, do not drag. Ctrl or Shift click keeps the normal selection. A small move under the drag threshold stays a click and does not start a rubber-band selection.
+- **Drop line:** a blue line marks where the dragged row lands. It hides after drop or cancel.
+- **Header sort (`src/file_operations.py`, `src/ui_manager.py`, `src/queue_manager.py`, `src/queue_reorder.py`):** click Name, Size, Target, Status or Path to sort the install queue. Click again to reverse. Installing and installed rows keep their places. Folder children sort inside their folder. A running USB session gets the new order. The select-all column does not sort.
+- **Fix:** the drag handle set no MIME data, so `QDrag.exec()` returned at once and nothing moved.
+- **Removed:** the tree's own automatic sort (`FileTreeWidgetItem.__lt__`). The tree order is the install queue.
+- Verification: pytest 96 passed (88 before; 8 new in `tests/test_sort_and_drag_handle.py`, mouse events sent to the tree viewport). exe built with PyInstaller (`dbibackend.spec`), bundled `src` checked for the new code; not launched on this PC (a 2.9.4 instance was running). On the PC with a real mouse: drag a row by its name, click each header twice, check Set as Next.
 
 ## 2.9.4 — проекція накопичувачів Sphaira, живий план черги, звіт сесії та відновлення
 

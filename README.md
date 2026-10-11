@@ -2,7 +2,7 @@
 
 **DBI Backend Qt** is a modern, feature-rich graphical user interface (GUI) for the **DBI** installer (Nintendo Switch). Built with Python 3 and PyQt6, this tool provides a superior alternative to traditional CLI backends, offering an advanced file queue, visual feedback, and deep OS integration.
 
-![Version](https://img.shields.io/badge/version-2.9.4-blue)
+![Version](https://img.shields.io/badge/version-2.9.5-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -60,13 +60,7 @@
 ### 🎨 Modern UI & UX
 *   **Theming:** Includes **Light**, **Dark**, and **Auto** modes (automatically syncs with Windows system theme).
 *   **Row-wide Progress Bars:** Instead of a tiny bar in one cell, the progress fills the entire background of the row for maximum visibility.
-*   **Smart Sorting (Dynamic during transfer):**
-    1.  **Active:** The file currently being installed (**Process**) stays at the absolute top.
-    2.  **Failed:** Files with errors are moved next for immediate attention.
-    3.  **Active Queue:** **Queued** (checked) files follow, sorted by **size** (largest first) to match DBI's priority.
-    4.  **Skipped:** Files that were not requested or explicitly skipped.
-    5.  **Completed:** Finished files (**Done**) are listed below, grouped above unchecked files.
-    6.  **Unchecked:** Files without a checkbox stay at the absolute bottom.
+*   **Sorting:** Click a column header (Filename, Size, Target, Status, Path) to reorder the install queue by it; click again to reverse. Installing and installed rows keep their places, files inside a folder sort within it, and a running USB session receives the new order.
 *   **Performance Optimization:** Features file handle caching and incremental progress tracking ($O(1)$) to ensure zero delay between files even in massive queues.
 *   **UI Scaling:** Zoom the file list in or out using `Ctrl` + `Mouse Wheel`.
 

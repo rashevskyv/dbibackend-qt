@@ -270,6 +270,45 @@ class QueueManager:
         seq[:] = new
         return True
 
+    def sort_by(self, column: str, descending: bool = False) -> bool:
+        """Sort the queue by 'name', 'size', 'target', 'status' or 'path'. Installing and
+        installed rows keep their places (frozen prefix); folder children sort inside
+        their folder. Equal keys keep their queue order."""
+        def rec(p):
+            return self.files.get(p) or self.folders[p]
+
+        def children(p):
+            return [self.files[c] for c in self.folders[p].files if c in self.files]
+
+        def code(r):
+            return STATUS_CONFLICT if r.in_conflict else r.status_code
+
+        def status(p):  # unchecked rows after checked ones with the same status
+            if p in self.folders:
+                return min((code(r) for r in children(p)), default=STATUS_QUEUED), not self.folders[p].checked
+            return code(self.files[p]), not self.files[p].checked
+
+        key = {
+            'name': lambda p: rec(p).name.lower(),
+            'size': lambda p: sum(r.size for r in children(p)) if p in self.folders else self.files[p].size,
+            'target': lambda p: rec(p).target,
+            'status': status,
+            'path': lambda p: str(p).lower(),
+        }[column]
+
+        def sort_tail(seq, is_frozen) -> bool:
+            frozen = self._frozen_len(seq, is_frozen)
+            new = seq[:frozen] + sorted(seq[frozen:], key=key, reverse=descending)
+            if new == seq:
+                return False
+            seq[:] = new
+            return True
+
+        changed = sort_tail(self.order, self._is_active_or_done)
+        for folder in self.folders.values():
+            changed = sort_tail(folder.files, self._file_active_or_done) or changed
+        return changed
+
     def reorder_top_level(self, from_idx: int, to_idx: int) -> bool:
         n = len(self.order)
         if from_idx < 0 or from_idx >= n or to_idx < 0 or to_idx >= n:

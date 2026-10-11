@@ -29,7 +29,10 @@ from .queue_reorder import (
     move_selected_items as qr_move_selected,
     move_selected_items_next as qr_move_selected_next,
     reorder_dragged_path as qr_reorder_dragged,
+    sort_queue as qr_sort_queue,
 )
+
+SORT_COLUMNS = {1: 'name', 2: 'size', 3: 'target', 4: 'status', 5: 'path'}
 
 
 class FileManager:
@@ -50,6 +53,7 @@ class FileManager:
         self.folder_items: Dict[Path, QTreeWidgetItem] = {}
         self.file_targets: Dict[str, int] = {}
         self._updating_checkboxes = False
+        self._last_sort = (-1, Qt.SortOrder.AscendingOrder)  # no indicator until the first sort
 
     def is_supported_file(self, path: Path) -> bool:
         if self.main_window.mode_switch and self.main_window.mode_switch.mode() in ('http', 'ftp'):
@@ -521,6 +525,16 @@ class FileManager:
 
     def reorder_dragged_path(self, src_path: Path, tgt_path: Optional[Path], before: bool = True) -> bool:
         return qr_reorder_dragged(self, src_path, tgt_path, before)
+
+    def on_header_clicked(self, section: int):
+        """Header click sorts the install queue. The header has already flipped its
+        indicator; column 0 (select-all checkbox) does not sort."""
+        header = self.main_window.file_tree.header()
+        if section not in SORT_COLUMNS:
+            header.setSortIndicator(*self._last_sort)
+            return
+        self._last_sort = (section, header.sortIndicatorOrder())
+        qr_sort_queue(self, SORT_COLUMNS[section], header.sortIndicatorOrder() == Qt.SortOrder.DescendingOrder)
 
     def get_file_status_code(self, filename: str) -> int:
         item = self.item_map.get(filename); return (item.data(4, Qt.ItemDataRole.UserRole) or 0) if item else 0

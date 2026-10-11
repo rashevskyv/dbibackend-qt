@@ -6,13 +6,16 @@ from PyQt6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QSplitterHandle, QSplitter,
     QStyledItemDelegate, QCheckBox, QProgressBar, QWidget,
     QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout,
-    QHeaderView
+    QHeaderView, QAbstractItemView, QApplication, QFrame
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QRect, QMimeData, QPoint, QTimer
 from PyQt6.QtGui import (
     QColor, QPainter, QBrush, QWheelEvent, QLinearGradient,
     QDrag, QPixmap, QPalette
 )
+from .queue_manager import STATUS_PROCESS, STATUS_DONE
+
+ROW_DRAG_MIME = "application/x-dbibackend-drag-path"
 
 # Custom data roles used to cache state on items so the sort comparator and
 # count-label updates don't have to walk the widget tree on every read.
@@ -23,73 +26,7 @@ IS_CONFLICT_ROLE = Qt.ItemDataRole.UserRole + 4
 
 
 class FileTreeWidgetItem(QTreeWidgetItem):
-    """Custom tree widget item with advanced sorting logic"""
-
-    def _get_status_sort_tuple(self):
-        tree = self.treeWidget()
-        if not tree: return (9, 0, self.text(1))
-
-        status_data = self.data(4, Qt.ItemDataRole.UserRole) or 0
-        size_data = self.data(2, Qt.ItemDataRole.UserRole) or 0
-
-        # Read the cached checked state populated by FileManager when the
-        # checkbox is created / toggled. Fall back to walking the widget
-        # tree only if the cache isn't populated yet.
-        cached = self.data(0, CHECKED_ROLE)
-        if cached is None:
-            is_checked = True
-            widget = tree.itemWidget(self, 0)
-            if widget:
-                cb = widget.findChild(QCheckBox)
-                if cb: is_checked = cb.isChecked()
-        else:
-            is_checked = bool(cached)
-
-        # Priority mapping: lower is higher on the list
-        if status_data == 1:     # 🔄 Process — Always at the very top
-            primary_priority = 0
-        elif status_data == 3:   # ❌ Failed — Needs attention
-            primary_priority = 1
-        elif status_data == 6:   # ⚠️ Name Conflict — Immediate attention
-            primary_priority = 1
-        elif status_data == 0 and is_checked: # Queued (Checked) — The main queue
-            primary_priority = 2
-        elif status_data == 4:   # ⏭ Skipped — Intentionally set aside
-            primary_priority = 3
-        elif status_data == 2:   # ✅ Done — Completed tasks
-            primary_priority = 4
-        elif status_data == 5:   # ⚠️ Missing — Known issues
-            primary_priority = 5
-        else:                    # Unchecked or other
-            primary_priority = 10
-
-        # Secondary sort: Queued items by size (descending), others alphabetical
-        if status_data == 0 and is_checked:
-            secondary_sort = -size_data
-        else:
-            secondary_sort = 0
-
-        return (primary_priority, secondary_sort, self.text(1))
-
-    def __lt__(self, other):
-        if not isinstance(other, FileTreeWidgetItem):
-            return super().__lt__(other)
-        tree = self.treeWidget()
-        if not tree:
-            return super().__lt__(other)
-        sort_column = tree.sortColumn()
-        if sort_column == 4:
-            return self._get_status_sort_tuple() < other._get_status_sort_tuple()
-        elif sort_column == 3:
-            self_target = self.data(3, Qt.ItemDataRole.UserRole) or 0
-            other_target = other.data(3, Qt.ItemDataRole.UserRole) or 0
-            return self_target < other_target
-        elif sort_column == 2:
-            self_size = self.data(2, Qt.ItemDataRole.UserRole) or 0
-            other_size = other.data(2, Qt.ItemDataRole.UserRole) or 0
-            return self_size < other_size
-        else:
-            return super().__lt__(other)
+    """Queue row. The tree never sorts itself: its order is the install queue."""
 
 
 class CustomSplitterHandle(QSplitterHandle):
@@ -221,6 +158,12 @@ class ZoomableTreeWidget(QTreeWidget):
         self.setSortingEnabled(False)
         self.header().setSortIndicatorShown(False)
         self.setAcceptDrops(True)
+        self._row_press = None  # (press pos, item) while a press may become a row drag
+        self.drop_marker = QFrame(self.viewport())  # blue line where a dragged row will land
+        self.drop_marker.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.drop_marker.setFixedHeight(2)
+        self.drop_marker.setStyleSheet("background: #2196F3;")
+        self.drop_marker.hide()
 
         # The package being installed stays on screen: when its row is scrolled
         # out of view, this strip shows it pinned over the first row. A child of
@@ -310,41 +253,118 @@ class ZoomableTreeWidget(QTreeWidget):
         else:
             super().dragEnterEvent(event)
 
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-            return
-        if not event.mimeData().hasFormat("application/x-dbibackend-drag-path"):
-            super().dragMoveEvent(event)
-            return
+    def _is_row_draggable(self, item) -> bool:
+        """Same rule as the drag handle: not installing, not installed, not a conflict, has a path."""
+        if not item.data(5, FILE_PATH_ROLE) or item.data(0, IS_CONFLICT_ROLE):
+            return False
+        return (item.data(4, Qt.ItemDataRole.UserRole) or 0) not in (STATUS_PROCESS, STATUS_DONE)
 
+    def start_row_drag(self, item):
+        """Drag one queue row. dropEvent reorders the queue. QDrag.exec() returns after drop or cancel."""
+        p_str = item.data(5, FILE_PATH_ROLE)
+        if not p_str:
+            return
+        mime = QMimeData()
+        mime.setData(ROW_DRAG_MIME, p_str.encode('utf-8'))
+        is_child = item.parent() is not None
+        mime.setData("application/x-dbibackend-drag-kind", b"child" if is_child else b"top")
+        if is_child:
+            parent_p_str = item.parent().data(5, FILE_PATH_ROLE) or ""
+            mime.setData("application/x-dbibackend-drag-parent", parent_p_str.encode('utf-8'))
+
+        pixmap = QPixmap(160, 24)
+        pixmap.fill(QColor(33, 150, 243, 180))
+        painter = QPainter(pixmap)
+        painter.setPen(Qt.GlobalColor.white)
+        font = painter.font()
+        font.setPointSize(9)
+        painter.setFont(font)
+        elided = painter.fontMetrics().elidedText(item.text(1), Qt.TextElideMode.ElideMiddle, 150)
+        painter.drawText(8, 16, elided)
+        painter.end()
+
+        drag = QDrag(self)
+        drag.setMimeData(mime)  # without it QDrag.exec() returns at once and nothing moves
+        drag.setPixmap(pixmap)
+        drag.setHotSpot(QPoint(10, 12))
+        drag.exec(Qt.DropAction.MoveAction)
+        self.drop_marker.hide()
+        self.setState(QAbstractItemView.State.NoState)
+
+    def mousePressEvent(self, event):
+        self._row_press = None
+        if event.button() == Qt.MouseButton.LeftButton and not (
+                event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)):
+            pos = event.position().toPoint()
+            item = self.itemAt(pos)
+            if item is not None and self._is_row_draggable(item):
+                self._row_press = (pos, item)
+        super().mousePressEvent(event)  # plain click still selects the row
+
+    def mouseMoveEvent(self, event):
+        if self._row_press is not None and (event.buttons() & Qt.MouseButton.LeftButton):
+            pos, item = self._row_press
+            if (event.position().toPoint() - pos).manhattanLength() < QApplication.startDragDistance():
+                return  # still a click: no rubber band
+            self._row_press = None
+            self.start_row_drag(item)
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._row_press = None
+        super().mouseReleaseEvent(event)
+
+    def _show_drop_marker(self, pos):
+        item = self.itemAt(pos)
+        if item is None:
+            self.drop_marker.hide()
+            return
+        r = self.visualItemRect(item)
+        y = r.top() if pos.y() < r.center().y() else r.bottom()
+        self.drop_marker.setGeometry(0, y - 1, self.viewport().width(), 2)
+        self.drop_marker.show()
+        self.drop_marker.raise_()
+
+    def _queue_drop_allowed(self, event) -> bool:
         is_child = (bytes(event.mimeData().data("application/x-dbibackend-drag-kind")) == b"child")
         parent_path_str = bytes(event.mimeData().data("application/x-dbibackend-drag-parent")).decode('utf-8', errors='ignore') if is_child else ""
         target_item = self.itemAt(event.position().toPoint())
 
         if is_child:
             if not target_item or not target_item.parent():
-                event.ignore()
-                return
+                return False
             tgt_parent_path = target_item.parent().data(5, FILE_PATH_ROLE) or ""
             if tgt_parent_path != parent_path_str:
-                event.ignore()
-                return
+                return False
             status_code = target_item.data(4, Qt.ItemDataRole.UserRole) or 0
-            if status_code in (1, 2):
-                event.ignore()
-                return
+            return status_code not in (1, 2)
+        if target_item:
+            top_item = target_item if target_item.parent() is None else target_item.parent()
+            status_code = top_item.data(4, Qt.ItemDataRole.UserRole) or 0
+            return status_code not in (1, 2)
+        return True
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
             event.acceptProposedAction()
+            return
+        if not event.mimeData().hasFormat(ROW_DRAG_MIME):
+            super().dragMoveEvent(event)
+            return
+        if self._queue_drop_allowed(event):
+            event.acceptProposedAction()
+            self._show_drop_marker(event.position().toPoint())
         else:
-            if target_item:
-                top_item = target_item if target_item.parent() is None else target_item.parent()
-                status_code = top_item.data(4, Qt.ItemDataRole.UserRole) or 0
-                if status_code in (1, 2):
-                    event.ignore()
-                    return
-            event.acceptProposedAction()
+            event.ignore()
+            self.drop_marker.hide()
+
+    def dragLeaveEvent(self, event):
+        self.drop_marker.hide()
+        super().dragLeaveEvent(event)
 
     def dropEvent(self, event):
+        self.drop_marker.hide()
         if event.mimeData().hasUrls():
             win = self.window()
             if hasattr(win, 'dropEvent'):
