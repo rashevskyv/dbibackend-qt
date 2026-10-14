@@ -1,6 +1,19 @@
 # Walkthrough
 
-Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.5**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.7**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+
+## 2.9.7 — release analyser (phase 1 of smart release install)
+
+- **New `src/release_analyzer.py`** (pure logic, no Qt, not wired into the UI yet): reads a dropped folder or archive and finds games (base, updates, DLC joined by the title ID in the file name), ports (NRO folders, `switch/` trees), port data (`switch.7z`, `English version/`, `Russian ROM.7z`), LayeredFS mods (`atmosphere/contents|titles/<TID>`, bare `<TID>/romfs`), and what to skip (emulators, firmware, keys, `.exe`, unfinished downloads, unknown archives).
+- **Mod update rule:** an update NSP in a mod folder belongs to that mod and to add-on mods below it. With the mod chosen, `plan()` installs that update instead of the release's newer one; two chosen mods that need different updates are a conflict.
+- **Defaults (`default_choice`)**, used by MTP later and to pre-tick the dialog: port files without a language, plus the UI language, else English; a port's only data is kept even in another language; "Optional" archives are off; a mod is on only when the game has exactly one.
+- Archives are listed with 7-Zip (`7z l -slt`); without 7-Zip they are reported as unreadable.
+- CLI for checking real releases: `python -m src.release_analyzer <folder>` (`HUB_LANG=uk|ru|en`).
+- Verification: pytest 118 passed (21 new in `tests/test_release_analyzer.py`, layouts copied from real releases). All 113 releases in `D:\Downloads\switch` scanned with no error; open cases: Donkey Kong Country Trilogy (3 ports in one `switch/`) goes to shared files, Dragon Quest XI font `.pak` zip has no SD path.
+
+## 2.9.6 — overall total ignores header reads of unticked files
+
+- `src/usb_handler.py`: the console reads headers of every listed file to plan the queue; reads of unticked files no longer add to the overall install total. Test: `tests/test_usb_range.py::test_header_read_of_unticked_file_keeps_overall_total`.
 
 ## 2.9.5 — install queue: drag rows, sort by column header
 
