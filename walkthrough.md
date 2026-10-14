@@ -1,6 +1,12 @@
 # Walkthrough
 
-Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.7**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.8**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+
+## 2.9.8 — analyser defaults: mismatched and downloading mods
+
+- A lone mod made for a title ID that is not in the release is no longer chosen by default; `plan()` reports it as a conflict to confirm. A chosen option with a file still downloading is a conflict too.
+- A file still downloading marks only its own folder unit. Before, a `.!qB` at the release root marked every root-level option (port data, `switch.7z`) as incomplete.
+- Verification: pytest 119 passed (2 new tests). Scan of 113 releases: the only change is Metroid Prime's mod, now marked incomplete.
 
 ## 2.9.7 — release analyser (phase 1 of smart release install)
 

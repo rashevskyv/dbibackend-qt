@@ -218,9 +218,18 @@ def analyze(paths: Sequence[str], list_archive: Optional[ListArchive] = None) ->
         kind, tids = _classify(ufiles)
         name = _basename(root) or 'SD card files'
         options.append(Option(root or '.', name, kind, root, ufiles, tids=tids, lang=detect_lang(name)))
-    partial = [p for p, why in rel.skipped if why == 'download not finished']
+    # a file still downloading marks only the folder unit it belongs to, not its neighbours
+    partial_roots = set()
+    for p, why in rel.skipped:
+        if why != 'download not finished':
+            continue
+        parts = p.split('/')
+        sd = _sd_split(parts)
+        if sd:
+            partial_roots.add('/'.join(parts[:sd[0]]))
+        partial_roots.update(d for d in port_dirs if d and _is_under(p, d))
     for o in options:
-        o.incomplete = any(_is_under(p, o.home) for p in partial)
+        o.incomplete = o.home in partial_roots
     port_names = {dst.split('/')[1].lower() for o in options if o.kind == 'port'
                   for _, dst in o.files if dst.lower().startswith('switch/') and dst.count('/') >= 2}
 
@@ -343,8 +352,9 @@ def default_choice(game: Game, lang: str = 'en') -> Set[str]:
     """Option keys to install when nobody asks the user (MTP) and to pre-tick in the dialog.
     Ports and their files: every option without a language in its name ("Optional ..." left out),
     plus the ones in `lang`, else in English, else (when nothing untagged is there) the first
-    language found (a port's only data must not be left out); an untagged option whose files the chosen language set writes in full is
-    dropped. Mods: only when the game has exactly one."""
+    language found (a port's only data must not be left out); an untagged option whose files
+    the chosen language set writes in full is dropped. Mods: only when the game has exactly one
+    and its title ID matches. Options still downloading are never chosen."""
     files = [o for o in game.options if o.kind != 'mod' and not o.incomplete]
     untagged = [o for o in files if o.lang is None and 'optional' not in o.name.lower()]
     tagged = [o for o in files if o.lang is not None]
@@ -355,7 +365,7 @@ def default_choice(game: Game, lang: str = 'en') -> Set[str]:
     chosen = {o.key for o in untagged if not (pick and {d.lower() for _, d in o.files} <= covered)}
     chosen.update(o.key for o in pick)
     mods = [o for o in game.options if o.kind == 'mod']
-    if len(mods) == 1 and not mods[0].incomplete:
+    if len(mods) == 1 and not mods[0].incomplete and not mods[0].tid_mismatch:
         chosen.add(mods[0].key)
     return chosen
 
@@ -368,6 +378,11 @@ def plan(game: Game, chosen: Set[str]) -> Plan:
     if len(mod_updates) > 1:
         names = ', '.join(o.name for o in picked if o.updates)
         conflicts.append(f'mods need different updates ({names}): choose one')
+    for o in picked:
+        if o.incomplete:
+            conflicts.append(f'{o.name}: a file is still downloading')
+        if o.tid_mismatch:
+            conflicts.append(f'{o.name}: made for another title ID, confirm it')
     packages = [game.base] if game.base else []
     if mod_updates:
         packages.append(mod_updates[min(mod_updates)])

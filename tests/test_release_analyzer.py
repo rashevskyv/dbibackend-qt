@@ -197,9 +197,11 @@ def test_mod_for_a_game_not_in_the_release():
     assert rel.skipped[0][1] == 'download not finished'
 
 
-def test_mod_tid_mismatch_is_flagged():
+def test_mod_tid_mismatch_is_flagged_and_not_chosen():
     g = only_game(analyze([BASE, 'Mod/atmosphere/contents/0100000000001000/romfs/a']))
-    assert g.options[0].tid_mismatch
+    m = g.options[0]
+    assert m.tid_mismatch and default_choice(g) == set()
+    assert plan(g, {m.key}).conflicts
 
 
 def test_several_ports_in_one_folder_are_shared():
@@ -239,3 +241,12 @@ def test_mod_still_downloading_is_not_chosen():
     g = only_game(analyze([BASE, 'Mod/atmosphere/contents/0100B7C00933A000/romfs/a',
                            'Mod/atmosphere/contents/0100B7C00933A000/romfs/b.pak.!qB']))
     assert g.options[0].incomplete and default_choice(g) == set()
+
+
+def test_download_at_release_root_does_not_block_port_files():
+    # NFSU2 with a DLC still downloading next to the port data
+    g = only_game(analyze(['P [03DB1E5631154000][v0].nsp', 'P [03DB1E5631155001][v0].nsp.!qB',
+                           'Homebrew/switch/p/p.nro', 'switch.7z'],
+                          archives({'switch.7z': ['switch/p/data.bin']})))
+    assert not any(o.incomplete for o in g.options)
+    assert default_choice(g) == {'Homebrew', 'switch.7z'}
