@@ -159,5 +159,25 @@ def test_missing_file_answers_zero_size_and_keeps_link():
     assert struct.unpack('<4sIII', written[1]) == (b'DBI0', 1, 2, 0)
 
 
+def test_header_read_of_unticked_file_keeps_overall_total():
+    """The console reads headers of unticked files to plan the queue; they must not grow the overall total."""
+    app = QCoreApplication.instance() or QCoreApplication([])
+    with tempfile.TemporaryDirectory() as d:
+        ticked, unticked = Path(d) / 'a.nsp', Path(d) / 'b.nsp'
+        ticked.write_bytes(b'X' * 1000)
+        unticked.write_bytes(b'Y' * 5000)
+        handler = USBHandler({ticked.name: ticked, unticked.name: unticked}, initial_checked={ticked.name})
+        handler.is_running = True
+        req_header = struct.pack('<IQI', 16, 0, len(unticked.name)) + unticked.name.encode('utf-8')
+        handler.in_ep = FakeInEp([req_header, b'\x00' * 16])
+        handler.out_ep = FakeOutEp()
+        try:
+            handler.process_file_range_command(len(req_header))
+        finally:
+            if handler.cached_file_handle:
+                handler.cached_file_handle.close()
+        assert handler.progress_tracker.total_requested_size == 1000
+
+
 if __name__ == '__main__':
     main()

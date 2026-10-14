@@ -520,8 +520,13 @@ class USBHandler(QThread):
         is_metadata = range_size < dbi_protocol.METADATA_THRESHOLD
         
         if is_metadata:
-            self.progress_tracker.register_file_request(name)
-        elif not is_metadata:
+            # The console reads headers of every listed file (SPHQ sends unticked ones too)
+            # to plan the queue; only ticked files count toward the overall total.
+            with self._lock:
+                selected = name in self._selected_files
+            if selected:
+                self.progress_tracker.register_file_request(name)
+        else:
             if not self.installation_started:
                 self.installation_started = True
                 requested = list(self.progress_tracker.requested_files)
