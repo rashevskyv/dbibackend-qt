@@ -27,6 +27,8 @@ def test_package_names():
     assert parse_package('Upd [0100A3D008C5C800][v786432].nsp').kind == 'update'
     assert parse_package('Port [01909cd6d76c0000].nsp').kind == 'base'
     assert parse_package('Taiko DLC.nsp').tid is None
+    # Simpsons Russian port stub: a random title ID that ends in D99 is a base, not a DLC
+    assert parse_package('Simpsons [05ab6d81a77b6d99].nsp').kind == 'base'
 
 
 def test_base_update_dlc():
@@ -173,6 +175,12 @@ def test_addon_mods_inherit_the_main_mod_update_and_bare_tid_folders():
     ], archives({f'{mod}/atmosphere.zip': ['atmosphere/contents/0100B7C00933A000/romfs/t.bin']})))
     addon = opt(g, 'Addon - English Voiceover')
     assert addon.lang == 'en' and [u.version for u in addon.updates] == [131072]
+    main = opt(g, mod)
+    assert addon.parent == main.key and main.parent is None
+    assert default_choice(g) == {main.key}   # one main mod; add-ons stay off
+    assert plan(g, {addon.key}).conflicts     # an add-on without its mod
+    both = plan(g, {main.key, addon.key})
+    assert both.conflicts == [] and both.sd_files[-1][0] is addon   # add-on copied last
     scripts = opt(g, 'Modified scripts')
     assert scripts.files[0][1] == 'atmosphere/contents/0100B7C00933A000/romfs/s.bin'
     assert [u.version for u in scripts.updates] == [131072]
@@ -181,6 +189,9 @@ def test_addon_mods_inherit_the_main_mod_update_and_bare_tid_folders():
 def test_old_titles_path_and_exefs_nsp_port():
     g = only_game(analyze([BASE, 'Mod/atmosphere/titles/0100B7C00933A000/romfs/a']))
     assert g.options[0].kind == 'mod' and g.options[0].tids == {TID}
+    # Yakuza Kiwami: an .nro inside the game's romfs does not make the mod a port
+    g = only_game(analyze([BASE, 'Mod/atmosphere/contents/0100B7C00933A000/romfs/module/m.nro']))
+    assert g.options[0].kind == 'mod'
     # N.O.V.A. 3: exefs.nsp under atmosphere/contents is an SD file, not a package to install
     g = only_game(analyze(['NOVA [0570F3D9B545F000][v0].nsp',
                            'Homebrew (1.0.1)/atmosphere/contents/0570F3D9B545F000/exefs.nsp',
@@ -209,7 +220,20 @@ def test_several_ports_in_one_folder_are_shared():
     rel = analyze(['DKC 1 [03DB1DA917792000][v0].nsp', 'DKC 2 [03DB1CAB43D78000][v0].nsp',
                    'switch/dkc1/dkc1.nro', 'switch/dkc2/dkc2.nro'])
     assert len(rel.games) == 2 and all(not g.options for g in rel.games)
-    assert [o.kind for o in rel.orphans] == ['port']
+    assert [(o.name, o.kind) for o in rel.orphans] == [('dkc1', 'port'), ('dkc2', 'port')]
+    assert rel.orphans[1].files == [('switch/dkc2/dkc2.nro', 'switch/dkc2/dkc2.nro')]
+
+
+def test_archive_with_a_replacement_file_for_the_mod():
+    # DQ XI: better_russian_font_...zip holds another pakchunk0-Switch_p.pak for the mod beside it
+    mod = 'Russian Language Mod'
+    pak = 'atmosphere/contents/0100B7C00933A000/romfs/JackGame/Content/Paks/pakchunk0-Switch_p.pak'
+    zip_ = f'{mod}/better_russian_font_pakchunk0-Switch_p.pak_duckbill.zip'
+    g = only_game(analyze([BASE, f'{mod}/{pak}', zip_], archives({zip_: ['pakchunk0-Switch_p.pak']})))
+    font = opt(g, 'better_russian_font_pakchunk0-Switch_p.pak_duckbill')
+    assert font.files == [('pakchunk0-Switch_p.pak', pak)] and font.parent == mod
+    assert default_choice(g) == {mod}
+    assert plan(g, {mod, font.key}).sd_files == [(font, 'pakchunk0-Switch_p.pak', pak)]
 
 
 def test_skipped_and_unknown():
@@ -250,3 +274,15 @@ def test_download_at_release_root_does_not_block_port_files():
                           archives({'switch.7z': ['switch/p/data.bin']})))
     assert not any(o.incomplete for o in g.options)
     assert default_choice(g) == {'Homebrew', 'switch.7z'}
+
+
+def test_port_mods_with_the_same_files_are_alternatives():
+    # Simpsons: two Russian voice mods for the port write the same files
+    g = only_game(analyze(['S [05ab6d81a77b6d99].nsp', 'switch/simpsons/simpsons.nro',
+                           'Russian Voice Mod (PC_Bkmz)/switch/simpsons/dialog.rcf',
+                           'Russian Voice Mod (PS2_Vector)/switch/simpsons/dialog.rcf']))
+    assert default_choice(g, 'ru') == {'.'}
+    one = only_game(analyze(['S [05ab6d81a77b6d99].nsp', 'switch/simpsons/simpsons.nro',
+                             'Russian Voice Mod (PC_Bkmz)/switch/simpsons/dialog.rcf']))
+    assert default_choice(one, 'ru') == {'.', 'Russian Voice Mod (PC_Bkmz)'}
+    assert default_choice(one, 'uk') == {'.'}

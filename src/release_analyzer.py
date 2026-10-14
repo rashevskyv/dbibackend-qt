@@ -33,6 +33,7 @@ _HEX16 = re.compile(r'^[0-9A-Fa-f]{16}$')
 _TID = re.compile(r'(?<![0-9A-Fa-f])([0-9A-Fa-f]{16})(?![0-9A-Fa-f])')
 _VERSION = re.compile(r'[\[\]]v(0x[0-9A-Fa-f]+|\d+)\]')
 _SKIP_NAME = re.compile(r'firmware|(?<![a-z])keys?(?![a-z])|switchemu', re.I)
+_MOD_WORD = re.compile(r'(?<![a-z])mod(?![a-z])', re.I)
 _MOD_TID = re.compile(r'^atmosphere/(?:contents|titles)/([0-9A-Fa-f]{16})/', re.I)
 _LANGS = (
     ('ru', re.compile(r'(?<![a-z])rus|рус')),
@@ -55,7 +56,10 @@ class Package:
         if self.tid is None:
             return 'unknown'
         low = self.tid & 0xFFF
-        return 'base' if low == 0 else 'update' if low == 0x800 else 'dlc'
+        if low == 0x800:
+            return 'update'
+        # DLC ends in 001..7FF; any other ending is a homebrew stub with a random title ID
+        return 'dlc' if 0 < low < 0x800 else 'base'
 
     @property
     def game_tid(self) -> Optional[int]:
@@ -83,6 +87,7 @@ class Option:
     lang: Optional[str] = None
     tid_mismatch: bool = False    # mod for a TID that is not in this release, joined by folder
     incomplete: bool = False      # a file in its folder is still downloading
+    parent: Optional[str] = None  # add-on: key of the mod it needs (Phoenix Wright 'Addon - ...')
 
 
 @dataclass
@@ -163,7 +168,8 @@ def _classify(files: List[Tuple[str, str]]) -> Tuple[str, Set[int]]:
     tids = set()
     has_nro = False
     for _, dst in files:
-        if dst.lower().endswith('.nro'):
+        # a game's romfs holds .nro modules too (Yakuza Kiwami); a port's NRO lives under switch/
+        if dst.lower().endswith('.nro') and dst.lower().startswith('switch/'):
             has_nro = True
         m = _MOD_TID.match(dst)
         if m:
@@ -232,6 +238,12 @@ def analyze(paths: Sequence[str], list_archive: Optional[ListArchive] = None) ->
         o.incomplete = o.home in partial_roots
     port_names = {dst.split('/')[1].lower() for o in options if o.kind == 'port'
                   for _, dst in o.files if dst.lower().startswith('switch/') and dst.count('/') >= 2}
+    # a mod's file names by folder: an archive of bare files with the same names replaces them
+    mod_names: Dict[str, Dict[str, str]] = {}
+    for o in options:
+        if o.kind == 'mod':
+            for _, dst in o.files:
+                mod_names.setdefault(o.home, {})[_basename(dst).lower()] = dst
 
     for a in archives:
         members = list_archive(a) if list_archive else None
@@ -251,6 +263,9 @@ def analyze(paths: Sequence[str], list_archive: Optional[ListArchive] = None) ->
                 afiles.append((m, sd[1]))
             elif len(parts) > 1 and parts[0].lower() in port_names:
                 afiles.append((m, 'switch/' + m))   # dusk/texture_replacements/... for the dusk port
+            elif parts[-1].lower() in mod_names.get(_parent(a), {}):
+                # DQ XI: better_russian_font_...zip holds another pakchunk0-Switch_p.pak for the mod
+                afiles.append((m, mod_names[_parent(a)][parts[-1].lower()]))
         if not afiles:
             rel.skipped.append((a, bad or 'unknown layout'))
             continue
@@ -259,6 +274,15 @@ def analyze(paths: Sequence[str], list_archive: Optional[ListArchive] = None) ->
         stem = _basename(a).rsplit('.', 1)[0]
         options.append(Option(a, stem, kind, home, afiles, archive=a, tids=tids,
                               lang=detect_lang(stem) or detect_lang(_basename(home))))
+
+    for o in options:
+        if o.kind != 'mod':
+            continue
+        above = [x for x in options if x.kind == 'mod' and x is not o and (
+            (x.home != o.home and _is_under(o.home, x.home)) or
+            (x.home == o.home and x.archive is None and o.archive is not None))]
+        if above:
+            o.parent = max(above, key=lambda x: len(x.home)).key
 
     # an update in a mod's folder belongs to that mod and to the add-on mods in folders below it
     by_game: Dict[int, Game] = {}
@@ -287,7 +311,7 @@ def analyze(paths: Sequence[str], list_archive: Optional[ListArchive] = None) ->
     # several archives in one mod folder: name them by file; a lone archive takes the folder name
     for o in options:
         if o.archive and o.home not in base_dirs and o.home and \
-                sum(1 for x in options if x.archive and x.home == o.home) == 1:
+                sum(1 for x in options if x.home == o.home) == 1:
             o.name = _basename(o.home)
             o.lang = o.lang or detect_lang(o.name)
 
@@ -307,15 +331,17 @@ def analyze(paths: Sequence[str], list_archive: Optional[ListArchive] = None) ->
                 g.options.append(_for_game(o, g, len(o.tids) > 1))
             continue
         if near is None:
-            rel.orphans.append(o)   # files for several games in one folder: the dialog asks
+            # files for several games in one folder (Donkey Kong Country 1-3): one option per
+            # switch/<port>/ folder; MTP copies all of them, the dialog asks which
+            rel.orphans.extend(_split_ports(o))
             continue
         if o.kind == 'mod':
             o.tid_mismatch = True
         near.options.append(o)
 
     for g in games:
-        # copy order: untagged files first, then English, then other languages; mods last
-        g.options.sort(key=lambda o: (o.kind == 'mod', o.lang is not None, o.lang != 'en',
+        # copy order: untagged files first, then English, then other languages; mods, then add-ons last
+        g.options.sort(key=lambda o: (o.kind == 'mod', o.parent is not None, o.lang is not None, o.lang != 'en',
                                       KIND_ORDER[o.kind], o.key))
         g.updates.sort(key=lambda p: p.version)
     rel.games = games
@@ -331,7 +357,20 @@ def _for_game(o: Option, g: Game, shared: bool) -> Option:
     files = [(s, d) for s, d in o.files
              if not (_MOD_TID.match(d) and int(_MOD_TID.match(d).group(1), 16) in other)]
     return Option(o.key, o.name, o.kind, o.home, files, o.archive, {g.tid},
-                  [u for u in o.updates if u.game_tid == g.tid], o.lang)
+                  [u for u in o.updates if u.game_tid == g.tid], o.lang, parent=o.parent)
+
+
+def _split_ports(o: Option) -> List[Option]:
+    groups: Dict[str, List[Tuple[str, str]]] = {}
+    for src, dst in o.files:
+        parts = dst.split('/')
+        top = '/'.join(parts[:2]) if parts[0].lower() == 'switch' and len(parts) > 2 else ''
+        groups.setdefault(top, []).append((src, dst))
+    if len(groups) < 2 or '' in groups:
+        return [o]
+    return [Option(f'{o.key}::{top}', top.split('/')[1], o.kind if any(d.lower().endswith('.nro') for _, d in f) else 'data',
+                   o.home, f, o.archive, lang=o.lang, incomplete=o.incomplete)
+            for top, f in sorted(groups.items())]
 
 
 def _nearest(games: List[Game], home: str) -> Optional[Game]:
@@ -354,8 +393,11 @@ def default_choice(game: Game, lang: str = 'en') -> Set[str]:
     plus the ones in `lang`, else in English, else (when nothing untagged is there) the first
     language found (a port's only data must not be left out); an untagged option whose files
     the chosen language set writes in full is dropped. Mods: only when the game has exactly one
-    and its title ID matches. Options still downloading are never chosen."""
+    and its title ID matches; add-ons stay off. Options still downloading are never chosen."""
     files = [o for o in game.options if o.kind != 'mod' and not o.incomplete]
+    # port files named "... Mod" (Simpsons voice mods) are alternatives, like LayeredFS mods
+    named = [o for o in files if _MOD_WORD.search(o.name)]
+    files = [o for o in files if o not in named]
     untagged = [o for o in files if o.lang is None and 'optional' not in o.name.lower()]
     tagged = [o for o in files if o.lang is not None]
     pick = [o for o in tagged if o.lang == lang] or [o for o in tagged if o.lang == 'en']
@@ -364,7 +406,10 @@ def default_choice(game: Game, lang: str = 'en') -> Set[str]:
     covered = {d.lower() for o in pick for _, d in o.files}
     chosen = {o.key for o in untagged if not (pick and {d.lower() for _, d in o.files} <= covered)}
     chosen.update(o.key for o in pick)
-    mods = [o for o in game.options if o.kind == 'mod']
+    langs = {lang, 'en', None} if not any(o.lang == lang for o in named) else {lang, None}
+    if len(named) == 1 and named[0].lang in langs:
+        chosen.add(named[0].key)
+    mods = [o for o in game.options if o.kind == 'mod' and o.parent is None]
     if len(mods) == 1 and not mods[0].incomplete and not mods[0].tid_mismatch:
         chosen.add(mods[0].key)
     return chosen
@@ -383,6 +428,9 @@ def plan(game: Game, chosen: Set[str]) -> Plan:
             conflicts.append(f'{o.name}: a file is still downloading')
         if o.tid_mismatch:
             conflicts.append(f'{o.name}: made for another title ID, confirm it')
+        if o.parent and o.parent not in chosen:
+            need = next((x.name for x in game.options if x.key == o.parent), o.parent)
+            conflicts.append(f'{o.name}: an add-on, needs {need}')
     packages = [game.base] if game.base else []
     if mod_updates:
         packages.append(mod_updates[min(mod_updates)])
@@ -470,12 +518,12 @@ def describe(release: Release, lang: str = 'en') -> str:
                              ''.join(f' +update v{u.version >> 16}' for u in o.updates),
                              ' TID MISMATCH' if o.tid_mismatch else '',
                              ' INCOMPLETE' if o.incomplete else ''])
-            lines.append(f'  {mark}{o.kind:<7} {o.name}  ({len(o.files)} files){extra}')
+            lines.append(f'  {mark}{"addon" if o.parent else o.kind:<7} {o.name}  ({len(o.files)} files){extra}')
         p = plan(g, default)
         for c in p.conflicts:
             lines.append(f'  ! {c}')
     for o in release.orphans:
-        lines.append(f'? {o.kind} without a game: {o.key}')
+        lines.append(f'+ shared {o.kind} (any game of the release): {o.name}')
     for u in release.unknown:
         lines.append(f'? no title ID in the name: {u}')
     for path, why in release.skipped:

@@ -1,6 +1,16 @@
 # Walkthrough
 
-Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.8**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.9**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+
+## 2.9.9 — analyser: mod add-ons, file replacements, homebrew stubs
+
+- **Add-ons:** a mod in a folder below another mod (Phoenix Wright "Addon - ...") gets `parent`. Add-ons are off by default, are copied after their mod, and `plan()` reports an add-on chosen without its mod.
+- **Replacement files:** an archive of bare files whose names match files of the mod beside it is an add-on that replaces them (DQ XI `better_russian_font_pakchunk0-Switch_p.pak_duckbill.zip` → the mod's `romfs/JackGame/Content/Paks/pakchunk0-Switch_p.pak`). Before, it was skipped as an unknown layout.
+- **Homebrew stub TIDs:** a title ID ending outside 000/800/001–7FF is a base (Simpsons Russian stub `...6d99` was read as a DLC).
+- **Port files named "... Mod"** (Simpsons voice mods) follow the mod rule: on only when there is one.
+- **Ports:** an `.nro` counts only under `switch/`; the `.nro` modules in Yakuza Kiwami's romfs made its mod a port.
+- **Several ports in one `switch/`** (Donkey Kong Country 1–3): one shared option per `switch/<port>/` folder.
+- Verification: pytest 121 passed. Scan of 113 releases: only the cases above changed.
 
 ## 2.9.8 — analyser defaults: mismatched and downloading mods
 
