@@ -24,6 +24,7 @@ nul
 presets/*.bak*
 presets/client2.dbi
 presets/like.dbi
+reports/
 
 # Virtual environments
 venv/
