@@ -1,6 +1,11 @@
 # Walkthrough
 
-Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.11**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.12**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+
+## 2.9.12 — bundle rows target the microSD
+
+- A release's microSD bundle row gets the "SD Card" target, so the Hub's queue plan books its size on the microSD.
+- Verification: pytest 133 passed.
 
 ## 2.9.11 — microSD files of a release go as one tar per option
 

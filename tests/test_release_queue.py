@@ -50,6 +50,7 @@ def test_release_add_edit_and_preset(monkeypatch, tmp_path):
     with fm.file_list[bundle].open('rb') as f:   # what the USB handler serves
         assert f.read(512)[:len('atmosphere/')] in (b'atmosphere/', b'./PaxHeade')
     assert fm.file_list[bundle].stat().st_size % 512 == 0
+    assert fm.file_targets[bundle] == 1   # SD card
 
     assert release_queue.can_edit(fm, folder.resolve())
     monkeypatch.setattr(ReleaseDialog, 'ask', lambda rel, choice, *a, **kw: (ReleaseDialog.SMART, {TID: set(), 0: set()}))

@@ -12,6 +12,7 @@ from . import release_bundle
 from . import release_choice as rc
 from .release_analyzer import scan_path
 from .release_dialog import ReleaseDialog
+from .dbi_protocol import TARGET_SD
 
 ADDED, PLAIN, SKIP = 'added', 'plain', 'skip'
 
@@ -27,7 +28,10 @@ def _apply(fm, folder: Path, rel, choice) -> None:
     rec = q.folders[folder]
     rec.release, rec.choice = rel, choice
     # packages first, so each game is on the console before its files reach the microSD
-    q.set_folder_files(folder, rc.packages(rel, choice, folder) + release_bundle.bundles(rel, choice, folder))
+    bundles = release_bundle.bundles(rel, choice, folder)
+    q.set_folder_files(folder, rc.packages(rel, choice, folder) + bundles)
+    for b in bundles:   # the Hub books microSD space for them
+        q.files[b].target = fm.file_targets[b.name] = TARGET_SD
 
 
 def offer(fm, folder: Path) -> Optional[str]:
