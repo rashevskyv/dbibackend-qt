@@ -123,6 +123,10 @@ class QueueManager:
                 self.files.pop(old, None)
         folder_rec.files = []
         self.add_folder_hierarchical(folder_path, keep)
+        for p in keep:   # a microSD bundle with the same name may now hold other files
+            rec = self.files.get(p)
+            if rec and rec.folder_path == folder_path:
+                rec.path, rec.size = p, p.stat().st_size
 
     def remove_path(self, path: Path):
         """Remove a file or folder (and its child files) from the queue."""

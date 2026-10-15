@@ -44,8 +44,12 @@ def test_release_add_edit_and_preset(monkeypatch, tmp_path):
     monkeypatch.setattr(ReleaseDialog, 'ask', fake_ask)
     monkeypatch.setattr(FolderModeDialog, 'ask_mode', lambda *a, **kw: (_ for _ in ()).throw(AssertionError('old dialog')))
     fm.ingest_paths([folder])
-    # one mod: ticked by default, so its update replaces the newer one
-    assert names(fm, folder) == [BASE, UPD2]
+    # one mod: ticked by default, so its update replaces the newer one; its files follow as one tar
+    bundle = f'Game - {MOD}.kefir-sd.tar'
+    assert names(fm, folder) == [BASE, UPD2, bundle]
+    with fm.file_list[bundle].open('rb') as f:   # what the USB handler serves
+        assert f.read(512)[:len('atmosphere/')] in (b'atmosphere/', b'./PaxHeade')
+    assert fm.file_list[bundle].stat().st_size % 512 == 0
 
     assert release_queue.can_edit(fm, folder.resolve())
     monkeypatch.setattr(ReleaseDialog, 'ask', lambda rel, choice, *a, **kw: (ReleaseDialog.SMART, {TID: set(), 0: set()}))

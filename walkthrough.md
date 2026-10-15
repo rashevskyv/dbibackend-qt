@@ -1,6 +1,13 @@
 # Walkthrough
 
-Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.10**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.11**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+
+## 2.9.11 — microSD files of a release go as one tar per option
+
+- **Bundles:** each chosen port, port-files or mod option becomes one queue row `<game> - <option>.kefir-sd.tar` after the game's packages. The tar is made on the fly from the release (`src/release_bundle.py`, `BundlePath`): loose files are members at their microSD path; an archive goes as is under `.kefir/`, after a `.kefir/rules` member with prefix rules (archive path → microSD path, never an empty prefix, so the archive's readme stays out). Nothing is copied on the PC; PAX headers keep long and Cyrillic names.
+- **USB:** `FILE_RANGE` opens queue paths with `Path.open`, so a bundle serves its tar. HTTP and FTP modes drop bundles.
+- **Needs Kefir Hub 0.14.100+.** An older Hub fails the analysis of a bundle row and goes on with the queue.
+- Verification: pytest 133 passed (new `test_release_bundle.py`: tar read back in random chunk sizes, rules). Not checked on the console yet.
 
 ## 2.9.10 — release dialog: choose ports, translations and mods per game
 

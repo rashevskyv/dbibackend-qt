@@ -8,6 +8,7 @@ from typing import Optional
 
 from PyQt6.QtCore import QLocale
 
+from . import release_bundle
 from . import release_choice as rc
 from .release_analyzer import scan_path
 from .release_dialog import ReleaseDialog
@@ -25,7 +26,8 @@ def _apply(fm, folder: Path, rel, choice) -> None:
     q.add_folder_hierarchical(folder, [])
     rec = q.folders[folder]
     rec.release, rec.choice = rel, choice
-    q.set_folder_files(folder, rc.packages(rel, choice, folder))
+    # packages first, so each game is on the console before its files reach the microSD
+    q.set_folder_files(folder, rc.packages(rel, choice, folder) + release_bundle.bundles(rel, choice, folder))
 
 
 def offer(fm, folder: Path) -> Optional[str]:
@@ -45,7 +47,8 @@ def offer(fm, folder: Path) -> Optional[str]:
     _apply(fm, base.resolve(), rel, choice)
     sd = rc.sd_file_count(rel, choice)
     if sd:
-        fm.main_window.log('info', f'{folder.name}: {sd} file(s) for the microSD ({rc.summary(rel, choice)})')
+        fm.main_window.log('info', f'{folder.name}: {sd} file(s) for the microSD ({rc.summary(rel, choice)}); '
+                                   'USB only, Kefir Hub 0.14.100 or newer')
     return ADDED
 
 

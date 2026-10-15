@@ -16,6 +16,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 from . import dbi_protocol
 from .progress_tracker import ProgressTracker
+from .release_bundle import BundlePath
 
 
 class NetworkTransferHandler(QThread):
@@ -33,6 +34,8 @@ class NetworkTransferHandler(QThread):
 
     def __init__(self, file_list: Dict[str, Path], port: int, display_ip: Optional[str] = None):
         super().__init__()
+        # microSD bundles of a release need the Hub's USB receiver; HTTP/FTP clients would try to install them
+        file_list = {n: p for n, p in file_list.items() if not isinstance(p, BundlePath)}
         self.file_list = file_list
         self.port = port
         self.display_ip = display_ip or self.get_local_ip()

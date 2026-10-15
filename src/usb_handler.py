@@ -500,7 +500,7 @@ class USBHandler(QThread):
                 if self.cached_file_handle:
                     self.cached_file_handle.close()
                 self.cached_file_handle = None
-                self.cached_file_handle = open(path, 'rb')
+                self.cached_file_handle = path.open('rb')   # a BundlePath gives its tar
                 self.cached_file_path = path
         except OSError as e:
             # A file moved or deleted after it was queued. Answer with size 0: the
@@ -555,7 +555,7 @@ class USBHandler(QThread):
             if self.cached_file_path != path:
                 if self.cached_file_handle:
                     self.cached_file_handle.close()
-                self.cached_file_handle = open(path, 'rb')
+                self.cached_file_handle = path.open('rb')   # a BundlePath gives its tar
                 self.cached_file_path = path
 
             f = self.cached_file_handle
