@@ -19,7 +19,8 @@ from . import __version__
 from .taskbar_manager import TaskbarManager
 from .config_manager import ConfigManager
 from .theme_manager import ThemeManager
-from .widgets import CustomSplitter, CustomSplitterHandle
+from .widgets import CustomSplitter, CustomSplitterHandle, FILE_PATH_ROLE, IS_FOLDER_ROLE
+from . import release_queue
 from .ui_manager import UIManager
 from .file_operations import FileManager
 from .server_operations import ServerManager
@@ -269,6 +270,12 @@ class MainWindow(QMainWindow):
             menu.addSeparator()
             act_retry = menu.addAction(f"Retry ({len(retry)})" if len(retry) > 1 else "Retry")
             act_retry.triggered.connect(lambda: self.server_manager.session.retry(retry))
+
+        folder = Path(item.data(5, FILE_PATH_ROLE)) if item and item.data(0, IS_FOLDER_ROLE) else None
+        if folder and release_queue.can_edit(self.file_manager, folder):
+            menu.addSeparator()
+            act_release = menu.addAction("Choose What to Install...")
+            act_release.triggered.connect(lambda: release_queue.edit(self.file_manager, folder))
 
         menu.addSeparator()
         act_next = menu.addAction("Set as Next in Queue")

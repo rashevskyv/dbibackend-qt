@@ -4,7 +4,7 @@ Tracks folders, files, selections, and detects duplicate base name collisions.
 """
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 
 SUPPORTED_EXTENSIONS = {'.nsp', '.nsz', '.xci', '.xcz'}
@@ -41,6 +41,8 @@ class FolderRecord:
     checked: bool = True
     status: str = "Queued"
     status_code: int = STATUS_QUEUED
+    release: Any = None   # release_analyzer.Release when added through the release dialog
+    choice: Dict[int, Set[str]] = field(default_factory=dict)   # release_choice.Choice
 
 class QueueManager:
     """Manages queue state, folder hierarchy, explicit ordering, and name collision detection."""
@@ -111,6 +113,16 @@ class QueueManager:
                 self.files[c_res] = rec
                 added += 1
         return added
+
+    def set_folder_files(self, folder_path: Path, child_paths: List[Path]) -> None:
+        """Replace a folder's packages (a new release choice); rows that stay keep their state."""
+        folder_rec = self.folders[folder_path]
+        keep = [p.resolve() for p in child_paths]
+        for old in folder_rec.files:
+            if old not in keep:
+                self.files.pop(old, None)
+        folder_rec.files = []
+        self.add_folder_hierarchical(folder_path, keep)
 
     def remove_path(self, path: Path):
         """Remove a file or folder (and its child files) from the queue."""

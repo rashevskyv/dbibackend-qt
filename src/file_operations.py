@@ -16,6 +16,7 @@ from .widgets import (
 )
 from .utility_functions import format_size
 from .folder_dialog import FolderModeDialog
+from . import release_queue
 from .queue_manager import (
     QueueManager, SUPPORTED_EXTENSIONS, STATUS_QUEUED,
     STATUS_PROCESS, STATUS_DONE, STATUS_FAILED, STATUS_SKIPPED
@@ -83,12 +84,18 @@ class FileManager:
                 if self.is_supported_file(path):
                     added_files += self.queue.add_flat_files([path])
             elif path.is_dir():
+                release = release_queue.offer(self, path)
+                if release == release_queue.ADDED:
+                    added_folders += 1
+                    continue
+                if release == release_queue.SKIP:
+                    continue
                 found_files = self.queue.scan_folder(path, self.SUPPORTED_EXTENSIONS)
                 if not found_files:
                     self.main_window.log('warning', f'No supported files found in folder: {path.name}')
                     continue
 
-                chosen_mode = batch_folder_mode
+                chosen_mode = FolderModeDialog.MODE_FOLDER if release == release_queue.PLAIN else batch_folder_mode
                 if chosen_mode is None:
                     mode, apply_all = FolderModeDialog.ask_mode(path.name, self.main_window)
                     if mode is None:

@@ -286,3 +286,14 @@ def test_port_mods_with_the_same_files_are_alternatives():
                              'Russian Voice Mod (PC_Bkmz)/switch/simpsons/dialog.rcf']))
     assert default_choice(one, 'ru') == {'.', 'Russian Voice Mod (PC_Bkmz)'}
     assert default_choice(one, 'uk') == {'.'}
+
+
+def test_port_update_layer_is_ticked_and_copied_last():
+    # Simpsons Hit & Run: the English archive holds the same files as the newer "Homebrew Update"
+    g = only_game(analyze([
+        'Port [018fcc923d8d0000].nsp', 'switch (v0.4 Stable) [ENG].7z', 'Homebrew Update (v0.6.1)/switch/simpsons/simpsons.nro',
+    ], archives({'switch (v0.4 Stable) [ENG].7z': ['switch/simpsons/simpsons.nro', 'switch/simpsons/data/a.rcf']})))
+    upd = opt(g, 'Homebrew Update (v0.6.1)')
+    assert upd.key in default_choice(g)
+    p = plan(g, default_choice(g))
+    assert p.sd_files[-1][0] is upd   # copied over the older archive, not under it

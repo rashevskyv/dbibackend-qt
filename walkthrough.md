@@ -1,6 +1,15 @@
 # Walkthrough
 
-Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.9**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.10**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+
+## 2.9.10 — release dialog: choose ports, translations and mods per game
+
+- **Add dialog:** a dropped folder with ports, port files or mods opens "Choose what to install" instead of the folder-mode question: one block per game, a tick box per option, pre-ticked by `default_choice` in the PC's UI language. Shared ports (Donkey Kong Country `switch/dkc1..3`) are all ticked; the user unticks. Ticking an add-on ticks its mod; unticking a mod drops its add-ons. Conflicts (two mods that need different updates, a mod for another title ID) are shown under the list. "Only packages" adds the folder the old way. A folder with only packages still gets the old question.
+- **Queue row:** the folder holds the packages the choice needs (a mod's own update replaces the newer one). "Choose What to Install..." in the row's menu changes it until a package of the folder starts.
+- **Presets and resume:** `releases` maps each release folder to its choice per title ID; on load the folder is analysed again and unknown keys are dropped.
+- **Analyser:** an option named "Update"/"Updated" (Simpsons "Homebrew Update (v0.6.1)") is ticked and copied after the port files; before, the older English archive dropped it.
+- Not yet: the files for the microSD are not sent (phase 3). The log shows how many there would be.
+- Verification: pytest 131 passed (new `test_release_choice.py`, `test_release_queue.py`). Dialog rendered for 13 real releases. Scan of 129 releases: only Simpsons changed.
 
 ## 2.9.9 — analyser: mod add-ons, file replacements, homebrew stubs
 

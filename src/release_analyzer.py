@@ -34,6 +34,8 @@ _TID = re.compile(r'(?<![0-9A-Fa-f])([0-9A-Fa-f]{16})(?![0-9A-Fa-f])')
 _VERSION = re.compile(r'[\[\]]v(0x[0-9A-Fa-f]+|\d+)\]')
 _SKIP_NAME = re.compile(r'firmware|(?<![a-z])keys?(?![a-z])|switchemu', re.I)
 _MOD_WORD = re.compile(r'(?<![a-z])mod(?![a-z])', re.I)
+# "Homebrew Update (v0.6.1)", "Updated videos": a later layer over the port, copied last
+_UPDATE_WORD = re.compile(r'(?<![a-z])updat', re.I)
 _MOD_TID = re.compile(r'^atmosphere/(?:contents|titles)/([0-9A-Fa-f]{16})/', re.I)
 _LANGS = (
     ('ru', re.compile(r'(?<![a-z])rus|рус')),
@@ -340,9 +342,9 @@ def analyze(paths: Sequence[str], list_archive: Optional[ListArchive] = None) ->
         near.options.append(o)
 
     for g in games:
-        # copy order: untagged files first, then English, then other languages; mods, then add-ons last
-        g.options.sort(key=lambda o: (o.kind == 'mod', o.parent is not None, o.lang is not None, o.lang != 'en',
-                                      KIND_ORDER[o.kind], o.key))
+        # copy order: untagged files first, then English, then other languages, then "Update" layers; mods, then add-ons last
+        g.options.sort(key=lambda o: (o.kind == 'mod', o.parent is not None, bool(_UPDATE_WORD.search(o.name)),
+                                      o.lang is not None, o.lang != 'en', KIND_ORDER[o.kind], o.key))
         g.updates.sort(key=lambda p: p.version)
     rel.games = games
     return rel
@@ -404,7 +406,8 @@ def default_choice(game: Game, lang: str = 'en') -> Set[str]:
     if not pick and tagged and not any(o.kind == 'data' for o in untagged):
         pick = [o for o in tagged if o.lang == tagged[0].lang]
     covered = {d.lower() for o in pick for _, d in o.files}
-    chosen = {o.key for o in untagged if not (pick and {d.lower() for _, d in o.files} <= covered)}
+    chosen = {o.key for o in untagged
+              if _UPDATE_WORD.search(o.name) or not (pick and {d.lower() for _, d in o.files} <= covered)}
     chosen.update(o.key for o in pick)
     langs = {lang, 'en', None} if not any(o.lang == lang for o in named) else {lang, None}
     if len(named) == 1 and named[0].lang in langs:

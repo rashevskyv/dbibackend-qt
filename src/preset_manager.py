@@ -11,6 +11,8 @@ from datetime import datetime
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
 from PyQt6.QtCore import Qt
 
+from . import release_queue
+
 
 class PresetManager:
     """Manages preset file loading/saving and batch script generation."""
@@ -92,7 +94,8 @@ class PresetManager:
         return data
 
     def _blob(self, name: str) -> dict:
-        return {"name": name, "created_at": datetime.now().isoformat(), "files": self._files()}
+        return {"name": name, "created_at": datetime.now().isoformat(), "files": self._files(),
+                "releases": release_queue.to_preset(self.file_manager)}
 
     # Resume after a crash, power loss, reboot or a console that fell asleep:
     # the live queue is mirrored to resume.dbi. Installed rows are unchecked by
@@ -103,13 +106,15 @@ class PresetManager:
 
     def autosave(self):
         files = self._files()
-        if files == getattr(self, '_last_autosave', None):
+        releases = release_queue.to_preset(self.file_manager)
+        if (files, releases) == getattr(self, '_last_autosave', None):
             return
         tmp = self.resume_path.with_suffix('.tmp')
         try:
-            tmp.write_text(json.dumps({"name": "resume", "created_at": datetime.now().isoformat(), "files": files}, indent=2), encoding='utf-8')
+            tmp.write_text(json.dumps({"name": "resume", "created_at": datetime.now().isoformat(), "files": files,
+                                       "releases": releases}, indent=2), encoding='utf-8')
             tmp.replace(self.resume_path)  # atomic: a power cut never leaves half a file
-            self._last_autosave = files
+            self._last_autosave = (files, releases)
         except OSError as e:
             print(f'[resume] autosave failed: {e}')
 
@@ -160,6 +165,7 @@ class PresetManager:
                     target = entry.get("target", 0)
                     rec.target = target if target in (0, 1, 2) else 0
                     fm.file_targets[rec.name] = rec.target
+                release_queue.restore(fm, d.get("releases") if isinstance(d, dict) else None)
                 fm.queue.recompute_conflicts()
                 fm.update_file_list()
                 fm.preset_loaded = True
