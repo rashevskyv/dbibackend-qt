@@ -1,6 +1,12 @@
 # Walkthrough
 
-Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.12**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+Журнал змін за версіями, найновіші зверху. Поточна версія — **2.9.13**. Усі зміни перевірені лише локально (pytest, `compileall`); на фізичному Switch нічого не перевірено.
+
+## 2.9.13 — release dialog: no Add while the choice cannot be installed
+
+- "Add"/"Save" is off while two ticked mods of one game need different updates or a ticked option is still downloading (rule 4 of the plan); its tooltip says why. A mod for another title ID stays a warning.
+- Checked on the console with Kefir Hub 0.14.100–0.14.102 over USB: DKC (3 stubs + 3 port bundles, 6/6), Phoenix Wright zip mod (201 MB, 460 files extracted), Pokemon S/V mod bundles (1049 files per game, ~50 files/s), Backpack Hero base + v6, then the mod with its v2 (v6 replaced, mod files written).
+- Verification: pytest 133 passed.
 
 ## 2.9.12 — bundle rows target the microSD
 

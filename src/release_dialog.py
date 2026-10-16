@@ -73,10 +73,10 @@ class ReleaseDialog(QDialog):
             plain.setToolTip('Add the folder as before: every package, nothing copied to the microSD')
             plain.clicked.connect(lambda: self._done(self.PLAIN))
             buttons.addWidget(plain)
-        ok = QPushButton('Add' if allow_plain else 'Save')
-        ok.setDefault(True)
-        ok.clicked.connect(lambda: self._done(self.SMART))
-        buttons.addWidget(ok)
+        self.ok = QPushButton('Add' if allow_plain else 'Save')
+        self.ok.setDefault(True)
+        self.ok.clicked.connect(lambda: self._done(self.SMART))
+        buttons.addWidget(self.ok)
         layout.addLayout(buttons)
         self._refresh()
 
@@ -137,6 +137,9 @@ class ReleaseDialog(QDialog):
         sd = rc.sd_file_count(self.rel, self.choice)
         lines = [f'{sd} file(s) to the microSD.'] + [f"<span style='color:#e0a000'>⚠ {escape(p)}</span>" for p in problems]
         self.warn.setText('<br>'.join(lines))
+        stop = rc.blocking(self.rel, self.choice)
+        self.ok.setEnabled(not stop)
+        self.ok.setToolTip('Untick one of the mods that need different updates, or a download that is not finished' if stop else '')
 
     def _on_changed(self, item: QTreeWidgetItem, column: int):
         if self._sync or column != 0 or item.data(0, KEY_ROLE) is None:

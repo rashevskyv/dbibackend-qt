@@ -67,6 +67,16 @@ def conflicts(rel: Release, choice: Choice) -> List[str]:
     return out
 
 
+def blocking(rel: Release, choice: Choice) -> bool:
+    """The choice cannot be installed: two mods of a game need different updates, or a ticked option
+    is still downloading. A mod for another title ID is only a warning: the user may mean it."""
+    for tid, opts in [(g.tid, g.options) for g in rel.games] + [(ORPHANS, rel.orphans)]:
+        picked = [o for o in opts if o.key in choice.get(tid, set())]
+        if len({u.version for o in picked for u in o.updates}) > 1 or any(o.incomplete for o in picked):
+            return True
+    return False
+
+
 def summary(rel: Release, choice: Choice) -> str:
     """Short text for the queue row, e.g. 'port, mod: Russian translation'."""
     names = [o.name for g in rel.games for o in g.options if o.key in choice.get(g.tid, set())]

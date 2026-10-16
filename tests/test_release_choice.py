@@ -71,6 +71,9 @@ def test_two_mods_with_different_updates_is_a_conflict():
     rc.toggle(rel, choice, TID, 'A', True)
     rc.toggle(rel, choice, TID, 'B', True)
     assert len(rc.conflicts(rel, choice)) == 1 and rc.conflicts(rel, choice)[0].startswith('Game: ')
+    assert rc.blocking(rel, choice)
+    rc.toggle(rel, choice, TID, 'B', False)
+    assert not rc.blocking(rel, choice)
 
 
 def test_preset_round_trip_drops_unknown_keys():
