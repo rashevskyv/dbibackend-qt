@@ -2,7 +2,7 @@
 
 **DBI Backend Qt** is a modern, feature-rich graphical user interface (GUI) for the **DBI** installer (Nintendo Switch). Built with Python 3 and PyQt6, this tool provides a superior alternative to traditional CLI backends, offering an advanced file queue, visual feedback, and deep OS integration.
 
-![Version](https://img.shields.io/badge/version-2.9.9-blue)
+![Version](https://img.shields.io/badge/version-2.9.15-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -34,6 +34,7 @@
 *   **USB Backend:** Direct installation via USB cable using the MTP/DBI protocol. High-speed and reliable. Supports only Switch game files (`.nsp`, `.nsz`, `.xci`, `.xcz`). Features unique byte-range interval tracking to avoid duplicating progress when ranges are re-requested.
     *   **Automatic MTP Handoff:** If the Switch is connected in MTP mode while the USB server is waiting, the backend writes a trigger to the SD card via Windows Shell COM. Kefir Hub 0.14.038+ detects it and offers to switch seamlessly to PC Install (USB). If declined, it avoids re-prompting.
     *   **Auto-Connect on Cable Plug-in:** Optional auto-start detects when the Switch appears in install mode on the USB cable and begins communication automatically without manual clicks.
+    *   **Stop after installation:** When the console ends the USB session, the server releases USB and enables mode switching. The session report stays visible. Auto-start stays off for that connection; start the server manually for another session or reconnect the cable.
 *   **HTTP Server:** Turns your PC into a local network repository. Use the "Install from HTTP" menu in DBI to install games over Wi-Fi or LAN. Supports adding any folders (as virtual directories) and files of any type.
 *   **FTP Server:** Serves your files over a local FTP server. Use the "Install from FTP" network source in DBI or any standard FTP client (like FileZilla). Supports adding folders and files of any type.
 

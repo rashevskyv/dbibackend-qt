@@ -166,6 +166,7 @@ def main():
         fm.update_file_status(f3, '')
         sm.on_transfer_complete(f1)
         sm.on_all_transfers_complete()
+        assert sm.usb_handler is fake_usb, "Keep the USB worker owned until its finished signal"
         assert f3 not in sm.completed_files_set
         assert sm.transfer_stats['completed_files'] == 1
         assert win.current_progress.value() < 100, "Current progress must not be 100 on incomplete session"

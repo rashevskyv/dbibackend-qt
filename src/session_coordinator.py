@@ -623,14 +623,14 @@ class SessionCoordinator:
         if hibernating:
             self.main_window.log('info', f"Session complete (Time: {time_taken}). Inactivity monitor active.")
 
-        for attr in ('usb_handler', 'http_handler', 'ftp_handler'):
-            h = getattr(self.server_manager, attr)
-            if h:
-                self.last_activity_time = getattr(h, 'last_activity_time', None) or time.time()
-                self.has_communicated = True
-                setattr(self.server_manager, attr, None)
-
-        self.server_manager._set_server_ui_state(False)
+        handler = (
+            self.server_manager.usb_handler
+            or self.server_manager.http_handler
+            or self.server_manager.ftp_handler
+        )
+        if handler:
+            self.last_activity_time = getattr(handler, 'last_activity_time', None) or time.time()
+            self.has_communicated = True
 
     def write_report(self, handler, show: bool):
         """Write the session report to reports/ and the log; show it unless the PC is

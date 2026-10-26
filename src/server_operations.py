@@ -189,6 +189,7 @@ class ServerManager:
 
     # USB Server Lifecycle
     def start_usb_server(self):
+        self._auto_start_armed = False
         checked_files = self.get_checked_files()
         self.session.prepare_session_start(len(checked_files))
         if not checked_files:
