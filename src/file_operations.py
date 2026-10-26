@@ -260,6 +260,17 @@ class FileManager:
                 self.item_map[rec.name] = item
             self.path_to_item[file_path] = item
 
+        tree = self.main_window.file_tree
+        control_width = tree.columnWidth(0)
+        items = [(tree.topLevelItem(i), 0) for i in range(tree.topLevelItemCount())]
+        while items:
+            item, depth = items.pop()
+            widget = tree.itemWidget(item, 0)
+            if widget is not None:
+                control_width = max(control_width, widget.sizeHint().width() + (depth + 1) * tree.indentation())
+            items.extend((item.child(i), depth + 1) for i in range(item.childCount()))
+        tree.setColumnWidth(0, control_width)
+
         self.file_list = self.queue.get_transfer_file_list()
         self.file_targets = {
             rec.name: rec.target for rec in self.queue.files.values() if not rec.in_conflict

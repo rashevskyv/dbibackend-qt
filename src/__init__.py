@@ -6,5 +6,5 @@ Bump ``__version__`` here when releasing; the title bar, About dialog,
 and dynamic status strings read from this single source of truth.
 """
 
-__version__ = "2.9.13"
+__version__ = "2.9.14"
 __all__ = ["__version__"]
