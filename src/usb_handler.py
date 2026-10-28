@@ -16,6 +16,7 @@ import usb.core
 import usb.util
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from .release_bundle import BundlePath
 from . import dbi_protocol
 from .progress_tracker import ProgressTracker
 from .usb_driver import usb_backends, find_and_reset_switch
@@ -544,7 +545,10 @@ class USBHandler(QThread):
                 # Force the next progress emit even if the throttle window
                 # hasn't elapsed so the UI flips to the new file immediately.
                 self._last_progress_emit = 0.0
-                self.log_message.emit('info', f'Sending: {name}')
+                if isinstance(path, BundlePath):
+                    self.log_message.emit('info', f'Packing and sending: {name} (tar made on the fly; the console shows no percent)')
+                else:
+                    self.log_message.emit('info', f'Sending: {name}')
 
         # --- Data Transfer (Optimized with caching) ---
         range_bytes_sent = 0

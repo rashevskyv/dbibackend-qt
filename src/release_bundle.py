@@ -43,7 +43,8 @@ def archive_rules(files: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
 
 class _Reader:
     def __init__(self, bundle: 'BundlePath'):
-        self.b, self.pos, self.handles = bundle, 0, {}
+        self.b, self.pos = bundle, 0
+        self.cur = None   # (path, handle) of the one file open now: thousands of members must not stay open
 
     def seek(self, off: int, whence: int = 0):
         self.pos = off if whence == 0 else self.pos + off if whence == 1 else self.b.size + off
@@ -62,17 +63,24 @@ class _Reader:
             elif data is None:
                 out += bytes(take)   # tar padding and the end blocks
             else:
-                f = self.handles.get(data) or self.handles.setdefault(data, open(data, 'rb'))
+                f = self._open(data)
                 f.seek(rel)
                 chunk = f.read(take)
                 out += chunk + bytes(take - len(chunk))   # a file that shrank: keep the layout
             self.pos += take
         return bytes(out)
 
+    def _open(self, path: str):
+        if self.cur and self.cur[0] == path:
+            return self.cur[1]
+        self.close()
+        self.cur = (path, open(path, 'rb'))
+        return self.cur[1]
+
     def close(self):
-        for f in self.handles.values():
-            f.close()
-        self.handles.clear()
+        if self.cur:
+            self.cur[1].close()
+            self.cur = None
 
     def __enter__(self):
         return self
