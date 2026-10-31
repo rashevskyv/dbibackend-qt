@@ -139,6 +139,10 @@ class PresetManager:
                 with open(path, 'r', encoding='utf-8') as f:
                     d = json.load(f)
                 raw_files = d["files"] if (isinstance(d, dict) and "files" in d and isinstance(d["files"], list)) else []
+                releases = d.get("releases") if isinstance(d, dict) else None
+                # rows of a smart preset game: their folder row is named after the game, not a real folder
+                game_rows = {Path(k).resolve() for k, v in releases.items()
+                             if isinstance(v, dict) and '_source' in v} if isinstance(releases, dict) else set()
                 fm = self.file_manager
                 fm.clear_file_list()
                 for entry in raw_files:
@@ -151,12 +155,16 @@ class PresetManager:
                     if not p.exists():
                         continue
                     p = p.resolve()
+                    if isinstance(entry.get("game"), str) and p.is_dir():
+                        # smart entry {"path": library folder, "game": "Animal Crossing"}
+                        release_queue.add_game(fm, p, entry["game"])
+                        continue
                     if p.is_dir():
                         fm.queue.add_folder_hierarchical(p, fm.queue.scan_folder(p))
                         continue
                     folder_value = entry.get("folder")
                     folder = Path(folder_value).resolve() if folder_value else None
-                    if folder and folder.is_dir() and p.is_relative_to(folder):
+                    if folder and (folder in game_rows or folder.is_dir() and p.is_relative_to(folder)):
                         fm.queue.add_folder_hierarchical(folder, [p])
                     else:
                         fm.queue.add_flat_files([p])
@@ -165,7 +173,7 @@ class PresetManager:
                     target = entry.get("target", 0)
                     rec.target = target if target in (0, 1, 2) else 0
                     fm.file_targets[rec.name] = rec.target
-                release_queue.restore(fm, d.get("releases") if isinstance(d, dict) else None)
+                release_queue.restore(fm, releases)
                 fm.queue.recompute_conflicts()
                 fm.update_file_list()
                 fm.preset_loaded = True

@@ -9,11 +9,11 @@ from typing import Optional
 import threading
 
 from PyQt6.QtCore import QLocale, Qt
-from PyQt6.QtWidgets import QApplication, QProgressDialog
+from PyQt6.QtWidgets import QApplication, QInputDialog, QProgressDialog
 
 from . import release_bundle
 from . import release_choice as rc
-from .release_analyzer import scan_path
+from .release_analyzer import match_paths, scan_path, skip_for_preset
 from .release_dialog import ReleaseDialog
 from .dbi_protocol import TARGET_SD
 
@@ -48,14 +48,18 @@ def _make_bundles(fm, rel, choice, folder: Path) -> list:
     return out[0] if out else []
 
 
-def _apply(fm, folder: Path, rel, choice) -> None:
+def _apply(fm, folder: Path, rel, choice, source: Optional[dict] = None) -> None:
     q = fm.queue
     q.add_folder_hierarchical(folder, [])
     rec = q.folders[folder]
     rec.release, rec.choice = rel, choice
+    if source:
+        rec.source = source
+    # a smart preset row is named after the game; its files live in the library folder
+    base = Path(rec.source['path']) if rec.source else folder
     # packages first, so each game is on the console before its files reach the microSD
-    bundles = _make_bundles(fm, rel, choice, folder)
-    q.set_folder_files(folder, rc.packages(rel, choice, folder) + bundles)
+    bundles = _make_bundles(fm, rel, choice, base)
+    q.set_folder_files(folder, rc.packages(rel, choice, base) + bundles)
     for b in bundles:   # the Hub books microSD space for them
         q.files[b].target = fm.file_targets[b.name] = TARGET_SD
 
@@ -100,8 +104,57 @@ def edit(fm, folder: Path) -> None:
     fm.update_file_list()
 
 
+def add_game(fm, library: Path, game: str, saved: Optional[dict] = None) -> None:
+    """Smart preset entry {"path": library folder, "game": name}: every file of the game found
+    in the library (see release_analyzer.match_paths). Several bases or repacks: ask which one;
+    mods or translations: the release dialog. `saved` (a saved preset, resume) asks nothing."""
+    skip = saved['_source'].get('skip', []) if saved else None
+
+    def select(paths):
+        nonlocal skip
+        paths = match_paths(paths, game)
+        if skip is None:
+            skip = skip_for_preset(paths, lambda title, names: _ask_base(fm, title, names))
+            if skip is None:
+                return []
+        return [p for p in paths if p not in skip]
+
+    try:
+        base, rel = scan_path(library, select=select)
+    except OSError as e:
+        fm.main_window.log('warning', f'Could not search {library} for {game}: {e}')
+        return
+    if skip is None:
+        return   # the user cancelled the base choice
+    if not rel.games and not rel.unknown:
+        fm.main_window.log('warning', f'Preset: nothing named "{game}" in {library}')
+        return
+    if saved:
+        choice = rc.from_preset(rel, saved, ui_lang())
+    elif rc.is_smart(rel):
+        mode, choice = ReleaseDialog.ask(rel, rc.defaults(rel, ui_lang()), game, fm.main_window, allow_plain=False)
+        if mode is None:
+            return
+    else:
+        choice = rc.defaults(rel, ui_lang())
+    _apply(fm, (base / game).resolve(), rel, choice,
+           {'path': str(base.resolve()), 'game': game, 'skip': sorted(skip)})
+
+
+def _ask_base(fm, title: str, names: list) -> Optional[int]:
+    item, ok = QInputDialog.getItem(fm.main_window, 'Choose a base',
+                                    f'{title}: several bases. Which one to install?', names, 0, False)
+    return names.index(item) if ok else None
+
+
 def to_preset(fm) -> dict:
-    return {str(p): rc.to_preset(r.choice) for p, r in fm.queue.folders.items() if r.release}
+    out = {}
+    for p, r in fm.queue.folders.items():
+        if r.release:
+            out[str(p)] = rc.to_preset(r.choice)
+            if r.source:   # rc.from_preset skips keys that are not title IDs
+                out[str(p)]['_source'] = r.source
+    return out
 
 
 def restore(fm, data) -> None:
@@ -109,6 +162,10 @@ def restore(fm, data) -> None:
     if not isinstance(data, dict):
         return
     for path_str, saved in data.items():
+        source = saved.get('_source') if isinstance(saved, dict) else None
+        if isinstance(source, dict) and Path(source.get('path', '')).is_dir() and source.get('game'):
+            add_game(fm, Path(source['path']), source['game'], saved)
+            continue
         folder = Path(path_str)
         if not folder.is_dir():
             continue

@@ -57,6 +57,7 @@
 *   **Custom Format:** Save your carefully selected file lists, including their checkbox states, targets, and folder structures, into `.dbi` files.
 *   **Shell Integration:** Supports "Open With..." — double-click any `.dbi` file in Windows Explorer to load your preset directly into the app.
 *   **Quick Access:** A dedicated "Presets" menu for rapid switching between different game sets.
+*   **Smart entries:** `{"path": "G:\\games", "game": "Animal Crossing"}` in `files` adds every file of that game found in the folder (name match, case and punctuation ignored, plus files with its title ID). Newest update by default; a repack (`REPACK`, `B+U` in the name) replaces the base and the updates; several bases or repacks, or an update tagged with a language or `mod` (or two updates of the same version): the app asks which one; mod or translation folders: the release dialog asks. A short name matches every title that contains it ("Bayonetta" adds 1, 2, 3 and Origins).
 
 ### 🎨 Modern UI & UX
 *   **Theming:** Includes **Light**, **Dark**, and **Auto** modes (automatically syncs with Windows system theme).

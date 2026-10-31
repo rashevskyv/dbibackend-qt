@@ -43,6 +43,7 @@ class FolderRecord:
     status_code: int = STATUS_QUEUED
     release: Any = None   # release_analyzer.Release when added through the release dialog
     choice: Dict[int, Set[str]] = field(default_factory=dict)   # release_choice.Choice
+    source: Optional[dict] = None   # smart preset: {"path": library, "game": name, "skip": [...]}
 
 class QueueManager:
     """Manages queue state, folder hierarchy, explicit ordering, and name collision detection."""

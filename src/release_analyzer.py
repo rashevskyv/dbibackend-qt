@@ -475,17 +475,93 @@ def parse_7z_listing(text: str) -> List[str]:
     return out
 
 
-def scan_path(path: Path, seven_zip: Optional[str] = None) -> Tuple[Path, Release]:
+def _norm(s: str) -> str:
+    return re.sub(r'[\W_]+', '', s.lower())
+
+
+def match_paths(paths: Sequence[str], game: str) -> List[str]:
+    """One game's paths in a library folder (smart preset): every path with `game` in a file or
+    folder name (case, spaces and punctuation ignored), plus every path that names a title ID of
+    a matched package (a DLC with another name, a mod in atmosphere/contents/<TID>/)."""
+    q = _norm(game)
+    if not q:
+        return []
+    norm = [p.replace('\\', '/') for p in paths]
+    hit = [p for p in norm if any(q in _norm(c) for c in p.split('/'))]
+    tids = {parse_package(p).game_tid for p in hit if p.lower().endswith(PACKAGE_EXT)} - {None}
+    seen = set(hit)
+    hit += [p for p in norm if p not in seen and
+            any(Package('', int(t, 16)).game_tid in tids for t in _TID.findall(p))]
+    return hit
+
+
+# "[UKR+REPACK]", "[RePack + Uv2228224 + 3DLC]", "[B+U1114112]": base, update and often a
+# translation in one file
+_REPACK = re.compile(r'repack|(?<![a-z])b\s*\+\s*u', re.I)
+
+
+def _tags(name: str) -> str:
+    """Text in [...] and (...) of a file name: "Rush" in a title is no Russian tag."""
+    return ' '.join(re.findall(r'[\[(]([^\])]*)[\])]', name))
+
+
+def skip_for_preset(paths: Sequence[str], ask: Callable[[str, List[str]], Optional[int]]) -> Optional[List[str]]:
+    """Packages a smart preset leaves out. A game with a repack gets the repack and no other base
+    and no update; a repack that names DLC replaces the DLC files too. Several candidate bases, or
+    several updates when one is tagged with a language or "mod" or two share the newest version:
+    `ask(game name, paths)` picks the index; None from it cancels (returns None). Otherwise all
+    updates stay and the analysis takes the newest (or the one a chosen mod carries)."""
+    games: Dict[int, List[Package]] = {}
+    for p in paths:
+        if p.lower().endswith(PACKAGE_EXT):
+            pkg = parse_package(p)
+            if pkg.tid is not None:
+                games.setdefault(pkg.game_tid, []).append(pkg)
+    skip: List[str] = []
+    for tid, pkgs in games.items():
+        title = Game(tid, '', next((p for p in pkgs if p.kind == 'base'), pkgs[0])).name
+
+        def pick(cands: List[Package]) -> Optional[Package]:
+            if len(cands) == 1:
+                return cands[0]
+            i = ask(title, [c.path for c in cands])
+            return None if i is None else cands[i]
+
+        bases = sorted((p for p in pkgs if p.kind == 'base'), key=lambda p: p.path)
+        repacks = [b for b in bases if _REPACK.search(b.name)]
+        chosen = pick(repacks or bases) if bases else 0
+        if chosen is None:
+            return None
+        skip += [b.path for b in bases if b is not chosen]
+        if chosen in repacks:
+            skip += [p.path for p in pkgs if p.kind == 'update' or
+                     (p.kind == 'dlc' and 'dlc' in chosen.name.lower())]
+            continue
+        updates = sorted((p for p in pkgs if p.kind == 'update'), key=lambda p: (-p.version, p.path))
+        tagged = any(detect_lang(_tags(u.name)) or _MOD_WORD.search(_tags(u.name)) for u in updates)
+        if len(updates) > 1 and (tagged or updates[0].version == updates[1].version):
+            upd = pick(updates)
+            if upd is None:
+                return None
+            skip += [u.path for u in updates if u is not upd]
+    return skip
+
+
+def scan_path(path: Path, seven_zip: Optional[str] = None,
+              select: Optional[Callable[[List[str]], List[str]]] = None) -> Tuple[Path, Release]:
     """Analyse a dropped folder or archive. Returns (base folder, release); paths in
-    the release are relative to the base folder."""
+    the release are relative to the base folder. `select` filters the folder's paths
+    before the analysis (a smart preset keeps one game of a library)."""
     path = Path(path)
     seven_zip = seven_zip or find_7zip()
     if path.is_dir():
         base = path
-        paths = [str(p.relative_to(base)) for p in base.rglob('*') if p.is_file()]
+        paths = [str(p.relative_to(base)).replace('\\', '/') for p in base.rglob('*') if p.is_file()]
     else:
         base = path.parent
         paths = [path.name]
+    if select:
+        paths = select(paths)
 
     def list_archive(rel: str) -> Optional[List[str]]:
         if not seven_zip:
