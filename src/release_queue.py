@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import QApplication, QInputDialog, QProgressDialog
 
 from . import release_bundle
 from . import release_choice as rc
-from .release_analyzer import match_paths, scan_path, skip_for_preset
+from .release_analyzer import keep_parts, match_paths, scan_path, skip_for_preset
 from .release_dialog import ReleaseDialog
 from .dbi_protocol import TARGET_SD
 
@@ -104,17 +104,23 @@ def edit(fm, folder: Path) -> None:
     fm.update_file_list()
 
 
-def add_game(fm, library: Path, game: str, saved: Optional[dict] = None) -> None:
+def add_game(fm, library: Path, game: str, saved: Optional[dict] = None,
+             entry: Optional[dict] = None) -> Optional[Path]:
     """Smart preset entry {"path": library folder, "game": name}: every file of the game found
     in the library (see release_analyzer.match_paths). Several bases or repacks: ask which one;
-    mods or translations: the release dialog. `saved` (a saved preset, resume) asks nothing."""
-    skip = saved['_source'].get('skip', []) if saved else None
+    mods or translations: the release dialog. `saved` (a saved preset, resume) asks nothing.
+    An entry saved by the app also holds "tid", "parts" and "prefer" (PresetManager._smart):
+    it adds no mods and asks nothing while the saved files are still there. Returns the row key."""
+    src = saved['_source'] if saved else (entry or {})
+    skip = src.get('skip', []) if saved else None
+    tid = int(src['tid'], 16) if isinstance(src.get('tid'), str) else None
+    parts, prefer = src.get('parts'), src.get('prefer') or ()
 
     def select(paths):
         nonlocal skip
-        paths = match_paths(paths, game)
+        paths = keep_parts(match_paths(paths, game, tid), parts)
         if skip is None:
-            skip = skip_for_preset(paths, lambda title, names: _ask_base(fm, title, names))
+            skip = skip_for_preset(paths, lambda title, names: _ask_base(fm, title, names), prefer)
             if skip is None:
                 return []
         return [p for p in paths if p not in skip]
@@ -123,22 +129,26 @@ def add_game(fm, library: Path, game: str, saved: Optional[dict] = None) -> None
         base, rel = scan_path(library, select=select)
     except OSError as e:
         fm.main_window.log('warning', f'Could not search {library} for {game}: {e}')
-        return
+        return None
     if skip is None:
-        return   # the user cancelled the base choice
+        return None   # the user cancelled the base choice
     if not rel.games and not rel.unknown:
         fm.main_window.log('warning', f'Preset: nothing named "{game}" in {library}')
-        return
+        return None
     if saved:
         choice = rc.from_preset(rel, saved, ui_lang())
+    elif prefer:   # saved from plain package rows: no mods; the row action can add them
+        choice = {tid: set() for tid in [g.tid for g in rel.games] + [rc.ORPHANS]}
     elif rc.is_smart(rel):
         mode, choice = ReleaseDialog.ask(rel, rc.defaults(rel, ui_lang()), game, fm.main_window, allow_plain=False)
         if mode is None:
-            return
+            return None
     else:
         choice = rc.defaults(rel, ui_lang())
-    _apply(fm, (base / game).resolve(), rel, choice,
-           {'path': str(base.resolve()), 'game': game, 'skip': sorted(skip)})
+    key = (base / game).resolve()
+    _apply(fm, key, rel, choice, {'path': str(base.resolve()), 'game': game, 'skip': sorted(skip),
+                                  **{k: src[k] for k in ('tid', 'parts', 'prefer') if src.get(k)}})
+    return key
 
 
 def _ask_base(fm, title: str, names: list) -> Optional[int]:

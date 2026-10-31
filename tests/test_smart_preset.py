@@ -70,3 +70,50 @@ def test_smart_preset_newest_update_repack_and_resume(monkeypatch, tmp_path):
     fm.load_preset(pm.resume_path)
     assert queued(fm) == before
     assert len(fm.queue.folders) == 1 and not [p for p in fm.queue.order if p in fm.queue.files]
+
+
+def test_save_makes_games_smart(monkeypatch, tmp_path):
+    app = QApplication.instance() or QApplication(sys.argv)
+    lib = tmp_path / 'games'
+    lib.mkdir()
+    for n in LIB + ['Bayonetta [010076F0049A2000][v0].nsp', 'Bayonetta 2 [01007960049A0000][v0].nsp']:
+        (lib / n).write_bytes(b'x' * 64)
+    win = MainWindow()
+    fm = win.file_manager
+    saved = [LIB[0], LIB[1], LIB[3], LIB[5], 'Bayonetta [010076F0049A2000][v0].nsp']
+    fm.ingest_paths([lib / n for n in saved])
+    out = tmp_path / 's.dbi'
+    monkeypatch.setattr('src.preset_manager.QFileDialog.getSaveFileName', lambda *a, **kw: (str(out), ''))
+    monkeypatch.setattr(QInputDialog, 'getItem', lambda *a: (_ for _ in ()).throw(AssertionError('asked')))
+    fm.save_preset()
+    files = json.loads(out.read_text(encoding='utf-8'))['files']
+    assert [e['game'] for e in files] == ['Animal Crossing New Horizons', 'Animal Well', 'Bayonetta']
+    ac = files[0]
+    assert ac['tid'] == '01006F8002326000' and ac['parts'] == ['base', 'dlc', 'update']
+    assert ac['path'] == str(lib) and 'checked' not in ac
+
+    # same library: the newest update and the other DLC join; Bayonetta 2 does not
+    fm.load_preset(out)
+    assert queued(fm) == sorted([LIB[0], LIB[2], LIB[3], LIB[4], LIB[5], 'Bayonetta [010076F0049A2000][v0].nsp'])
+
+    # a repack appears: the saved clean base still wins, with its newest update
+    (lib / 'Animal Crossing [01006F8002326000][v262144][UKR+REPACK].nsp').write_bytes(b'x' * 64)
+    fm.load_preset(out)
+    assert LIB[0] in queued(fm) and LIB[2] in queued(fm)
+
+    # an unticked row keeps that game as files
+    fm.clear_file_list()
+    fm.ingest_paths([lib / LIB[0], lib / LIB[1]])
+    fm.queue.files[(lib / LIB[1]).resolve()].checked = False
+    fm.update_file_list()
+    fm.save_preset()
+    files = json.loads(out.read_text(encoding='utf-8'))['files']
+    assert [e['name'] for e in files] == [LIB[0], LIB[1]]
+
+
+def test_only_update_saved_adds_no_base():
+    assert match_paths(['B [0100A280121F6000][v0].nsp', 'B 2 [0100A280121F7000][v0].nsp'], 'B', 0x0100A280121F6000) \
+        == ['B [0100A280121F6000][v0].nsp']
+    from src.release_analyzer import keep_parts
+    assert keep_parts(['G [0100A280121F6000][v0].nsp', 'G [0100A280121F6800][v65536].nsp', 'x.nsp'], ['update']) \
+        == ['G [0100A280121F6800][v65536].nsp', 'x.nsp']

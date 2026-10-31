@@ -2,6 +2,8 @@
 Preset and Batch File Operations for DBI Backend.
 Handles saving and loading .dbi JSON presets and .bat batch export.
 """
+import os
+import re
 import sys
 import json
 from pathlib import Path
@@ -12,6 +14,7 @@ from PyQt6.QtWidgets import QFileDialog, QMessageBox
 from PyQt6.QtCore import Qt
 
 from . import release_queue
+from .release_analyzer import PACKAGE_EXT, Game, parse_package
 
 
 class PresetManager:
@@ -94,8 +97,47 @@ class PresetManager:
         return data
 
     def _blob(self, name: str) -> dict:
-        return {"name": name, "created_at": datetime.now().isoformat(), "files": self._files(),
+        return {"name": name, "created_at": datetime.now().isoformat(), "files": self._smart(self._files()),
                 "releases": release_queue.to_preset(self.file_manager)}
+
+    def _smart(self, files: list) -> list:
+        """A saved preset keeps games, not files: the package rows of one title ID become one entry
+        {"path": their folder, "game", "tid", "parts": kinds saved, "prefer": file names saved,
+        "target"}. Loaded later, it takes a newer update or new DLC from the folder and keeps the
+        saved base. Stay as files: rows without a title ID, rows of a release folder, games with an
+        unticked row, games spread over two drives."""
+        folders = self.file_manager.queue.folders
+        groups = {}
+        for e in files:
+            rec = folders.get(Path(e["folder"])) if e.get("folder") else None
+            pkg = parse_package(e["name"])
+            if pkg.tid is not None and not (rec and rec.release):
+                groups.setdefault(pkg.game_tid, []).append(e)
+        out, done = [], set()
+        for e in files:
+            pkg = parse_package(e["name"])
+            rows = groups.get(pkg.game_tid) if pkg.tid is not None else None
+            if not rows or e not in rows:
+                out.append(e)
+                continue
+            if pkg.game_tid in done:
+                continue
+            done.add(pkg.game_tid)
+            pkgs = [parse_package(r["name"]) for r in rows]
+            try:
+                path = os.path.commonpath([str(Path(r["path"]).parent) for r in rows])
+            except ValueError:
+                path = None
+            if not path or not all(r["checked"] for r in rows):
+                out += rows
+                continue
+            base = next((i for i, p in enumerate(pkgs) if p.kind == 'base'), 0)
+            # "AM2R_0100414d32524e00.nsp" -> "AM2R"
+            game = re.split(r'[\s_]*[0-9A-Fa-f]{16}', Game(pkg.game_tid, '', pkgs[base]).name)[0]
+            out.append({"path": path, "game": game.rsplit('.', 1)[0] if game.lower().endswith(PACKAGE_EXT) else game,
+                        "tid": f'{pkg.game_tid:016X}', "parts": sorted({p.kind for p in pkgs}),
+                        "prefer": [r["name"] for r in rows], "target": rows[base]["target"]})
+        return out
 
     # Resume after a crash, power loss, reboot or a console that fell asleep:
     # the live queue is mirrored to resume.dbi. Installed rows are unchecked by
@@ -157,7 +199,12 @@ class PresetManager:
                     p = p.resolve()
                     if isinstance(entry.get("game"), str) and p.is_dir():
                         # smart entry {"path": library folder, "game": "Animal Crossing"}
-                        release_queue.add_game(fm, p, entry["game"])
+                        key = release_queue.add_game(fm, p, entry["game"], entry=entry)
+                        target = entry.get("target", 0)
+                        if key and target in (1, 2):
+                            for f in fm.queue.folders[key].files:
+                                if f.suffix.lower() in PACKAGE_EXT:
+                                    fm.queue.files[f].target = fm.file_targets[f.name] = target
                         continue
                     if p.is_dir():
                         fm.queue.add_folder_hierarchical(p, fm.queue.scan_folder(p))

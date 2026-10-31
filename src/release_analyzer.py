@@ -479,20 +479,34 @@ def _norm(s: str) -> str:
     return re.sub(r'[\W_]+', '', s.lower())
 
 
-def match_paths(paths: Sequence[str], game: str) -> List[str]:
+def _game_tids(path: str) -> Set[int]:
+    return {Package('', int(t, 16)).game_tid for t in _TID.findall(path)}
+
+
+def match_paths(paths: Sequence[str], game: str, tid: Optional[int] = None) -> List[str]:
     """One game's paths in a library folder (smart preset): every path with `game` in a file or
     folder name (case, spaces and punctuation ignored), plus every path that names a title ID of
-    a matched package (a DLC with another name, a mod in atmosphere/contents/<TID>/)."""
+    a matched package (a DLC with another name, a mod in atmosphere/contents/<TID>/).
+    With `tid` (a saved preset) the game is that title: a name match that names another title ID
+    is left out, so "Bayonetta" does not pull Bayonetta 2."""
     q = _norm(game)
-    if not q:
-        return []
     norm = [p.replace('\\', '/') for p in paths]
-    hit = [p for p in norm if any(q in _norm(c) for c in p.split('/'))]
-    tids = {parse_package(p).game_tid for p in hit if p.lower().endswith(PACKAGE_EXT)} - {None}
-    seen = set(hit)
-    hit += [p for p in norm if p not in seen and
-            any(Package('', int(t, 16)).game_tid in tids for t in _TID.findall(p))]
-    return hit
+    named = [p for p in norm if q and any(q in _norm(c) for c in p.split('/'))]
+    if tid is not None:
+        seen = set(named)
+        return [p for p in norm if tid in _game_tids(p) or (p in seen and not _game_tids(p) - {tid})]
+    tids = {parse_package(p).game_tid for p in named if p.lower().endswith(PACKAGE_EXT)} - {None}
+    seen = set(named)
+    return named + [p for p in norm if p not in seen and _game_tids(p) & tids]
+
+
+def keep_parts(paths: Sequence[str], parts: Optional[Sequence[str]]) -> List[str]:
+    """Drop packages whose kind ('base', 'update', 'dlc') is not in `parts`: a preset saved with
+    only an update must not add the base. Packages without a title ID always stay."""
+    if not parts:
+        return list(paths)
+    return [p for p in paths if not p.lower().endswith(PACKAGE_EXT) or
+            parse_package(p).tid is None or parse_package(p).kind in parts]
 
 
 # "[UKR+REPACK]", "[RePack + Uv2228224 + 3DLC]", "[B+U1114112]": base, update and often a
@@ -505,12 +519,16 @@ def _tags(name: str) -> str:
     return ' '.join(re.findall(r'[\[(]([^\])]*)[\])]', name))
 
 
-def skip_for_preset(paths: Sequence[str], ask: Callable[[str, List[str]], Optional[int]]) -> Optional[List[str]]:
+def skip_for_preset(paths: Sequence[str], ask: Callable[[str, List[str]], Optional[int]],
+                    prefer: Sequence[str] = ()) -> Optional[List[str]]:
     """Packages a smart preset leaves out. A game with a repack gets the repack and no other base
     and no update; a repack that names DLC replaces the DLC files too. Several candidate bases, or
     several updates when one is tagged with a language or "mod" or two share the newest version:
     `ask(game name, paths)` picks the index; None from it cancels (returns None). Otherwise all
-    updates stay and the analysis takes the newest (or the one a chosen mod carries)."""
+    updates stay and the analysis takes the newest (or the one a chosen mod carries).
+    A file named in `prefer` (the files a saved preset held) wins without a question; a preferred
+    base that is no repack keeps the updates."""
+    prefer = set(prefer)
     games: Dict[int, List[Package]] = {}
     for p in paths:
         if p.lower().endswith(PACKAGE_EXT):
@@ -522,14 +540,16 @@ def skip_for_preset(paths: Sequence[str], ask: Callable[[str, List[str]], Option
         title = Game(tid, '', next((p for p in pkgs if p.kind == 'base'), pkgs[0])).name
 
         def pick(cands: List[Package]) -> Optional[Package]:
-            if len(cands) == 1:
-                return cands[0]
+            liked = [c for c in cands if c.name in prefer]
+            if len(cands) == 1 or liked:
+                return (liked or cands)[0]
             i = ask(title, [c.path for c in cands])
             return None if i is None else cands[i]
 
         bases = sorted((p for p in pkgs if p.kind == 'base'), key=lambda p: p.path)
         repacks = [b for b in bases if _REPACK.search(b.name)]
-        chosen = pick(repacks or bases) if bases else 0
+        liked = [b for b in bases if b.name in prefer]
+        chosen = liked[0] if liked else pick(repacks or bases) if bases else 0
         if chosen is None:
             return None
         skip += [b.path for b in bases if b is not chosen]
