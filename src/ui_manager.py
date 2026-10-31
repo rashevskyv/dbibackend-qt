@@ -98,6 +98,13 @@ class UIManager:
         delete_preset_action.triggered.connect(self.main_window.delete_preset)
         self.main_window.presets_menu.addAction(delete_preset_action)
 
+        # presets stay plain files; this loads each game smartly (see PresetManager._smart)
+        smart_load_action = QAction('Smart Loading (newer updates and DLC)', self.main_window)
+        smart_load_action.setCheckable(True)
+        smart_load_action.setChecked(bool(self.main_window.config.get('smart_preset_load', False)))
+        smart_load_action.toggled.connect(lambda on: self.main_window.config.set('smart_preset_load', on))
+        self.main_window.presets_menu.addAction(smart_load_action)
+
         self.main_window.presets_menu.addSeparator()
 
         # Help menu

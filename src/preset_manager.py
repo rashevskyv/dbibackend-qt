@@ -97,38 +97,44 @@ class PresetManager:
         return data
 
     def _blob(self, name: str) -> dict:
-        return {"name": name, "created_at": datetime.now().isoformat(), "files": self._smart(self._files()),
+        return {"name": name, "created_at": datetime.now().isoformat(), "files": self._files(),
                 "releases": release_queue.to_preset(self.file_manager)}
 
-    def _smart(self, files: list) -> list:
-        """A saved preset keeps games, not files: the package rows of one title ID become one entry
+    @staticmethod
+    def _smart(files: list, release_folders: set) -> list:
+        """Smart loading (Presets menu): the package rows of one title ID load as one smart entry
         {"path": their folder, "game", "tid", "parts": kinds saved, "prefer": file names saved,
-        "target"}. Loaded later, it takes a newer update or new DLC from the folder and keeps the
-        saved base. Stay as files: rows without a title ID, rows of a release folder, games with an
-        unticked row, games spread over two drives."""
-        folders = self.file_manager.queue.folders
+        "target"}, so a newer update or new DLC in that folder joins and the saved base stays.
+        Load as files: rows without a title ID in the name, rows of a release folder, games with
+        an unticked row, games spread over two drives."""
+        def pkg_of(e):
+            ok = isinstance(e, dict) and isinstance(e.get("path"), str) and e["path"] and "game" not in e
+            return parse_package(Path(e["path"]).name) if ok else None
+
+        def in_release(e):
+            return bool(e.get("folder")) and Path(e["folder"]).resolve() in release_folders
+
         groups = {}
         for e in files:
-            rec = folders.get(Path(e["folder"])) if e.get("folder") else None
-            pkg = parse_package(e["name"])
-            if pkg.tid is not None and not (rec and rec.release):
+            pkg = pkg_of(e)
+            if pkg and pkg.tid is not None and not in_release(e):
                 groups.setdefault(pkg.game_tid, []).append(e)
         out, done = [], set()
         for e in files:
-            pkg = parse_package(e["name"])
-            rows = groups.get(pkg.game_tid) if pkg.tid is not None else None
-            if not rows or e not in rows:
+            pkg = pkg_of(e)
+            rows = groups.get(pkg.game_tid) if pkg and pkg.tid is not None else None
+            if not rows or not any(r is e for r in rows):
                 out.append(e)
                 continue
             if pkg.game_tid in done:
                 continue
             done.add(pkg.game_tid)
-            pkgs = [parse_package(r["name"]) for r in rows]
+            pkgs = [pkg_of(r) for r in rows]
             try:
                 path = os.path.commonpath([str(Path(r["path"]).parent) for r in rows])
             except ValueError:
                 path = None
-            if not path or not all(r["checked"] for r in rows):
+            if not path or not all(r.get("checked", True) for r in rows):
                 out += rows
                 continue
             base = next((i for i, p in enumerate(pkgs) if p.kind == 'base'), 0)
@@ -136,7 +142,7 @@ class PresetManager:
             game = re.split(r'[\s_]*[0-9A-Fa-f]{16}', Game(pkg.game_tid, '', pkgs[base]).name)[0]
             out.append({"path": path, "game": game.rsplit('.', 1)[0] if game.lower().endswith(PACKAGE_EXT) else game,
                         "tid": f'{pkg.game_tid:016X}', "parts": sorted({p.kind for p in pkgs}),
-                        "prefer": [r["name"] for r in rows], "target": rows[base]["target"]})
+                        "prefer": [p.name for p in pkgs], "target": rows[base].get("target", 0)})
         return out
 
     # Resume after a crash, power loss, reboot or a console that fell asleep:
@@ -185,6 +191,9 @@ class PresetManager:
                 # rows of a smart preset game: their folder row is named after the game, not a real folder
                 game_rows = {Path(k).resolve() for k, v in releases.items()
                              if isinstance(v, dict) and '_source' in v} if isinstance(releases, dict) else set()
+                if self.main_window.config.get('smart_preset_load', False) and path.resolve() != self.resume_path.resolve():
+                    release_folders = {Path(k).resolve() for k in releases} if isinstance(releases, dict) else set()
+                    raw_files = self._smart(raw_files, release_folders)
                 fm = self.file_manager
                 fm.clear_file_list()
                 for entry in raw_files:

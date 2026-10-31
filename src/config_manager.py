@@ -22,6 +22,7 @@ class ConfigManager:
         'last_file_directory': '',
         'last_folder_directory': '',
         'last_preset_directory': '',
+        'smart_preset_load': False,
         'window_geometry': None,
         'splitter_sizes': None,
         'file_tree_zoom': 0,

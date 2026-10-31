@@ -72,7 +72,7 @@ def test_smart_preset_newest_update_repack_and_resume(monkeypatch, tmp_path):
     assert len(fm.queue.folders) == 1 and not [p for p in fm.queue.order if p in fm.queue.files]
 
 
-def test_save_makes_games_smart(monkeypatch, tmp_path):
+def test_plain_save_smart_load(monkeypatch, tmp_path):
     app = QApplication.instance() or QApplication(sys.argv)
     lib = tmp_path / 'games'
     lib.mkdir()
@@ -86,13 +86,14 @@ def test_save_makes_games_smart(monkeypatch, tmp_path):
     monkeypatch.setattr('src.preset_manager.QFileDialog.getSaveFileName', lambda *a, **kw: (str(out), ''))
     monkeypatch.setattr(QInputDialog, 'getItem', lambda *a: (_ for _ in ()).throw(AssertionError('asked')))
     fm.save_preset()
-    files = json.loads(out.read_text(encoding='utf-8'))['files']
-    assert [e['game'] for e in files] == ['Animal Crossing New Horizons', 'Animal Well', 'Bayonetta']
-    ac = files[0]
-    assert ac['tid'] == '01006F8002326000' and ac['parts'] == ['base', 'dlc', 'update']
-    assert ac['path'] == str(lib) and 'checked' not in ac
+    assert [e['name'] for e in json.loads(out.read_text(encoding='utf-8'))['files']] == saved   # plain files
 
-    # same library: the newest update and the other DLC join; Bayonetta 2 does not
+    win.config.set('smart_preset_load', False)
+    fm.load_preset(out)
+    assert queued(fm) == sorted(saved)
+
+    # smart loading: the newest update and the other DLC join; Bayonetta 2 does not
+    win.config.set('smart_preset_load', True)
     fm.load_preset(out)
     assert queued(fm) == sorted([LIB[0], LIB[2], LIB[3], LIB[4], LIB[5], 'Bayonetta [010076F0049A2000][v0].nsp'])
 
@@ -101,14 +102,15 @@ def test_save_makes_games_smart(monkeypatch, tmp_path):
     fm.load_preset(out)
     assert LIB[0] in queued(fm) and LIB[2] in queued(fm)
 
-    # an unticked row keeps that game as files
+    # an unticked row loads that game as files
     fm.clear_file_list()
     fm.ingest_paths([lib / LIB[0], lib / LIB[1]])
     fm.queue.files[(lib / LIB[1]).resolve()].checked = False
     fm.update_file_list()
     fm.save_preset()
-    files = json.loads(out.read_text(encoding='utf-8'))['files']
-    assert [e['name'] for e in files] == [LIB[0], LIB[1]]
+    fm.load_preset(out)
+    assert queued(fm) == sorted([LIB[0], LIB[1]])
+    win.config.set('smart_preset_load', False)
 
 
 def test_only_update_saved_adds_no_base():
